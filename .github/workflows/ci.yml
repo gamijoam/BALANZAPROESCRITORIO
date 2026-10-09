@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-unit-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore .\Pos.sln
+      - name: Build
+        run: dotnet build .\Pos.sln --configuration Release --no-restore
+      - name: Unit tests
+        run: dotnet test .\Pos.sln --configuration Release --no-build --filter "FullyQualifiedName!~Pos.Integration.Tests" --logger "trx;LogFileName=unit-tests.trx"
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: '**/TestResults/*.trx'
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pos_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pos_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Pos: Host=localhost;Port=5432;Database=pos_ci;Username=postgres;Password=postgres
+      POS_TEST_CONNECTION: Host=localhost;Port=5432;Database=pos_ci;Username=postgres;Password=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore .\Pos.sln
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Apply migrations to CI PostgreSQL
+        run: dotnet tool run dotnet-ef database update --project src/Pos.Infrastructure/Pos.Infrastructure.csproj --startup-project src/Pos.Server/Pos.Server.csproj
+      - name: PostgreSQL integration tests
+        run: dotnet test tests/Pos.Integration.Tests/Pos.Integration.Tests.csproj --configuration Release --no-restore --logger "trx;LogFileName=postgres-integration.trx"
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-integration-results
+          path: '**/TestResults/*.trx'

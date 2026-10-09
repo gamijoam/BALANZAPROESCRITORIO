@@ -1,0 +1,22 @@
+# Build output
+**/bin/
+**/obj/
+**/StrykerOutput/
+.vs/
+*.user
+*.suo
+
+# Local configuration and data
+appsettings.Local.json
+*.db
+*.dump
+*.backup
+secrets.json
+
+# IDE and OS
+.vscode/
+Thumbs.db
+Desktop.ini
+
+# Local installation package
+artifacts/
