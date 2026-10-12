@@ -9,8 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Pos.Domain\Pos.Domain.csproj" />
     <ProjectReference Include="..\Pos.Shared.Contracts\Pos.Shared.Contracts.csproj" />
     <ProjectReference Include="..\Pos.Desktop.Presentation\Pos.Desktop.Presentation.csproj" />
+    <ProjectReference Include="..\Modules\Pos.Desktop.Modules.Abstractions\Pos.Desktop.Modules.Abstractions.csproj" />
+    <ProjectReference Include="..\Modules\Pos.Modules.Packaging\Pos.Modules.Packaging.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,15 +8,27 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Pos.Server\Pos.Server.csproj" />
     <ProjectReference Include="..\..\src\Pos.Infrastructure\Pos.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Pos.Modules.Abstractions\Pos.Modules.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Pos.Modules.Example\Pos.Modules.Example.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Pos.Modules.Warehouses\Pos.Modules.Warehouses.csproj" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\src\Modules\Pos.Modules.Example\migrations\example-status-0001.json" Link="example-status-0001.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Modules\Pos.Modules.Warehouses\module.manifest.json" Link="warehouses-module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Modules\Pos.Modules.Warehouses\migrations\warehouses-0001.json" Link="warehouses-0001.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="../../src/Pos.Desktop.Presentation/Pos.Desktop.Presentation.csproj" />
+  <Project Path="../../src/Pos.Domain/Pos.Domain.csproj" />
+  <Project Path="Pos.Runtime.Tests.csproj" />
+</Solution>

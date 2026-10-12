@@ -22,7 +22,7 @@ public partial class OpenCashWindow : Window
         }
         OpeningBalanceUsd = usd;
         OpeningBalanceVes = ves;
-        Currency = (CurrencyBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "VES";
+        Currency = "VES";
         DialogResult = true;
     }
 

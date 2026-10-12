@@ -3,8 +3,10 @@ namespace Pos.Domain.Identity;
 public enum Permission
 {
     ConfirmSale,
+    CreateCreditSale,
     ApplyDiscount,
     ChangePrice,
+    OverrideSalePrice,
     AdjustStock,
     ReturnSale,
     ManageUsers,
@@ -15,7 +17,35 @@ public enum Permission
     ManageCustomers,
     ManageReceivables,
     ViewReports,
-    ViewExchangeRate
+    ViewExchangeRate,
+    ManageModules,
+    ViewWarehouses,
+    ManageWarehouses,
+    TransferInventory
+}
+
+public enum PermissionOverrideMode { Inherit, Allow, RequireAdminPin, Deny }
+public enum PermissionAccessMode { Allow, RequireAdminPin, Deny }
+
+public static class OperatorPermissionPolicy
+{
+    public static PermissionAccessMode Resolve(OperatorRole role, Permission permission, PermissionOverrideMode mode)
+    {
+        if (!Enum.IsDefined(role)) throw new ArgumentOutOfRangeException(nameof(role));
+        if (!Enum.IsDefined(permission)) throw new ArgumentOutOfRangeException(nameof(permission));
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        if (role == OperatorRole.Administrator) return PermissionAccessMode.Allow;
+        if (permission == Permission.ManageModules) return PermissionAccessMode.Deny;
+        return mode switch
+        {
+            PermissionOverrideMode.Allow => PermissionAccessMode.Allow,
+            PermissionOverrideMode.RequireAdminPin => PermissionAccessMode.RequireAdminPin,
+            PermissionOverrideMode.Deny => PermissionAccessMode.Deny,
+            _ => RolePermissionPolicy.For(role).Can(permission)
+                ? PermissionAccessMode.Allow
+                : permission == Permission.OverrideSalePrice ? PermissionAccessMode.RequireAdminPin : PermissionAccessMode.Deny
+        };
+    }
 }
 
 public enum OperatorRole { Cashier, Supervisor, Administrator }
@@ -24,12 +54,13 @@ public static class RolePermissionPolicy
 {
     public static PermissionSet For(OperatorRole role) => role switch
     {
-        OperatorRole.Cashier => new PermissionSet(Permission.ConfirmSale, Permission.CloseCashSession, Permission.ViewExchangeRate),
+        OperatorRole.Cashier => new PermissionSet(Permission.ConfirmSale, Permission.CreateCreditSale, Permission.CloseCashSession, Permission.ViewExchangeRate),
         OperatorRole.Supervisor => new PermissionSet(
-            Permission.ConfirmSale, Permission.ApplyDiscount, Permission.ChangePrice, Permission.AdjustStock,
+            Permission.ConfirmSale, Permission.CreateCreditSale, Permission.ApplyDiscount, Permission.ChangePrice, Permission.AdjustStock,
             Permission.ReturnSale, Permission.ManageExchangeRate, Permission.CloseCashSession,
             Permission.ViewSensitiveReports, Permission.ManageCatalog, Permission.ManageCustomers,
-            Permission.ManageReceivables, Permission.ViewReports, Permission.ViewExchangeRate),
+            Permission.ManageReceivables, Permission.ViewReports, Permission.ViewExchangeRate,
+            Permission.ViewWarehouses, Permission.ManageWarehouses, Permission.TransferInventory),
         OperatorRole.Administrator => new PermissionSet(Enum.GetValues<Permission>()),
         _ => throw new ArgumentOutOfRangeException(nameof(role))
     };

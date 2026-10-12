@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Pos.BuildingBlocks\Pos.BuildingBlocks.csproj" />
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\Pos.Infrastructure\Pos.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Pos.Modules.Packaging\Pos.Modules.Packaging.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -28,6 +28,7 @@ Visual Studio es opcional: el proyecto puede compilarse desde la CLI de .NET. Do
 - [POS de escritorio del Hito 3](docs/specs/hito-3-pos-escritorio.md)
 - [Funciones operativas del Hito 4](docs/specs/hito-4-funciones-operativas.md)
 - [Instalación local y respaldo del Hito 5](docs/specs/hito-5-instalacion-local-y-respaldo.md)
+- [Módulos del POS: arquitectura, creación, firma, instalación y actualización](docs/manuales/MODULOS-POS.md)
 
 ## Compilar
 

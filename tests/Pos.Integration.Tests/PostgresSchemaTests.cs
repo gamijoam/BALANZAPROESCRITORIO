@@ -113,7 +113,7 @@ public sealed class PostgresSchemaTests
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
             db.Products.Add(new ProductRecord { Id = productId, Sku = $"TEST-{productId:N}", Name = "Test item", UnitPrice = 10, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2 });
-            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0, OpenedAtUtc = DateTime.UtcNow });
+            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0, OpenedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
 
             var sales = new SalesService(db);
@@ -152,21 +152,89 @@ public sealed class PostgresSchemaTests
     }
 
     [Fact]
-    public async Task Credit_sale_checks_customer_limit_and_records_the_receivable_atomically()
+    public async Task Partial_and_full_returns_are_atomic_idempotent_and_reconcile_stock_and_cash()
     {
         var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
-        var terminalId = Guid.NewGuid(); var username = $"credit-{Guid.NewGuid():N}";
-        var productId = Guid.NewGuid(); var customerId = Guid.NewGuid(); var cashId = Guid.NewGuid();
+        var terminalId = Guid.NewGuid(); var username = $"return-{Guid.NewGuid():N}";
+        var productId = Guid.NewGuid(); var cashId = Guid.NewGuid();
         Guid operatorId; Guid saleId;
         await using (var db = new PosDbContext(options))
         {
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
-            db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-{productId:N}", Name = "Credit item", UnitPrice = 10m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
-            db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
-            db.Customers.Add(new CustomerRecord { Id = customerId, Name = "Credit customer", Currency = "VES", CreditLimit = 9m, CreatedAtUtc = DateTime.UtcNow });
-            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+            db.Products.Add(new ProductRecord { Id = productId, Sku = $"RETURN-{productId:N}", Name = "Return item", UnitPrice = 10m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 3m });
+            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
-            var checkout = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("credit", 10m, "VES")], customerId);
+
+            var sale = await new SalesService(db).ConfirmAsync(operatorId, terminalId, cashId, "return-sale-0001",
+                new CheckoutRequest([new CheckoutLine(productId, 2m)], [new CheckoutPayment("cash", 20m, "VES")]));
+            saleId = sale.SaleId;
+            var saleLine = await db.SaleLines.SingleAsync(x => x.SaleId == saleId);
+            var returns = new SaleReturnService(db);
+            var partialRequest = new SaleReturnRequest("Producto devuelto en buen estado", [new SaleReturnLineRequest(saleLine.Id, 1m, true)]);
+
+            var first = await returns.ReturnAsync(operatorId, terminalId, cashId, saleId, "return-key-0001", partialRequest);
+            var replay = await returns.ReturnAsync(operatorId, terminalId, cashId, saleId, "return-key-0001", partialRequest);
+            Assert.False(first.Replayed);
+            Assert.True(replay.Replayed);
+            Assert.Equal(first.ReturnId, replay.ReturnId);
+            Assert.Equal(10m, first.Amount);
+
+            var final = await returns.ReturnAsync(operatorId, terminalId, cashId, saleId, "return-key-0002",
+                new SaleReturnRequest("Producto restante no revendible", [new SaleReturnLineRequest(saleLine.Id, 1m, false)]));
+            Assert.Equal(10m, final.Amount);
+            await Assert.ThrowsAsync<CheckoutRejectedException>(() => returns.ReturnAsync(operatorId, terminalId, cashId, saleId, "return-key-0003",
+                new SaleReturnRequest("Devolución excedida", [new SaleReturnLineRequest(saleLine.Id, 1m, true)])));
+        }
+
+        await using (var verify = new PosDbContext(options))
+        {
+            Assert.Equal(2m, await verify.Stocks.Where(x => x.ProductId == productId).Select(x => x.Quantity).SingleAsync());
+            Assert.Equal("Returned", await verify.Sales.Where(x => x.Id == saleId).Select(x => x.Status).SingleAsync());
+            Assert.Equal(2, await verify.SaleReturns.CountAsync(x => x.SaleId == saleId));
+            var returnIds = await verify.SaleReturns.Where(x => x.SaleId == saleId).Select(x => x.Id).ToArrayAsync();
+            Assert.Equal(2, await verify.SaleReturnPayments.CountAsync(x => returnIds.Contains(x.SaleReturnId)));
+            Assert.Equal(20m, await verify.CashMovements.Where(x => x.CashSessionId == cashId && x.Direction == "Out").SumAsync(x => x.Amount));
+            Assert.Equal(1, await verify.StockMovements.CountAsync(x => x.ProductId == productId && x.QuantityDelta > 0m));
+            Assert.Equal(2, await verify.AuditEvents.CountAsync(x => x.TerminalId == terminalId && x.Action == "sale.returned"));
+
+            await verify.SaleReturnPayments.Where(x => returnIds.Contains(x.SaleReturnId)).ExecuteDeleteAsync();
+            await verify.SaleReturnLines.Where(x => returnIds.Contains(x.SaleReturnId)).ExecuteDeleteAsync();
+            await verify.ReturnIdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await verify.SaleReturns.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await verify.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+            await verify.CashMovements.Where(x => x.CashSessionId == cashId).ExecuteDeleteAsync();
+            await verify.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await verify.SaleLines.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await verify.Payments.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await verify.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await verify.Sales.Where(x => x.Id == saleId).ExecuteDeleteAsync();
+            await verify.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+            await verify.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+            await verify.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
+            await verify.AccessSessions.Where(x => x.OperatorId == operatorId).ExecuteDeleteAsync();
+            await verify.OperatorUsers.Where(x => x.Id == operatorId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Credit_sale_checks_customer_limit_and_records_the_receivable_atomically()
+    {
+        var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
+        var terminalId = Guid.NewGuid(); var username = $"credit-{Guid.NewGuid():N}";
+        var productId = Guid.NewGuid(); var customerId = Guid.NewGuid(); var cashId = Guid.NewGuid(); var rateId = Guid.NewGuid();
+        Guid operatorId; Guid saleId;
+        await using (var db = new PosDbContext(options))
+        {
+            operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
+            var usdToVes = new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 875.65m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow };
+            db.ExchangeRates.Add(usdToVes);
+            db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-{productId:N}", Name = "Credit item", UnitPrice = 875.65m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
+            db.Customers.Add(new CustomerRecord { Id = customerId, Name = "Credit customer", Currency = "USD", CreditLimit = 0.99m, CreatedAtUtc = DateTime.UtcNow });
+            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+            var checkout = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("credit", 875.65m, "VES")], customerId, usdToVes.Id);
 
             var rejected = await Assert.ThrowsAsync<CheckoutRejectedException>(() => new SalesService(db).ConfirmAsync(operatorId, terminalId, cashId, "credit-key-0001", checkout));
             Assert.Equal("credit_limit_exceeded", rejected.Code);
@@ -174,12 +242,21 @@ public sealed class PostgresSchemaTests
             Assert.Empty(await db.Sales.Where(x => x.TerminalId == terminalId).ToListAsync());
 
             var customer = await db.Customers.SingleAsync(x => x.Id == customerId);
-            customer.CreditLimit = 10m;
+            customer.CreditLimit = 1m;
             await db.SaveChangesAsync();
             var accepted = await new SalesService(db).ConfirmAsync(operatorId, terminalId, cashId, "credit-key-0002", checkout);
             saleId = accepted.SaleId;
             Assert.False(accepted.Replayed);
-            Assert.Equal(10m, await db.ReceivableEntries.Where(x => x.CustomerId == customerId && x.EntryType == "Charge").SumAsync(x => x.Amount));
+            var charge = await db.ReceivableEntries.SingleAsync(x => x.CustomerId == customerId && x.EntryType == "Charge");
+            Assert.Equal(1m, charge.Amount);
+            Assert.Equal("USD", charge.Currency);
+            Assert.Equal(875.65m, charge.OriginalAmount);
+            Assert.Equal("VES", charge.OriginalCurrency);
+            Assert.Equal(CreditAccountCurrency.UsdPerVes(usdToVes.Rate), charge.AppliedExchangeRate);
+            var paymentUsd = CreditAccountCurrency.ToUsd(525.39m, "VES", usdToVes.Rate);
+            db.ReceivableEntries.Add(new ReceivableEntryRecord { Id = Guid.NewGuid(), CustomerId = customerId, EntryType = "Payment", Amount = paymentUsd, Currency = "USD", OriginalAmount = 525.39m, OriginalCurrency = "VES", AppliedExchangeRate = CreditAccountCurrency.UsdPerVes(usdToVes.Rate), Reason = "Integration abono", ActorId = operatorId, TerminalId = terminalId, OccurredAtUtc = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+            Assert.Equal(0.40m, await db.ReceivableEntries.Where(x => x.CustomerId == customerId).SumAsync(x => x.EntryType == "Charge" ? x.Amount : -x.Amount));
             Assert.Equal(1m, await db.Stocks.Where(x => x.ProductId == productId).Select(x => x.Quantity).SingleAsync());
         }
 
@@ -187,6 +264,7 @@ public sealed class PostgresSchemaTests
         {
             await cleanup.ReceivableEntries.Where(x => x.CustomerId == customerId).ExecuteDeleteAsync();
             await cleanup.SaleLines.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
             await cleanup.Payments.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
             await cleanup.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
@@ -213,7 +291,7 @@ public sealed class PostgresSchemaTests
                 new ProductRecord { Id = usdProductId, Sku = $"USD-{usdProductId:N}", Name = "USD item", UnitPrice = 2m, Currency = "USD", CreatedAtUtc = DateTime.UtcNow },
                 new ProductRecord { Id = vesProductId, Sku = $"VES-{vesProductId:N}", Name = "VES item", UnitPrice = 80m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.AddRange(new StockRecord { ProductId = usdProductId, Quantity = 2m }, new StockRecord { ProductId = vesProductId, Quantity = 2m });
-            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, TerminalId = terminalId, Currency = "USD", OpenedAtUtc = DateTime.UtcNow });
+            db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "USD", OpenedAtUtc = DateTime.UtcNow });
             db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "VES", ToCurrency = "USD", Rate = 0.025m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
 
@@ -241,7 +319,7 @@ public sealed class PostgresSchemaTests
             var usdCashSession = await db.CashSessions.SingleAsync(x => x.Id == cashId);
             usdCashSession.Status = "Closed";
             usdCashSession.ClosedAtUtc = DateTime.UtcNow;
-            db.CashSessions.Add(new CashSessionRecord { Id = cashVesId, OperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+            db.CashSessions.Add(new CashSessionRecord { Id = cashVesId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
             var reverse = await new SalesService(db).ConfirmAsync(operatorId, terminalId, cashVesId, "fx-checkout-0002",
                 new CheckoutRequest([new CheckoutLine(usdProductId, 1m)], [new CheckoutPayment("cash", 80m, "VES")], ExchangeRateId: rateId));
@@ -268,6 +346,72 @@ public sealed class PostgresSchemaTests
     }
 
     [Fact]
+    public async Task Checkout_accepts_and_audits_usd_cent_rounding_while_cash_close_counts_actual_usd()
+    {
+        var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
+        var now = DateTime.UtcNow; var terminalId = Guid.NewGuid(); var productId = Guid.NewGuid();
+        var cashId = Guid.NewGuid(); var rateId = Guid.NewGuid(); var username = $"rounding-{Guid.NewGuid():N}";
+        Guid operatorId = Guid.Empty; Guid saleId = Guid.Empty;
+        try
+        {
+            await using (var db = new PosDbContext(options))
+            {
+                operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
+                db.Products.Add(new ProductRecord { Id = productId, Sku = $"ROUND-{productId:N}", Name = "Producto de redondeo", UnitPrice = 1_000m, Currency = "VES", CreatedAtUtc = now });
+                db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1m });
+                db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalanceVes = 0m, OpeningBalanceUsd = 0m, OpenedAtUtc = now });
+                db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 36.50m, EffectiveAtUtc = now.AddSeconds(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = now });
+                await db.SaveChangesAsync();
+
+                var sales = new SalesService(db);
+                var underpaid = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("Efectivo", 27.39m, "USD")], ExchangeRateId: rateId);
+                var rejected = await Assert.ThrowsAsync<CheckoutRejectedException>(() => sales.ConfirmAsync(operatorId, terminalId, cashId, "rounding-under-0001", underpaid));
+                Assert.Equal("payment_total_mismatch", rejected.Code);
+
+                var accepted = await sales.ConfirmAsync(operatorId, terminalId, cashId, "rounding-accepted-01",
+                    underpaid with { Payments = [new CheckoutPayment("Efectivo", 27.40m, "USD")] });
+                saleId = accepted.SaleId;
+                var sale = await db.Sales.SingleAsync(x => x.Id == saleId);
+                var payment = await db.Payments.SingleAsync(x => x.SaleId == saleId);
+                Assert.Equal(1_000m, sale.Total);
+                Assert.Equal("VES", sale.Currency);
+                Assert.Equal(-0.10m, sale.RoundingAdjustment);
+                Assert.Equal(27.40m, payment.Amount);
+                Assert.Equal("USD", payment.Currency);
+                var audit = await db.AuditEvents.SingleAsync(x => x.TerminalId == terminalId && x.Action == "sale.confirmed");
+                using var auditPayload = System.Text.Json.JsonDocument.Parse(audit.Payload);
+                Assert.Equal(-0.10m, auditPayload.RootElement.GetProperty("roundingAdjustment").GetDecimal());
+                Assert.Equal(0.18250m, auditPayload.RootElement.GetProperty("allowedRoundingDifference").GetDecimal());
+
+                var close = CashSessionLedger.Calculate(0m, 0m, [new CashReceipt(payment.Currency, payment.Amount)], [], 27.40m, 0m);
+                Assert.Equal(27.40m, close.Usd.ExpectedBalance);
+                Assert.Equal(0m, close.Ves.ExpectedBalance);
+                Assert.Equal(0m, close.Usd.Variance);
+            }
+        }
+        finally
+        {
+            await using var cleanup = new PosDbContext(options);
+            if (saleId != Guid.Empty)
+            {
+                await cleanup.Payments.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+                await cleanup.SaleLines.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+                await cleanup.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+                await cleanup.Sales.Where(x => x.Id == saleId).ExecuteDeleteAsync();
+            }
+            if (operatorId != Guid.Empty)
+            {
+                await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+                await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+                await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+                await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
+                await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
+                await cleanup.OperatorUsers.Where(x => x.Id == operatorId).ExecuteDeleteAsync();
+            }
+        }
+    }
+
+    [Fact]
     public async Task Zero_opening_cash_session_records_mixed_currency_sale_for_sales_and_cash_reports()
     {
         var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
@@ -281,7 +425,7 @@ public sealed class PostgresSchemaTests
                 operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
                 db.Products.Add(new ProductRecord { Id = productId, Sku = $"CASH-{productId:N}", Name = "Cash report item", UnitPrice = 100m, Currency = "VES", CreatedAtUtc = now });
                 db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1m });
-                db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0m, OpeningBalanceUsd = 0m, OpeningBalanceVes = 0m, OpenedAtUtc = now });
+                db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0m, OpeningBalanceUsd = 0m, OpeningBalanceVes = 0m, OpenedAtUtc = now });
                 db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 100m, EffectiveAtUtc = now.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = now });
                 await db.SaveChangesAsync();
 
@@ -338,7 +482,7 @@ public sealed class PostgresSchemaTests
             operatorId = await new AuthenticationService(setup).CreateOperatorAsync(username, "4826");
             setup.Products.Add(new ProductRecord { Id = productId, Sku = $"RACE-{productId:N}", Name = "Last unit", UnitPrice = 7, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             setup.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1 });
-            setup.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+            setup.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await setup.SaveChangesAsync();
         }
 
@@ -372,6 +516,71 @@ public sealed class PostgresSchemaTests
             await verify.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
             await verify.AccessSessions.Where(x => x.OperatorId == operatorId).ExecuteDeleteAsync();
             await verify.OperatorUsers.Where(x => x.Id == operatorId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Different_authenticated_operator_can_sell_through_the_open_terminal_cash_session()
+    {
+        var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
+        var terminalId = Guid.NewGuid();
+        var openerId = Guid.Empty;
+        var sellerId = Guid.Empty;
+        var cashId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        await using (var setup = new PosDbContext(options))
+        {
+            var auth = new AuthenticationService(setup);
+            openerId = await auth.CreateOperatorAsync($"cash-owner-{Guid.NewGuid():N}", "4826");
+            sellerId = await auth.CreateOperatorAsync($"cash-seller-{Guid.NewGuid():N}", "4826");
+            setup.Products.Add(new ProductRecord { Id = productId, Sku = $"SWITCH-{productId:N}", Name = "Cambio de operador", UnitPrice = 10m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            setup.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
+            setup.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = openerId, ActiveOperatorId = openerId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+            await setup.SaveChangesAsync();
+        }
+
+        try
+        {
+            await using (var deniedDb = new PosDbContext(options))
+            {
+                var checkoutBeforeClaim = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("cash", 10m, "VES")]);
+                var denied = await Assert.ThrowsAsync<CheckoutRejectedException>(() => new SalesService(deniedDb)
+                    .ConfirmAsync(sellerId, terminalId, cashId, $"switch-denied-{Guid.NewGuid():N}", checkoutBeforeClaim));
+                Assert.Equal("open_cash_session_required", denied.Code);
+            }
+
+            await using (var claimDb = new PosDbContext(options))
+            {
+                var session = await claimDb.CashSessions.SingleAsync(x => x.Id == cashId);
+                session.ActiveOperatorId = sellerId;
+                claimDb.AuditEvents.Add(new AuditRecord { Id = Guid.NewGuid(), ActorId = sellerId, TerminalId = terminalId,
+                    Action = "cash-session.operator_claimed", Payload = "{}", OccurredAtUtc = DateTime.UtcNow });
+                await claimDb.SaveChangesAsync();
+            }
+
+            await using var db = new PosDbContext(options);
+            var checkoutAfterClaim = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("cash", 10m, "VES")]);
+            var result = await new SalesService(db).ConfirmAsync(sellerId, terminalId, cashId, $"switch-{Guid.NewGuid():N}", checkoutAfterClaim);
+
+            Assert.False(result.Replayed);
+            var sale = await db.Sales.AsNoTracking().SingleAsync(x => x.Id == result.SaleId);
+            Assert.Equal(sellerId, sale.OperatorId);
+            Assert.Equal(cashId, sale.CashSessionId);
+        }
+        finally
+        {
+            await using var cleanup = new PosDbContext(options);
+            var saleIds = await cleanup.Sales.Where(x => x.CashSessionId == cashId).Select(x => x.Id).ToArrayAsync();
+            await cleanup.SaleLines.Where(x => saleIds.Contains(x.SaleId)).ExecuteDeleteAsync();
+            await cleanup.Payments.Where(x => saleIds.Contains(x.SaleId)).ExecuteDeleteAsync();
+            await cleanup.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await cleanup.Sales.Where(x => saleIds.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+            await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
+            await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+            await cleanup.AccessSessions.Where(x => x.OperatorId == openerId || x.OperatorId == sellerId).ExecuteDeleteAsync();
+            await cleanup.OperatorUsers.Where(x => x.Id == openerId || x.Id == sellerId).ExecuteDeleteAsync();
         }
     }
 

@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "operations": [
+    {
+      "type": "createTable",
+      "table": "status_check",
+      "columns": [
+        {
+          "name": "id",
+          "dataType": "uuid",
+          "nullable": false,
+          "primaryKey": true
+        },
+        {
+          "name": "checked_at_utc",
+          "dataType": "timestamptz",
+          "nullable": false,
+          "primaryKey": false
+        }
+      ]
+    }
+  ]
+}

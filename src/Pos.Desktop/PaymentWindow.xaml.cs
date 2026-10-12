@@ -1,7 +1,8 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Pos.Desktop.Presentation;
 
@@ -9,11 +10,12 @@ namespace Pos.Desktop;
 
 public partial class PaymentWindow : Window
 {
-    public static IReadOnlyList<string> PaymentMethods { get; } = ["Efectivo", "Punto de venta", "Transferencia", "Pago móvil", "Fiado"];
+    public static IReadOnlyList<string> PaymentMethods { get; } = ["Efectivo", "Punto de venta", "Transferencia", "Pago móvil", "Crédito"];
     public static IReadOnlyList<string> Currencies { get; } = ["VES", "USD"];
     private readonly decimal _total;
     private readonly string _currency;
     private readonly decimal? _usdToVes;
+    private readonly bool _isRetry;
     private readonly ObservableCollection<PaymentRow> _rows = [];
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(150) };
 
@@ -26,32 +28,95 @@ public partial class PaymentWindow : Window
         _currency = currency;
         _usdToVes = usdToVes;
         TotalLabel.Text = $"{currency} {total:N2}";
-        var isRetry = fixedPayments is { Count: > 0 };
-        if (isRetry)
+        TotalOtherCurrencyTitle.Text = $"EQUIVALENTE {OtherCurrency(currency)}";
+        TotalOtherCurrencyLabel.Text = FormatOtherCurrencyEquivalent(total, currency, usdToVes);
+        _isRetry = fixedPayments is { Count: > 0 };
+        _rows.CollectionChanged += (_, _) => PaymentsPlaceholder.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_isRetry)
         {
             PaymentTitle.Text = "Pagos de la venta pendiente";
-            AddPaymentButton.IsEnabled = false;
-            foreach (var payment in fixedPayments!) _rows.Add(new PaymentRow(payment.Method, PosNumberFormat.FormatAmount(payment.Amount), payment.Currency));
+            PaymentMethodsPanel.IsEnabled = false;
+            foreach (var payment in fixedPayments!) _rows.Add(new PaymentRow(payment.Method, PosNumberFormat.FormatAmount(payment.Amount), payment.Currency, _usdToVes, isFixed: true));
         }
-        else _rows.Add(new PaymentRow("Efectivo", PosNumberFormat.FormatAmount(total), currency));
         PaymentsGrid.ItemsSource = _rows;
-        PaymentsGrid.IsReadOnly = isRetry;
-        ConfirmButton.Content = isRetry ? "Reintentar venta" : "Confirmar venta";
+        PaymentsGrid.IsReadOnly = _isRetry;
+        ConfirmButton.Content = _isRetry ? "Reintentar venta" : "Confirmar venta";
         _refresh.Tick += (_, _) => RefreshTotals();
         _refresh.Start();
         Closed += (_, _) => _refresh.Stop();
         RefreshTotals();
     }
 
-    private void AddPayment_Click(object sender, RoutedEventArgs e)
+    private void PaymentMethod_Click(object sender, RoutedEventArgs e)
     {
+        if (_isRetry || (sender as FrameworkElement)?.Tag?.ToString() is not { } method ||
+            !PaymentMethods.Contains(method, StringComparer.Ordinal)) return;
+        AddPayment(method);
+    }
+
+    private void Window_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_isRetry) PaymentsGrid.Focus();
+        else CashMethodButton.Focus();
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var modifiers = Keyboard.Modifiers;
+        var pressedKey = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Enter in an edited payment cell commits the amount first. If the
+        // payment now covers the sale, it also confirms it; otherwise the
+        // dialog stays open and keeps the pending balance visible.
+        if (pressedKey == Key.Enter && modifiers == ModifierKeys.None &&
+            PaymentsGrid.IsKeyboardFocusWithin && Keyboard.FocusedElement is not Button &&
+            (Keyboard.FocusedElement is not ComboBox comboBox || !comboBox.IsDropDownOpen))
+        {
+            e.Handled = true;
+            PaymentsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            PaymentsGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            RefreshTotals();
+            if (ConfirmButton.IsEnabled)
+                Confirm_Click(ConfirmButton, new RoutedEventArgs(Button.ClickEvent, ConfirmButton));
+            return;
+        }
+
+        if (_isRetry || (modifiers != ModifierKeys.Control && modifiers != ModifierKeys.Alt)) return;
+        var method = pressedKey switch
+        {
+            Key.D1 or Key.NumPad1 => PaymentMethods[0],
+            Key.D2 or Key.NumPad2 => PaymentMethods[1],
+            Key.D3 or Key.NumPad3 => PaymentMethods[2],
+            Key.D4 or Key.NumPad4 => PaymentMethods[3],
+            Key.D5 or Key.NumPad5 => PaymentMethods[4],
+            _ => null
+        };
+        if (method is null) return;
+        e.Handled = true;
+        AddPayment(method);
+    }
+
+    private void AddPayment(string method)
+    {
+        if (_isRetry || !PaymentMethods.Contains(method, StringComparer.Ordinal)) return;
         var pending = Math.Max(0, _total - CurrentPaidInSaleCurrency());
-        _rows.Add(new PaymentRow("Punto de venta", PosNumberFormat.FormatAmount(pending), _currency));
+        var row = new PaymentRow(method, PosNumberFormat.FormatAmount(pending), _currency, _usdToVes);
+        _rows.Add(row);
+        PaymentsGrid.SelectedItem = row;
+        PaymentsGrid.ScrollIntoView(row);
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (!_rows.Contains(row) || PaymentsGrid.Columns.Count < 3) return;
+            PaymentsGrid.CurrentCell = new DataGridCellInfo(row, PaymentsGrid.Columns[2]);
+            PaymentsGrid.BeginEdit();
+        }));
+        RefreshTotals();
     }
 
     private void RemovePayment_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is PaymentRow row && _rows.Count > 1) _rows.Remove(row);
+        if ((sender as FrameworkElement)?.DataContext is PaymentRow row) _rows.Remove(row);
+        RefreshTotals();
     }
 
     private void Confirm_Click(object sender, RoutedEventArgs e)
@@ -68,15 +133,10 @@ public partial class PaymentWindow : Window
             }
             payments.Add(new SalePaymentInput(row.Method, amount, row.Currency));
         }
-        if (payments.Any(x => x.Currency != _currency) && _usdToVes is null)
+        var summary = PaymentSummary.Calculate(_total, _currency, _rows, _usdToVes);
+        if (!summary.CanConfirm)
         {
-            ErrorLabel.Text = "Registra una tasa vigente para cobrar en dos monedas.";
-            return;
-        }
-        var converted = payments.Sum(x => x.Currency == _currency ? x.Amount : decimal.Round(x.Currency == "USD" ? x.Amount * _usdToVes!.Value : x.Amount / _usdToVes!.Value, 2, MidpointRounding.AwayFromZero));
-        if (converted != _total)
-        {
-            ErrorLabel.Text = $"Los pagos convertidos deben sumar {_currency} {PosNumberFormat.FormatAmount(_total)}.";
+            ErrorLabel.Text = summary.Guidance;
             return;
         }
         Payments = payments;
@@ -84,22 +144,31 @@ public partial class PaymentWindow : Window
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
-    private decimal CurrentPaid() => _rows.Sum(x => x.TryGetAmount(out var amount) ? amount : 0m);
-    private decimal CurrentPaidInSaleCurrency() => _rows.Sum(x => x.TryGetAmount(out var amount) ? x.Currency == _currency ? amount : _usdToVes is null ? 0m : decimal.Round(x.Currency == "USD" ? amount * _usdToVes.Value : amount / _usdToVes.Value, 2, MidpointRounding.AwayFromZero) : 0m);
+    private decimal CurrentPaidInSaleCurrency() => PaymentSummary.Calculate(_total, _currency, _rows, _usdToVes).Paid;
 
     private void RefreshTotals()
     {
-        var paid = CurrentPaidInSaleCurrency();
-        PaidLabel.Text = $"{_currency} {paid:N2}";
-        DueLabel.Text = $"{_currency} {_total - paid:N2}";
-        ConfirmButton.IsEnabled = paid == _total && _rows.Count > 0;
+        var summary = PaymentSummary.Calculate(_total, _currency, _rows, _usdToVes);
+        DueLabel.Text = $"{_currency} {PosNumberFormat.FormatAmount(summary.Remaining)}";
+        OtherCurrencyDueTitle.Text = $"EQUIVALENTE {OtherCurrency(_currency)}";
+        OtherCurrencyDueLabel.Text = FormatOtherCurrencyEquivalent(summary.RemainingOtherCurrencyEquivalent, _currency);
+        ErrorLabel.Text = _rows.Count == 0 ? "Selecciona un método de pago para continuar." : summary.Guidance;
+        ErrorLabel.Foreground = summary.RoundingAdjustment != 0m ? Brushes.SteelBlue : Brushes.Firebrick;
+        PaymentsPlaceholder.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (!_isRetry) PaymentMethodsPanel.IsEnabled = summary.CanAddPayment;
+        ConfirmButton.IsEnabled = summary.CanConfirm;
     }
 
-    public sealed class PaymentRow(string method, string amountText, string currency)
-    {
-        public string Method { get; set; } = method;
-        public string AmountText { get; set; } = amountText;
-        public string Currency { get; set; } = currency;
-        public bool TryGetAmount(out decimal amount) => PosNumberFormat.TryParseAmount(AmountText, out amount);
-    }
+    private static string OtherCurrency(string currency) => currency == "USD" ? "VES" : "USD";
+
+    private static string FormatOtherCurrencyEquivalent(decimal amount, string currency, decimal? usdToVes) =>
+        FormatOtherCurrencyEquivalent(currency switch
+        {
+            "USD" when usdToVes is > 0m => decimal.Round(amount * usdToVes.Value, 2, MidpointRounding.AwayFromZero),
+            "VES" when usdToVes is > 0m => decimal.Round(amount / usdToVes.Value, 2, MidpointRounding.AwayFromZero),
+            _ => null
+        }, currency);
+
+    private static string FormatOtherCurrencyEquivalent(decimal? amount, string currency) =>
+        amount is { } value ? $"{OtherCurrency(currency)} {PosNumberFormat.FormatAmount(value)}" : $"{OtherCurrency(currency)} —";
 }

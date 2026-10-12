@@ -1,0 +1,79 @@
+<Window x:Class="Pos.Modules.Warehouses.Desktop.WarehouseWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Almacenes y traslados" Height="720" Width="1120" MinHeight="620" MinWidth="980"
+        WindowStartupLocation="CenterOwner" Background="#EEF3F9" Loaded="Window_Loaded">
+    <Grid Margin="18">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="ALMACENES Y TRASLADOS" FontSize="24" FontWeight="Bold" Foreground="#18395F"/>
+            <TextBlock Text="Consulta existencias por ubicación y mueve productos con registro de despacho y recepción." Foreground="#58718F" Margin="0,4,0,0"/>
+        </StackPanel>
+        <TabControl Grid.Row="1" Background="White" Padding="8">
+            <TabItem Header="Almacenes y existencias">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="2*"/><ColumnDefinition Width="3*"/></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Almacén:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="WarehousePicker" Width="310" DisplayMemberPath="Name" SelectionChanged="WarehousePicker_SelectionChanged"/>
+                        <Button Content="Actualizar" Margin="8,0,0,0" Padding="14,7" Click="Refresh_Click"/>
+                        <Button x:Name="AssignTerminalButton" Content="Asignar esta terminal" Margin="8,0,0,0" Padding="14,7" Background="#2E64B7" Foreground="White" Click="AssignTerminal_Click"/>
+                        <Button x:Name="DeactivateWarehouseButton" Content="Desactivar" Margin="8,0,0,0" Padding="14,7" IsEnabled="False" Click="DeactivateWarehouse_Click"/>
+                    </StackPanel>
+                    <GroupBox x:Name="CreateWarehouseGroup" Grid.Row="1" Grid.Column="0" Header="Crear almacén" Margin="0,0,12,0" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="Código" Margin="0,4,0,3"/><TextBox x:Name="WarehouseCodeBox" MaxLength="20" Height="32"/>
+                            <TextBlock Text="Nombre" Margin="0,10,0,3"/><TextBox x:Name="WarehouseNameBox" MaxLength="100" Height="32"/>
+                            <Button Content="Crear almacén" Margin="0,14,0,0" Padding="10" Background="#2E64B7" Foreground="White" Click="CreateWarehouse_Click"/>
+                            <TextBlock Text="La existencia inicial de productos nuevos queda en el almacén principal. Los demás empiezan en cero." TextWrapping="Wrap" Foreground="#58718F" Margin="0,14,0,0"/>
+                        </StackPanel>
+                    </GroupBox>
+                    <GroupBox Grid.Row="1" Grid.Column="1" Header="Existencias del almacén seleccionado" Padding="8">
+                        <DataGrid x:Name="WarehouseStockGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"/>
+                    </GroupBox>
+                    <TextBlock x:Name="WarehouseStatus" Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0" Foreground="#375A83" TextWrapping="Wrap"/>
+                </Grid>
+            </TabItem>
+            <TabItem x:Name="TransfersTab" Header="Traslados">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <GroupBox Grid.Row="0" Header="Nuevo traslado" Padding="10" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="1.6*"/><ColumnDefinition Width="0.7*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0"><TextBlock Text="Origen"/><ComboBox x:Name="TransferSourcePicker" DisplayMemberPath="Name"/></StackPanel>
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0"><TextBlock Text="Destino"/><ComboBox x:Name="TransferDestinationPicker" DisplayMemberPath="Name"/></StackPanel>
+                            <StackPanel Grid.Column="2" Margin="0,0,8,0"><TextBlock Text="Código o nombre del producto"/><TextBox x:Name="TransferProductBox" KeyDown="TransferProductBox_KeyDown"/></StackPanel>
+                            <StackPanel Grid.Column="3" Margin="0,0,8,0"><TextBlock Text="Cantidad"/><TextBox x:Name="TransferQuantityBox" Text="1"/></StackPanel>
+                            <Button Grid.Column="4" Content="Agregar" VerticalAlignment="Bottom" Padding="12,6" Click="AddTransferLine_Click"/>
+                            <Button Grid.Column="5" Content="Crear traslado" VerticalAlignment="Bottom" Margin="8,0,0,0" Padding="12,6" Background="#2E64B7" Foreground="White" Click="CreateTransfer_Click"/>
+                        </Grid>
+                    </GroupBox>
+                    <GroupBox Grid.Row="1" Header="Productos del nuevo traslado" Padding="6" Margin="0,0,0,10">
+                        <DataGrid x:Name="TransferDraftGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column">
+                            <DataGrid.Columns><DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="150"/><DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*"/><DataGridTextColumn Header="Cantidad" Binding="{Binding Quantity}" Width="120"/></DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Traslados recientes" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button Content="Despachar" Margin="18,0,0,0" Padding="14,6" Click="DispatchTransfer_Click"/>
+                        <Button Content="Recibir completo" Margin="8,0,0,0" Padding="14,6" Click="ReceiveTransfer_Click"/>
+                        <Button Content="Actualizar" Margin="8,0,0,0" Padding="14,6" Click="RefreshTransfers_Click"/>
+                    </StackPanel>
+                    <DataGrid x:Name="TransfersGrid" Grid.Row="3" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Estado" Binding="{Binding StatusLabel}" Width="125"/>
+                            <DataGridTextColumn Header="Origen" Binding="{Binding Source}" Width="*"/>
+                            <DataGridTextColumn Header="Destino" Binding="{Binding Destination}" Width="*"/>
+                            <DataGridTextColumn Header="Fecha" Binding="{Binding CreatedAtUtc, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Width="150"/>
+                            <DataGridTextColumn Header="Artículos" Binding="{Binding LineCount}" Width="90"/>
+                            <DataGridTextColumn Header="Unidades" Binding="{Binding Quantity}" Width="110"/>
+                            <DataGridTextColumn Header="Diferencia" Binding="{Binding Variance}" Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <Button Grid.Row="2" Content="Cerrar" HorizontalAlignment="Right" Width="120" Margin="0,12,0,0" Padding="8" IsCancel="True"/>
+    </Grid>
+</Window>

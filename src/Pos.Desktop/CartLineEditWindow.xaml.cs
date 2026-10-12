@@ -1,0 +1,70 @@
+using System.Globalization;
+using System.Windows;
+using Pos.Desktop.Presentation;
+
+namespace Pos.Desktop;
+
+public partial class CartLineEditWindow : Window
+{
+    private readonly decimal _catalogPrice;
+    public decimal Quantity { get; private set; }
+    public decimal? UnitPriceOverride { get; private set; }
+    public string? PriceOverrideReason { get; private set; }
+
+    public CartLineEditWindow(CartLineViewModel line)
+    {
+        InitializeComponent();
+        _catalogPrice = line.CatalogUnitPrice;
+        ProductLabel.Text = $"{line.Product.Name} · Código {line.Product.Sku}";
+        QuantityBox.Text = line.Quantity.ToString("0.###", PosNumberFormat.Culture);
+        PriceOverrideBox.Text = line.UnitPrice.ToString("N2", PosNumberFormat.Culture);
+        PriceOverrideReasonBox.Text = line.PriceOverrideReason ?? string.Empty;
+        CatalogPriceLabel.Text = $"Precio de catálogo: {line.SettlementCurrency} {line.CatalogUnitPrice:N2}. El precio especial se aplica solo a esta venta.";
+        Loaded += (_, _) => QuantityBox.Focus();
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorLabel.Text = string.Empty;
+        if (!decimal.TryParse(QuantityBox.Text.Trim(), NumberStyles.Number, PosNumberFormat.Culture, out var quantity) ||
+            quantity <= 0m || decimal.Round(quantity, 3) != quantity)
+        {
+            ErrorLabel.Text = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
+            QuantityBox.Focus();
+            QuantityBox.SelectAll();
+            return;
+        }
+
+        if (!PosNumberFormat.TryParseAmount(PriceOverrideBox.Text, out var price) || price <= 0m || decimal.Round(price, 4) != price)
+        {
+            ErrorLabel.Text = "El precio debe ser mayor que cero y tener hasta cuatro decimales.";
+            PriceOverrideBox.Focus();
+            PriceOverrideBox.SelectAll();
+            return;
+        }
+
+        var reason = PriceOverrideReasonBox.Text.Trim();
+        // Typing the catalog price means “use the catalog price”, so no special authorization is needed.
+        if (price == _catalogPrice)
+        {
+            UnitPriceOverride = null;
+            PriceOverrideReason = null;
+        }
+        else
+        {
+            if (reason.Length is < 3 or > 250)
+            {
+                ErrorLabel.Text = "Escribe un motivo de entre 3 y 250 caracteres para el precio especial.";
+                PriceOverrideReasonBox.Focus();
+                return;
+            }
+            UnitPriceOverride = price;
+            PriceOverrideReason = reason;
+        }
+
+        Quantity = quantity;
+        DialogResult = true;
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+}

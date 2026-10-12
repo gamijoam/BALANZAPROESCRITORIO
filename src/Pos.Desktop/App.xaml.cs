@@ -1,4 +1,8 @@
 using System.Globalization;
+using System.Data.Common;
+using System.IO;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Windows;
 using Pos.Desktop.Presentation;
@@ -8,17 +12,160 @@ namespace Pos.Desktop;
 public partial class App : Application
 {
     private PosApiClient? _apiClient;
+    private LocalPosServerProcessHost? _localServer;
+    private bool _canRestartLocalService;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         CultureInfo.DefaultThreadCurrentCulture = PosNumberFormat.Culture;
         CultureInfo.DefaultThreadCurrentUICulture = PosNumberFormat.Culture;
         Thread.CurrentThread.CurrentCulture = PosNumberFormat.Culture;
         Thread.CurrentThread.CurrentUICulture = PosNumberFormat.Culture;
         base.OnStartup(e);
-        _apiClient = new PosApiClient(new Uri("http://localhost:5155"));
+        var apiBaseUrl = Environment.GetEnvironmentVariable("POS_API_BASE_URL");
+        var configurationDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "Configuracion");
+        var profileStore = new PosInstallationProfileStore(Path.Combine(configurationDirectory, "deployment.dpapi"), new WindowsDpapiSecretProtector());
+        PosInstallationProfile? profile;
+        try { profile = profileStore.Load(); }
+        catch (InvalidOperationException exception)
+        {
+            MessageBox.Show(exception.Message, "Perfil de instalación no disponible", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
+        if (profile is null && string.IsNullOrWhiteSpace(apiBaseUrl))
+        {
+            var setup = new InstallationSetupWindow(configurationDirectory);
+            if (setup.ShowDialog() != true || setup.Profile is null)
+            {
+                Shutdown(0);
+                return;
+            }
+            profile = setup.Profile;
+            profileStore.Save(profile);
+        }
+
+        var startLocalServer = false;
+        if (profile is not null)
+        {
+            apiBaseUrl = profile.ApiBaseUrl;
+            if (profile.Mode == PosInstallationMode.Standalone)
+            {
+                apiBaseUrl = "http://127.0.0.1:5155";
+                startLocalServer = true;
+            }
+            else if (profile.Mode == PosInstallationMode.Server)
+            {
+                startLocalServer = true;
+                try
+                {
+                    var listenAddress = new Uri(profile.ApiBaseUrl);
+                    var localAddresses = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(network => network.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                        .SelectMany(network => network.GetIPProperties().UnicastAddresses)
+                        .Select(address => address.Address);
+                    if (!System.Net.Dns.GetHostAddresses(listenAddress.Host).Any(resolved => localAddresses.Any(local => local.Equals(resolved))))
+                        throw new InvalidOperationException("La dirección del servidor no resuelve a una dirección asignada a esta computadora.");
+                    if (listenAddress.AbsolutePath != "/" || !string.IsNullOrEmpty(listenAddress.Query))
+                        throw new InvalidOperationException("La dirección HTTPS del servidor debe ser raíz, sin ruta ni parámetros.");
+                }
+                catch (Exception exception) when (exception is System.Net.Sockets.SocketException or InvalidOperationException)
+                {
+                    MessageBox.Show(exception.Message, "Dirección de servidor no válida", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Shutdown(1);
+                    return;
+                }
+            }
+        }
+        else
+        {
+            apiBaseUrl ??= "http://127.0.0.1:5155";
+        }
+
+        if (!Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out var apiUri))
+        {
+            MessageBox.Show("La dirección del servicio POS_API_BASE_URL o del perfil de instalación no es válida.", "Punto de venta", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
+        if (startLocalServer || (profile is null && apiUri.IsLoopback && apiUri.Port == 5155))
+        {
+            if (profile?.Mode != PosInstallationMode.Server)
+            {
+                // Keep the single-PC API bound to IPv4 loopback only.
+                apiBaseUrl = "http://127.0.0.1:5155";
+                apiUri = new Uri(apiBaseUrl);
+            }
+            while (true)
+            {
+                try
+                {
+                    await EnsureLocalServerReadyAsync(apiUri, profile);
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    var result = MessageBox.Show(
+                        $"{exception.Message}{Environment.NewLine}{Environment.NewLine}Cuando PostgreSQL esté iniciado o corregida la conexión, selecciona Sí para volver a comprobarla. Selecciona No para cerrar el POS.",
+                        "Servicio local no disponible", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (result == MessageBoxResult.Yes) continue;
+                    Shutdown(1);
+                    return;
+                }
+            }
+
+            if (profile is not null)
+            {
+                profile = profile with { DatabaseConfigured = true };
+                profileStore.Save(profile);
+            }
+        }
+        else if (profile?.Mode == PosInstallationMode.ClientTerminal)
+        {
+            while (true)
+            {
+                try
+                {
+                    await EnsureRemoteServiceReadyAsync(apiUri, profile?.ServerCertificateSha256);
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    var result = MessageBox.Show(
+                        $"{exception.Message}{Environment.NewLine}{Environment.NewLine}Sí: volver a intentar. No: cambiar la IP y confirmar de nuevo el servidor. Cancelar: cerrar el POS.",
+                        "Servidor POS no disponible", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+                    if (result == MessageBoxResult.Yes) continue;
+                    if (result == MessageBoxResult.No)
+                    {
+                        var setup = new InstallationSetupWindow(configurationDirectory, PosInstallationMode.ClientTerminal);
+                        if (setup.ShowDialog() == true && setup.Profile is not null)
+                        {
+                            profile = setup.Profile;
+                            profileStore.Save(profile);
+                            apiBaseUrl = profile.ApiBaseUrl;
+                            apiUri = new Uri(apiBaseUrl);
+                            break;
+                        }
+                    }
+                    Shutdown(1);
+                    return;
+                }
+            }
+            profileStore.Save(profile!);
+        }
+
+        _apiClient = new PosApiClient(new Uri(apiBaseUrl), terminalCredential: profile?.TerminalCredential,
+            serverCertificateSha256: profile?.ServerCertificateSha256);
+        _apiClient.RequestAdministratorPinAsync = (challenge, _) =>
+        {
+            var dialog = new AdminPinApprovalWindow(challenge) { Owner = MainWindow };
+            return Task.FromResult(dialog.ShowDialog() == true ? dialog.Credentials : null);
+        };
         var viewModel = new PosViewModel(_apiClient);
-        var window = new MainWindow(viewModel);
+        var window = new MainWindow(viewModel, _apiClient,
+            startLocalServer && _canRestartLocalService ? RestartLocalServiceAndReloadModulesAsync : null);
         MainWindow = window;
         window.Show();
     }
@@ -26,6 +173,154 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _apiClient?.Dispose();
+        _localServer?.Dispose();
         base.OnExit(e);
+    }
+
+    private async Task RestartLocalServiceAndReloadModulesAsync(CancellationToken cancellationToken)
+    {
+        if (_localServer is null)
+            throw new InvalidOperationException("Esta terminal no administra el servidor. Reinicia el servicio desde la computadora servidor.");
+
+        await _localServer.RestartAsync(cancellationToken);
+        if (MainWindow is MainWindow mainWindow)
+        {
+            if (!await mainWindow.ReloadDesktopModulesAsync(cancellationToken))
+                throw new InvalidOperationException("El servidor volvió a estar listo, pero no se pudo cargar una o más pantallas. Revisa el mensaje de estado del POS.");
+        }
+    }
+
+    private async Task EnsureLocalServerReadyAsync(Uri apiBaseAddress, PosInstallationProfile? profile = null)
+    {
+        _localServer?.Dispose();
+        _localServer = null;
+        var localDataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "Configuracion");
+        var store = new LocalDatabaseConfigurationStore(Path.Combine(localDataDirectory, "base-datos.dpapi"), new WindowsDpapiSecretProtector());
+        LocalDatabaseConfiguration? settings;
+        try
+        {
+            settings = store.Load();
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new PosServerStartupException(
+                $"{exception.Message} El POS y el actualizador deben ejecutarse con la misma cuenta de Windows. Si necesitas regenerar la conexión, cierra el POS y ejecuta scripts\\Configure-LocalDatabase.ps1 desde la instalación con esa cuenta; el script pedirá la contraseña del administrador postgres y guardará una nueva clave para el usuario de aplicación. No escribas la contraseña postgres si esta pantalla indica que el usuario es pos_app.");
+        }
+
+        if (settings is null)
+        {
+            settings = TryReadLegacyUserSecrets();
+            if (settings is not null) store.Save(settings);
+        }
+
+        var logs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "Logs");
+        var serverPath = ResolveServerPath();
+        var probeHost = CreateLocalServerHost(apiBaseAddress, serverPath, logs, settings, profile);
+        await probeHost.EnsureCurrentServerAsync();
+        var health = await probeHost.ProbeAsync();
+        if (health == PosServerHealth.NotRunning && !File.Exists(serverPath))
+        {
+            probeHost.Dispose();
+            throw new PosServerStartupException($"No se encontró el servidor local del POS junto a la aplicación. Revisa el paquete actualizado. Ruta esperada: {serverPath}");
+        }
+        if (health == PosServerHealth.NotRunning && settings is null)
+        {
+            var setupWindow = new DatabaseSetupWindow();
+            if (setupWindow.ShowDialog() != true || setupWindow.Configuration is null)
+            {
+                probeHost.Dispose();
+                throw new PosServerStartupException("La conexión PostgreSQL no se configuró. El POS no puede iniciar sesión sin el servicio local.");
+            }
+            settings = setupWindow.Configuration;
+            store.Save(settings);
+        }
+
+        if (health != PosServerHealth.NotRunning && settings is null)
+        {
+            _localServer = probeHost;
+        }
+        else
+        {
+            _localServer = CreateLocalServerHost(apiBaseAddress, serverPath, logs, settings!, profile);
+            probeHost.Dispose();
+        }
+        _canRestartLocalService = settings is not null;
+
+        try
+        {
+            await new PosLocalStartupCoordinator(_localServer).EnsureReadyAsync();
+        }
+        catch (Exception exception) when (health == PosServerHealth.NotRunning &&
+                                          exception is PosDatabaseUnavailableException or PosServerStartupException)
+        {
+            var choice = MessageBox.Show(
+                $"{exception.Message}{Environment.NewLine}{Environment.NewLine}¿Quieres revisar o corregir los datos de PostgreSQL?",
+                "No se pudo conectar con PostgreSQL", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (choice != MessageBoxResult.Yes) throw;
+
+            var setupWindow = new DatabaseSetupWindow(settings);
+            if (setupWindow.ShowDialog() != true || setupWindow.Configuration is null) throw;
+            settings = setupWindow.Configuration;
+            store.Save(settings);
+            _localServer.Dispose();
+            _localServer = CreateLocalServerHost(apiBaseAddress, serverPath, logs, settings, profile);
+            await new PosLocalStartupCoordinator(_localServer).EnsureReadyAsync();
+        }
+    }
+
+    private static LocalPosServerProcessHost CreateLocalServerHost(Uri apiBaseAddress, string serverPath, string logs,
+        LocalDatabaseConfiguration? database, PosInstallationProfile? profile)
+    {
+        var isLanServer = profile?.Mode == PosInstallationMode.Server;
+        return new LocalPosServerProcessHost(apiBaseAddress, serverPath, logs, database?.ToConnectionString(),
+            isLanServer ? apiBaseAddress.ToString().TrimEnd('/') : null,
+            isLanServer ? profile!.ServerCertificatePath : null,
+            isLanServer ? profile!.ServerCertificatePassword : null,
+            isLanServer ? profile!.ServerCertificateSha256 : null);
+    }
+
+    private static async Task EnsureRemoteServiceReadyAsync(Uri apiBaseAddress, string? serverCertificateSha256 = null)
+    {
+        var handler = ServerCertificatePin.IsValid(serverCertificateSha256)
+            ? ServerCertificatePin.CreatePinnedHandler(serverCertificateSha256!)
+            : new HttpClientHandler();
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var response = await client.GetAsync(new Uri(apiBaseAddress.ToString().TrimEnd('/') + "/health/ready"));
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"El servicio respondió {((int)response.StatusCode)} y no está listo para recibir ventas.");
+        using var document = await System.Text.Json.JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        if (!document.RootElement.TryGetProperty("status", out var status) || status.GetString() != "ready")
+            throw new InvalidOperationException("El servicio HTTPS respondió, pero PostgreSQL no está listo.");
+    }
+
+    private static string ResolveServerPath()
+    {
+        var appDirectory = AppContext.BaseDirectory;
+        var candidates = new[]
+        {
+            Path.GetFullPath(Path.Combine(appDirectory, "..", "server", "Pos.Server.exe")),
+            Path.GetFullPath(Path.Combine(appDirectory, "..", "net10.0", "Pos.Server.exe")),
+            Path.GetFullPath(Path.Combine(appDirectory, "..", "..", "..", "..", "Pos.Server", "bin", "Debug", "net10.0", "Pos.Server.exe")),
+            Path.GetFullPath(Path.Combine(appDirectory, "..", "..", "..", "..", "Pos.Server", "bin", "Release", "net10.0", "Pos.Server.exe"))
+        };
+        return candidates.FirstOrDefault(File.Exists) ?? candidates[0];
+    }
+
+    private static LocalDatabaseConfiguration? TryReadLegacyUserSecrets()
+    {
+        const string userSecretsId = "f7b2b1b3-8d25-4d18-98ff-c301ae6b94a5";
+        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "UserSecrets", userSecretsId, "secrets.json");
+        if (!File.Exists(path)) return null;
+
+        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        if (!document.RootElement.TryGetProperty("ConnectionStrings", out var strings) ||
+            !strings.TryGetProperty("Pos", out var value) || string.IsNullOrWhiteSpace(value.GetString())) return null;
+
+        var builder = new DbConnectionStringBuilder { ConnectionString = value.GetString()! };
+        string Read(string key) => builder.TryGetValue(key, out var result) ? Convert.ToString(result, CultureInfo.InvariantCulture) ?? string.Empty : string.Empty;
+        if (!int.TryParse(Read("Port"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var port)) port = 5432;
+        var configuration = new LocalDatabaseConfiguration(Read("Host"), port, Read("Database"), Read("Username"), Read("Password"));
+        _ = configuration.ToConnectionString();
+        return configuration;
     }
 }

@@ -1,14 +1,18 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using Pos.Domain.Finance;
+using Pos.Domain.Sales;
 
 namespace Pos.Desktop.Presentation;
 
 public sealed class PosViewModel : INotifyPropertyChanged
 {
     private readonly IPosApiClient _api;
+    private readonly HashSet<CartLineViewModel> _observedCartLines = [];
     private string _searchText = string.Empty;
     private string _statusMessage = "Conecta con el servicio para iniciar la venta.";
     private string _operatorName = string.Empty;
@@ -17,12 +21,14 @@ public sealed class PosViewModel : INotifyPropertyChanged
     private ProductInfo? _currentProduct;
     private CashSessionInfo? _cashSession;
     private CustomerInfo? _selectedCustomer;
+    private CartLineViewModel? _selectedCartLine;
     private Guid? _pendingCustomerId;
     private string? _pendingIdempotencyKey;
     private SaleLineInput[]? _pendingLines;
     private SalePaymentInput[]? _pendingPayments;
     private ReceiptLine[]? _pendingReceiptLines;
     private decimal _pendingTotal;
+    private decimal _pendingRoundingAdjustment;
     private string _pendingCurrency = "VES";
     private Guid? _pendingExchangeRateId;
     private ExchangeRateInfo? _usdToVesRate;
@@ -30,6 +36,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public PosViewModel(IPosApiClient api)
     {
         _api = api;
+        CartLines.CollectionChanged += CartLines_CollectionChanged;
         SearchCommand = new AsyncRelayCommand(() => SearchAsync(SearchText), () => !IsBusy && !string.IsNullOrWhiteSpace(SearchText));
         IncreaseLineCommand = new RelayCommand(x => Increase(x as CartLineViewModel), _ => CanEditCart);
         DecreaseLineCommand = new RelayCommand(x => Decrease(x as CartLineViewModel), _ => CanEditCart);
@@ -46,7 +53,16 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public ICommand DecreaseLineCommand { get; }
     public ICommand RemoveLineCommand { get; }
     public ICommand ChargeCommand { get; }
-    public string OperatorName { get => _operatorName; private set => Set(ref _operatorName, value); }
+    public string OperatorName
+    {
+        get => _operatorName;
+        private set
+        {
+            if (!Set(ref _operatorName, value)) return;
+            OnPropertyChanged(nameof(CashStatus));
+            OnPropertyChanged(nameof(OperatorSessionActionToolTip));
+        }
+    }
     public string SearchText { get => _searchText; set { if (Set(ref _searchText, value)) (SearchCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged(); } }
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
     public string ActiveTool { get => _activeTool; private set => Set(ref _activeTool, value); }
@@ -58,19 +74,47 @@ public sealed class PosViewModel : INotifyPropertyChanged
         {
             if (!Set(ref _cashSession, value)) return;
             OnPropertyChanged(nameof(CashStatus)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge));
+            OnPropertyChanged(nameof(OperatorSessionActionLabel)); OnPropertyChanged(nameof(CanUseSessionAction));
+            OnPropertyChanged(nameof(OperatorSessionActionToolTip));
             foreach (var line in CartLines) line.SetPricing(Currency, _usdToVesRate);
             OnPropertyChanged(nameof(CurrentUnitPrice)); OnPropertyChanged(nameof(CurrentPriceLabel)); OnPropertyChanged(nameof(ReferenceCurrentPriceLabel)); OnPropertyChanged(nameof(ReferenceTotalLabel));
             RefreshTotals(); NotifyChargeCommand();
         }
     }
     public CustomerInfo? SelectedCustomer { get => _selectedCustomer; private set => Set(ref _selectedCustomer, value); }
-    public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) { OnPropertyChanged(nameof(CanCharge)); NotifyChargeCommand(); } } }
+    public CartLineViewModel? SelectedCartLine
+    {
+        get => _selectedCartLine;
+        set
+        {
+            if (Set(ref _selectedCartLine, value)) OnPropertyChanged(nameof(CanEditSelectedLine));
+        }
+    }
+    public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) { OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(CanEditSelectedLine)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); } } }
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_api.AccessToken);
-    public bool CanCharge => IsAuthenticated && CashSession is not null && ItemCount > 0 && !IsBusy;
+    public Uri ApiBaseAddress => _api.BaseAddress;
+    public bool CanCharge => IsAuthenticated && CashSession is { IsActiveForCurrentOperator: true } && ItemCount > 0 && !IsBusy;
+    public string OperatorSessionActionLabel => CashSession is not null ? "Cambiar operador" : "Cerrar sesión";
+    public bool CanUseSessionAction => IsAuthenticated && !IsBusy && CartLines.Count == 0 && !HasPendingCheckout;
+    public string OperatorSessionActionToolTip => IsBusy
+        ? "Espera a que termine la operación actual."
+        : HasPendingCheckout
+        ? "Resuelve la venta pendiente antes de cambiar de operador."
+        : CartLines.Count > 0
+            ? "Cobra o retira los artículos del carrito antes de cambiar de operador."
+            : CashSession is null
+                ? "Cierra tu sesión y vuelve al inicio de sesión."
+                : CashSession.IsActiveForCurrentOperator
+                    ? "Cambia de operador manteniendo abierto el turno; quedará disponible para el siguiente usuario."
+                    : $"Cierra esta sesión. El turno seguirá asignado a {CashSession.ActiveOperatorName ?? "otro operador"}.";
     public bool CanEditCart => _pendingIdempotencyKey is null;
+    public bool CanEditSelectedLine => CanEditCart && !IsBusy && SelectedCartLine is not null;
     public bool HasPendingCheckout => _pendingIdempotencyKey is not null;
     public IReadOnlyList<SalePaymentInput>? PendingPayments => _pendingPayments?.ToArray();
-    public string CashStatus => CashSession is null ? "Caja cerrada" : $"Caja abierta · {CashSession.Currency}";
+    public string CashStatus => CashSession is null ? "Caja cerrada"
+        : CashSession.IsActiveForCurrentOperator
+            ? $"Caja abierta · {CashSession.Currency} · turno de {CashSession.OpenedByOperatorName}"
+            : $"Caja abierta · en uso por {CashSession.ActiveOperatorName ?? "otro operador"}";
     public decimal Total => CartLines.Sum(x => x.LineTotal);
     public decimal ItemCount => CartLines.Sum(x => x.Quantity);
     public decimal CurrentUnitPrice => CurrentProduct is null ? 0m : ConvertPrice(CurrentProduct.UnitPrice, CurrentProduct.Currency, Currency, _usdToVesRate?.Rate);
@@ -83,22 +127,123 @@ public sealed class PosViewModel : INotifyPropertyChanged
 
     public async Task LoginAsync(string username, string pin, Guid terminalId, CancellationToken cancellationToken = default)
     {
+        await AuthenticateAsync(username, pin, terminalId, cancellationToken);
+        await LoadInitialPosStateAsync(cancellationToken);
+    }
+
+    public async Task AuthenticateAsync(string username, string pin, Guid terminalId, CancellationToken cancellationToken = default)
+    {
         IsBusy = true;
+        StatusMessage = "Validando usuario y PIN.";
         try
         {
             await _api.LoginAsync(username, pin, terminalId, cancellationToken);
             OperatorName = username.Trim();
+            OnPropertyChanged(nameof(IsAuthenticated));
+            StatusMessage = "Acceso validado. Preparando el punto de venta.";
+        }
+        catch (PosApiException ex)
+        {
+            StatusMessage = ex.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                ? "Usuario o PIN incorrecto."
+                : "No se pudo validar el acceso. Verifica el servicio.";
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            StatusMessage = "No se pudo conectar con el servicio. Revisa la dirección y la red.";
+            throw;
+        }
+        catch (Exception)
+        {
+            StatusMessage = "No se pudo validar el acceso. Revisa el servicio e inténtalo de nuevo.";
+            throw;
+        }
+        finally { IsBusy = false; }
+    }
+
+    public async Task LogoutAsync(CancellationToken cancellationToken = default)
+    {
+        await EndOperatorSessionAsync(releaseCashSession: false, cancellationToken);
+    }
+
+    public async Task SwitchOperatorAsync(CancellationToken cancellationToken = default)
+    {
+        await EndOperatorSessionAsync(releaseCashSession: true, cancellationToken);
+    }
+
+    private async Task EndOperatorSessionAsync(bool releaseCashSession, CancellationToken cancellationToken)
+    {
+        if (IsBusy) throw new InvalidOperationException("Espera a que termine la operación actual antes de cerrar la sesión.");
+        if (!releaseCashSession && CashSession is not null)
+            throw new InvalidOperationException("Cierra la caja antes de cerrar la sesión del operador.");
+        if (HasPendingCheckout)
+            throw new InvalidOperationException("Resuelve la venta pendiente antes de cerrar la sesión.");
+        if (CartLines.Count > 0)
+            throw new InvalidOperationException("Cobra o retira los artículos del carrito antes de cerrar la sesión.");
+
+        IsBusy = true;
+        try
+        {
+            if (releaseCashSession && CashSession is { IsActiveForCurrentOperator: true })
+                await _api.ReleaseCurrentCashSessionAsync(cancellationToken);
+            await _api.LogoutAsync(cancellationToken);
+            OperatorName = string.Empty;
+            CashSession = null;
+            SelectedCustomer = null;
+            SelectedCartLine = null;
+            CurrentProduct = null;
+            SearchResults.Clear();
+            SearchText = string.Empty;
+            _usdToVesRate = null;
+            StatusMessage = releaseCashSession
+                ? "Operador cambiado. Inicia sesión para continuar; la caja sigue abierta."
+                : "Sesión cerrada. Inicia sesión para continuar.";
+            OnPropertyChanged(nameof(IsAuthenticated));
+            OnPropertyChanged(nameof(CanCharge));
+            RefreshTotals();
+        }
+        finally { IsBusy = false; }
+    }
+
+    public async Task LoadInitialPosStateAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsAuthenticated) throw new InvalidOperationException("Authenticate before loading POS session data.");
+        IsBusy = true;
+        try
+        {
             await RefreshExchangeRateAsync(cancellationToken);
             CashSession = await _api.GetCurrentCashSessionAsync(cancellationToken);
-            StatusMessage = CashSession is null ? "Sesión iniciada. Abre la caja para comenzar." : "Sesión iniciada. Escanea o busca un producto.";
+            if (CashSession is { ActiveOperatorName: null, IsActiveForCurrentOperator: false })
+            {
+                try { CashSession = await _api.ClaimCurrentCashSessionAsync(cancellationToken); }
+                catch (PosApiException ex) when (ex.Code == "cash_session_in_use")
+                { CashSession = await _api.GetCurrentCashSessionAsync(cancellationToken); }
+            }
+            StatusMessage = CashSession is null
+                ? "Sesión iniciada. Abre la caja para comenzar."
+                : CashSession.IsActiveForCurrentOperator
+                    ? "Sesión iniciada. La caja está lista para continuar."
+                    : $"Hay un turno abierto en esta terminal, reservado para {CashSession.ActiveOperatorName ?? "otro operador"}. Ese operador debe liberar el turno antes de que otro pueda usar la caja.";
             OnPropertyChanged(nameof(IsAuthenticated)); OnPropertyChanged(nameof(CanCharge));
         }
         catch (PosApiException ex)
         {
-            StatusMessage = ex.StatusCode == System.Net.HttpStatusCode.Unauthorized ? "Usuario o PIN incorrecto." : "No se pudo iniciar sesión. Verifica el servicio.";
+            StatusMessage = ex.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                ? "Acceso aceptado, pero el servicio rechazó la sesión inicial."
+                : "Acceso aceptado, pero no se pudieron cargar los datos del punto de venta.";
             throw;
         }
-        catch (HttpRequestException) { StatusMessage = "No se pudo conectar con el servicio. Revisa la dirección y la red."; throw; }
+        catch (HttpRequestException)
+        {
+            StatusMessage = "Acceso aceptado, pero se perdió la conexión al cargar los datos iniciales.";
+            throw;
+        }
+        catch (Exception)
+        {
+            StatusMessage = "Acceso aceptado, pero ocurrió un error al cargar los datos iniciales.";
+            throw;
+        }
         finally { IsBusy = false; }
     }
 
@@ -117,12 +262,19 @@ public sealed class PosViewModel : INotifyPropertyChanged
         finally { IsBusy = false; }
     }
 
+    public async Task<CashSessionInfo?> RefreshCashSessionAsync(CancellationToken cancellationToken = default)
+    {
+        CashSession = await _api.GetCurrentCashSessionAsync(cancellationToken);
+        return CashSession;
+    }
+
     public async Task<CashCloseInfo?> CloseCashSessionAsync(decimal countedBalance, CancellationToken cancellationToken = default)
         => await CloseCashSessionAsync(countedBalance, 0m, cancellationToken);
 
     public async Task<CashCloseInfo?> CloseCashSessionAsync(decimal countedUsd, decimal countedVes, CancellationToken cancellationToken = default)
     {
         if (CashSession is null) return null;
+        if (!CashSession.IsActiveForCurrentOperator) throw new InvalidOperationException($"La caja está en uso por {CashSession.ActiveOperatorName ?? "otro operador"}.");
         IsBusy = true;
         try
         {
@@ -135,15 +287,25 @@ public sealed class PosViewModel : INotifyPropertyChanged
     }
 
     public Task RecordCashMovementAsync(CashMovementInput movement, CancellationToken cancellationToken = default)
-        => CashSession is null ? throw new InvalidOperationException("No hay una caja abierta.") : _api.RecordCashMovementAsync(CashSession.Id, movement, cancellationToken);
+        => CashSession is null ? throw new InvalidOperationException("No hay una caja abierta.")
+            : !CashSession.IsActiveForCurrentOperator ? throw new InvalidOperationException($"La caja está en uso por {CashSession.ActiveOperatorName ?? "otro operador"}.")
+            : _api.RecordCashMovementAsync(CashSession.Id, movement, cancellationToken);
 
     public Task<IReadOnlyList<InventoryItemInfo>> GetInventoryAsync(CancellationToken cancellationToken = default) => _api.GetInventoryAsync(cancellationToken);
+    public Task<IReadOnlyList<InventoryItemInfo>> GetInventoryAsync(string? query, string status, string currency, string stock, bool? hasImage, CancellationToken cancellationToken = default)
+        => _api.GetInventoryAsync(query, status, currency, stock, hasImage, cancellationToken);
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => _api.CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
+    public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
+        => _api.UpdateProductAsync(productId, sku, name, cancellationToken);
+    public Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
+        => _api.SetProductActiveAsync(productId, active, cancellationToken);
     public Task UploadProductImageAsync(Guid productId, string imagePath, CancellationToken cancellationToken = default)
         => _api.UploadProductImageAsync(productId, imagePath, cancellationToken);
     public Task<byte[]?> GetProductImageAsync(Guid productId, CancellationToken cancellationToken = default)
         => _api.GetProductImageAsync(productId, cancellationToken);
+    public Task RemoveProductImageAsync(Guid productId, CancellationToken cancellationToken = default)
+        => _api.RemoveProductImageAsync(productId, cancellationToken);
     public Task<decimal> AdjustStockAsync(Guid productId, decimal quantityDelta, string reason, CancellationToken cancellationToken = default)
         => _api.AdjustStockAsync(productId, quantityDelta, reason, cancellationToken);
     public Task<IReadOnlyList<StockMovementInfo>> GetStockMovementsAsync(Guid productId, CancellationToken cancellationToken = default)
@@ -151,6 +313,10 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task<IReadOnlyList<CustomerInfo>> GetCustomersAsync(string? query = null, CancellationToken cancellationToken = default) => _api.GetCustomersAsync(query, cancellationToken);
     public Task<CustomerInfo> CreateCustomerAsync(string name, string? documentNumber, string? phone, string currency, decimal creditLimit, CancellationToken cancellationToken = default)
         => _api.CreateCustomerAsync(name, documentNumber, phone, currency, creditLimit, cancellationToken);
+    public Task<CustomerInfo> UpdateCustomerAsync(Guid customerId, string name, string? documentNumber, string? phone, decimal creditLimit, CancellationToken cancellationToken = default)
+        => _api.UpdateCustomerAsync(customerId, name, documentNumber, phone, creditLimit, cancellationToken);
+    public Task DeactivateCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
+        => _api.DeactivateCustomerAsync(customerId, cancellationToken);
     public Task ChangePriceAsync(Guid productId, decimal price, string reason, CancellationToken cancellationToken = default) => _api.ChangePriceAsync(productId, price, reason, cancellationToken);
     public Task<IReadOnlyList<ExchangeRateInfo>> GetExchangeRatesAsync(CancellationToken cancellationToken = default) => _api.GetExchangeRatesAsync(cancellationToken);
     public async Task SetExchangeRateAsync(string from, string to, decimal rate, DateTime effectiveAtUtc, string source, CancellationToken cancellationToken = default)
@@ -160,19 +326,53 @@ public sealed class PosViewModel : INotifyPropertyChanged
     }
     public Task<SalesReportInfo> GetSalesReportAsync(DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default)
         => _api.GetSalesReportAsync(fromUtc, toUtc, cancellationToken);
-    public Task<SaleDetailReportInfo> GetSalesDetailReportAsync(DateTime fromUtc, DateTime toUtc, string? currency, int page = 1, CancellationToken cancellationToken = default)
-        => _api.GetSalesDetailReportAsync(fromUtc, toUtc, currency, page, cancellationToken);
+    public Task<ProductSalesReportInfo> GetProductSalesReportAsync(DateTime fromUtc, DateTime toUtc, string? currency, CancellationToken cancellationToken = default)
+        => _api.GetProductSalesReportAsync(fromUtc, toUtc, currency, cancellationToken);
+    public Task<SaleDetailReportInfo> GetSalesDetailReportAsync(DateTime fromUtc, DateTime toUtc, string? currency, int page = 1, CancellationToken cancellationToken = default, string? paymentMethod = null, string? operatorName = null, string? status = null, string? query = null)
+        => _api.GetSalesDetailReportAsync(fromUtc, toUtc, currency, page, cancellationToken, paymentMethod, operatorName, status, query);
+    public Task<SaleReturnReceipt> ReturnSaleAsync(Guid saleId, SaleReturnInput request, string idempotencyKey, CancellationToken cancellationToken = default)
+        => _api.ReturnSaleAsync(saleId, request, idempotencyKey, cancellationToken);
     public Task<CashSessionReportInfo> GetCashSessionReportAsync(DateTime fromUtc, DateTime toUtc, string? status, CancellationToken cancellationToken = default)
         => _api.GetCashSessionReportAsync(fromUtc, toUtc, status, cancellationToken);
     public Task<IReadOnlyList<OperatorInfo>> GetOperatorsAsync(CancellationToken cancellationToken = default) => _api.GetOperatorsAsync(cancellationToken);
+    public Task<ModuleInstallationPlanClientResult> PlanModuleInstallationAsync(string requestedModuleId, IReadOnlyList<string> packagePaths, CancellationToken cancellationToken = default)
+        => _api.PlanModuleInstallationAsync(requestedModuleId, packagePaths, cancellationToken);
+    public Task<ModuleInstallationClientResult> InstallModuleAsync(string requestedModuleId, IReadOnlyList<string> packagePaths, CancellationToken cancellationToken = default)
+        => _api.InstallModuleAsync(requestedModuleId, packagePaths, cancellationToken);
+    public Task<IReadOnlyList<InstalledModuleRecordClient>> GetInstalledModulesAsync(CancellationToken cancellationToken = default)
+        => _api.GetInstalledModulesAsync(cancellationToken);
+    public Task DeactivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)
+        => _api.DeactivateModuleAsync(moduleId, cancellationToken);
+    public Task ActivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)
+        => _api.ActivateModuleAsync(moduleId, cancellationToken);
+    public Task<IReadOnlyList<WarehouseClientInfo>> GetWarehousesAsync(CancellationToken cancellationToken = default)
+        => _api.GetWarehousesAsync(cancellationToken);
+    public Task<IReadOnlyList<WarehouseStockClientInfo>> GetWarehouseStockAsync(Guid warehouseId, bool includeInactive = false, CancellationToken cancellationToken = default)
+        => _api.GetWarehouseStockAsync(warehouseId, includeInactive, cancellationToken);
+    public Task<IReadOnlyList<WarehouseTransferClientInfo>> GetWarehouseTransfersAsync(CancellationToken cancellationToken = default)
+        => _api.GetWarehouseTransfersAsync(cancellationToken);
+    public Task CreateWarehouseAsync(string code, string name, CancellationToken cancellationToken = default)
+        => _api.CreateWarehouseAsync(code, name, cancellationToken);
+    public Task SetWarehouseActiveAsync(Guid warehouseId, bool active, CancellationToken cancellationToken = default)
+        => _api.SetWarehouseActiveAsync(warehouseId, active, cancellationToken);
+    public Task CreateWarehouseTransferAsync(Guid sourceWarehouseId, Guid destinationWarehouseId, IReadOnlyList<WarehouseTransferClientLine> lines, CancellationToken cancellationToken = default)
+        => _api.CreateWarehouseTransferAsync(sourceWarehouseId, destinationWarehouseId, lines, cancellationToken);
+    public Task DispatchWarehouseTransferAsync(Guid transferId, CancellationToken cancellationToken = default)
+        => _api.DispatchWarehouseTransferAsync(transferId, cancellationToken);
+    public Task ReceiveWarehouseTransferAsync(Guid transferId, IReadOnlyList<WarehouseReceiptClientLine> lines, CancellationToken cancellationToken = default)
+        => _api.ReceiveWarehouseTransferAsync(transferId, lines, cancellationToken);
+    public Task AssignTerminalWarehouseAsync(Guid terminalId, Guid warehouseId, CancellationToken cancellationToken = default)
+        => _api.AssignTerminalWarehouseAsync(terminalId, warehouseId, cancellationToken);
+    public Task<IReadOnlyList<OperatorPermissionSetting>> GetOperatorPermissionsAsync(Guid id, CancellationToken cancellationToken = default) => _api.GetOperatorPermissionsAsync(id, cancellationToken);
+    public Task SetOperatorPermissionsAsync(Guid id, IReadOnlyList<OperatorPermissionSetting> permissions, CancellationToken cancellationToken = default) => _api.SetOperatorPermissionsAsync(id, permissions, cancellationToken);
     public Task CreateOperatorAsync(string username, string pin, string role, CancellationToken cancellationToken = default) => _api.CreateOperatorAsync(username, pin, role, cancellationToken);
     public Task SetOperatorRoleAsync(Guid id, string role, CancellationToken cancellationToken = default) => _api.SetOperatorRoleAsync(id, role, cancellationToken);
     public Task SetOperatorActiveAsync(Guid id, bool active, CancellationToken cancellationToken = default) => _api.SetOperatorActiveAsync(id, active, cancellationToken);
     public Task<IReadOnlyList<AuditInfo>> GetAuditAsync(CancellationToken cancellationToken = default) => _api.GetAuditAsync(cancellationToken);
     public Task<IReadOnlyList<InventoryReportRow>> GetInventoryReportAsync(CancellationToken cancellationToken = default) => _api.GetInventoryReportAsync(cancellationToken);
     public Task<ReceivableInfo> GetReceivablesAsync(Guid customerId, CancellationToken cancellationToken = default) => _api.GetReceivablesAsync(customerId, cancellationToken);
-    public Task RecordReceivablePaymentAsync(Guid customerId, decimal amount, string currency, string reason, CancellationToken cancellationToken = default)
-        => _api.RecordReceivablePaymentAsync(customerId, amount, currency, reason, cancellationToken);
+    public Task RecordReceivablePaymentAsync(Guid customerId, decimal amount, string currency, string? reference, CancellationToken cancellationToken = default)
+        => _api.RecordReceivablePaymentAsync(customerId, amount, currency, reference, cancellationToken);
     public void SelectCustomer(CustomerInfo? customer) { SelectedCustomer = customer; StatusMessage = customer is null ? "Venta general." : $"Cliente: {customer.Name}."; }
 
     public async Task SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -205,6 +405,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public bool AddProduct(ProductInfo product)
     {
         if (!CanEditCart) { StatusMessage = "Hay una venta pendiente de confirmar. Reintenta antes de cambiar el carrito."; return false; }
+        if (product.StockQuantity is <= 0m) { StatusMessage = $"{product.Name} está agotado y no se puede agregar."; return false; }
         if (product.Currency is not ("USD" or "VES"))
         {
             StatusMessage = "La moneda del producto no está soportada.";
@@ -235,7 +436,34 @@ public sealed class PosViewModel : INotifyPropertyChanged
         if (!CanEditCart) { StatusMessage = "Confirma el resultado de la venta pendiente antes de modificarla."; return; }
         if (line is null) return;
         CartLines.Remove(line);
+        if (ReferenceEquals(SelectedCartLine, line)) SelectedCartLine = null;
+        UpdatePreviewAfterRemoval(line);
         RefreshTotals();
+    }
+
+    public bool EditCartLine(CartLineViewModel? line, decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
+    {
+        if (!CanEditCart) { StatusMessage = "Confirma el resultado de la venta pendiente antes de modificarla."; return false; }
+        if (line is null || !CartLines.Contains(line)) return false;
+        if (quantity <= 0m || decimal.Round(quantity, 3) != quantity)
+        {
+            StatusMessage = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
+            return false;
+        }
+        var reason = string.IsNullOrWhiteSpace(priceOverrideReason) ? null : priceOverrideReason.Trim();
+        if (!SalePriceOverridePolicy.IsValid(unitPriceOverride, reason))
+        {
+            StatusMessage = "El precio especial debe ser mayor que cero, tener hasta cuatro decimales e indicar un motivo de al menos 3 caracteres.";
+            return false;
+        }
+
+        line.ApplyEdits(quantity, unitPriceOverride, reason);
+        SelectedCartLine = line;
+        RefreshTotals();
+        StatusMessage = unitPriceOverride.HasValue
+            ? "Precio especial aplicado a esta venta. Al confirmar, un administrador deberá autorizarlo con su PIN."
+            : "Artículo actualizado.";
+        return true;
     }
 
     public async Task<SaleReceipt> CompleteSaleAsync(IReadOnlyList<SalePaymentInput> payments, CancellationToken cancellationToken = default)
@@ -245,28 +473,40 @@ public sealed class PosViewModel : INotifyPropertyChanged
         {
             if (payments.Count == 0 || payments.Any(x => x.Amount <= 0 || x.Currency is not ("USD" or "VES")))
                 throw new ArgumentException("Cada pago debe tener un monto válido y estar expresado en VES o USD.", nameof(payments));
-            var paymentTotal = 0m;
             foreach (var payment in payments)
             {
                 if (payment.Currency != Currency && _usdToVesRate is null)
                     throw new ArgumentException("Registra una tasa USD/VES vigente para aceptar pagos en ambas monedas.", nameof(payments));
-                paymentTotal += ConvertPrice(payment.Amount, payment.Currency, Currency, _usdToVesRate?.Rate);
-                if ((string.Equals(payment.Method, "Fiado", StringComparison.OrdinalIgnoreCase) || string.Equals(payment.Method, "credit", StringComparison.OrdinalIgnoreCase)) && payment.Currency != Currency)
-                    throw new ArgumentException("El pago fiado debe expresarse en la moneda de la venta.", nameof(payments));
+                if (IsCreditPayment(payment.Method) && payment.Currency != Currency)
+                    throw new ArgumentException("El pago a crédito debe expresarse en la moneda de la venta.", nameof(payments));
             }
-            if (paymentTotal != Total)
-                throw new ArgumentException($"Los pagos convertidos suman {PosNumberFormat.FormatAmount(paymentTotal)} {Currency}; el total es {PosNumberFormat.FormatAmount(Total)} {Currency}.", nameof(payments));
-            if (payments.Any(x => string.Equals(x.Method, "Fiado", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Method, "credit", StringComparison.OrdinalIgnoreCase)) && SelectedCustomer is null)
-                throw new ArgumentException("Selecciona un cliente antes de cobrar una parte al fiado.", nameof(payments));
+            if (Currency == "VES" && payments.Any(x => IsCreditPayment(x.Method)) && _usdToVesRate is null)
+                throw new ArgumentException("Registra una tasa USD/VES vigente para convertir el crédito a dólares.", nameof(payments));
+            PaymentSettlementResult settlement;
+            try
+            {
+                settlement = PaymentSettlementPolicy.Evaluate(Total, Currency,
+                    payments.Select(x => new PaymentTender(x.Amount, x.Currency)), _usdToVesRate?.Rate);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new ArgumentException(exception.Message, nameof(payments), exception);
+            }
+            if (!settlement.IsSettled)
+                throw new ArgumentException($"Los pagos difieren del total en {Currency} {PosNumberFormat.FormatAmount(decimal.Abs(settlement.RoundingAdjustment))}, por encima del ajuste de redondeo permitido.", nameof(payments));
+            if (payments.Any(x => IsCreditPayment(x.Method)) && SelectedCustomer is null)
+                throw new ArgumentException("Selecciona un cliente antes de cobrar una parte a crédito.", nameof(payments));
             _pendingIdempotencyKey = Guid.NewGuid().ToString("N");
-            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity)).ToArray();
+            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason)).ToArray();
             _pendingPayments = payments.ToArray();
             _pendingCustomerId = SelectedCustomer?.Id;
             _pendingReceiptLines = CartLines.Select(x => new ReceiptLine(x.Product.Sku, x.Product.Name, x.Quantity, x.UnitPrice, x.LineTotal, x.Product.UnitPrice, x.Product.Currency, x.AppliedExchangeRate)).ToArray();
             _pendingTotal = Total;
+            _pendingRoundingAdjustment = settlement.RoundingAdjustment;
             _pendingCurrency = Currency;
-            _pendingExchangeRateId = CartLines.Any(x => x.ExchangeRateId.HasValue) || payments.Any(x => x.Currency != Currency) ? _usdToVesRate?.Id : null;
-            OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); NotifyCartCommands();
+            _pendingExchangeRateId = CartLines.Any(x => x.ExchangeRateId.HasValue) || payments.Any(x => x.Currency != Currency) ||
+                (Currency == "VES" && payments.Any(x => IsCreditPayment(x.Method))) ? _usdToVesRate?.Id : null;
+            OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyCartCommands();
         }
         var lines = _pendingLines!;
         var fixedPayments = _pendingPayments!;
@@ -275,9 +515,10 @@ public sealed class PosViewModel : INotifyPropertyChanged
         try
         {
             var saleId = await _api.CheckoutAsync(CashSession.Id, lines, fixedPayments, _pendingCustomerId, _pendingIdempotencyKey, _pendingExchangeRateId, cancellationToken);
-            var receipt = new SaleReceipt(saleId, DateTime.Now, _pendingCurrency, _pendingTotal, receiptLines, fixedPayments);
+            var receipt = new SaleReceipt(saleId, DateTime.Now, _pendingCurrency, _pendingTotal, receiptLines, fixedPayments)
+            { RoundingAdjustment = _pendingRoundingAdjustment };
             ClearPendingCheckout();
-            CartLines.Clear(); CurrentProduct = null; SelectedCustomer = null; RefreshTotals();
+            CartLines.Clear(); SelectedCartLine = null; CurrentProduct = null; SelectedCustomer = null; RefreshTotals();
             StatusMessage = $"Venta {saleId.ToString("N")[..8]} confirmada.";
             return receipt;
         }
@@ -313,8 +554,45 @@ public sealed class PosViewModel : INotifyPropertyChanged
     }
 
     private void Increase(CartLineViewModel? line) { if (line is null || !CanEditCart) return; line.Quantity++; RefreshTotals(); }
-    private void Decrease(CartLineViewModel? line) { if (line is null || !CanEditCart) return; if (line.Quantity <= 1) CartLines.Remove(line); else line.Quantity--; RefreshTotals(); }
-    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); NotifyChargeCommand(); }
+    private void Decrease(CartLineViewModel? line)
+    {
+        if (line is null || !CanEditCart) return;
+        if (line.Quantity <= 1)
+        {
+            CartLines.Remove(line);
+            UpdatePreviewAfterRemoval(line);
+        }
+        else line.Quantity--;
+        RefreshTotals();
+    }
+
+    private void UpdatePreviewAfterRemoval(CartLineViewModel removedLine)
+    {
+        if (CurrentProduct?.Id == removedLine.Product.Id)
+            CurrentProduct = CartLines.LastOrDefault()?.Product;
+    }
+    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); }
+
+    private void CartLines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var line in _observedCartLines) line.PropertyChanged -= CartLine_PropertyChanged;
+            _observedCartLines.Clear();
+        }
+        if (e.OldItems is not null)
+            foreach (CartLineViewModel line in e.OldItems)
+                if (_observedCartLines.Remove(line)) line.PropertyChanged -= CartLine_PropertyChanged;
+        if (e.NewItems is not null)
+            foreach (CartLineViewModel line in e.NewItems)
+                if (_observedCartLines.Add(line)) line.PropertyChanged += CartLine_PropertyChanged;
+        RefreshTotals();
+    }
+
+    private void CartLine_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(CartLineViewModel.Quantity) or nameof(CartLineViewModel.LineTotal)) RefreshTotals();
+    }
     private string FormatReference(decimal amount)
     {
         if (Currency == "USD") return $"USD {PosNumberFormat.FormatAmount(amount)}";
@@ -338,14 +616,18 @@ public sealed class PosViewModel : INotifyPropertyChanged
         var ratio = from == "USD" && to == "VES" ? usdToVes.Value : from == "VES" && to == "USD" ? 1m / usdToVes.Value : throw new InvalidOperationException("Unsupported currency conversion.");
         return decimal.Round(price * ratio, 2, MidpointRounding.AwayFromZero);
     }
+    private static bool IsCreditPayment(string method) => string.Equals(method, "credit", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(method, "fiado", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "credito", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(method, "crédito", StringComparison.OrdinalIgnoreCase);
     private void ClearPendingCheckout()
     {
-        _pendingIdempotencyKey = null; _pendingLines = null; _pendingPayments = null; _pendingReceiptLines = null; _pendingCustomerId = null; _pendingExchangeRateId = null;
-        OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); NotifyCartCommands();
+        _pendingIdempotencyKey = null; _pendingLines = null; _pendingPayments = null; _pendingReceiptLines = null; _pendingCustomerId = null; _pendingExchangeRateId = null; _pendingRoundingAdjustment = 0m;
+        OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyCartCommands();
     }
     private void NotifyChargeCommand() => (ChargeCommand as RelayCommand)?.NotifyCanExecuteChanged();
     private void NotifyCartCommands()
     {
+        OnPropertyChanged(nameof(CanEditSelectedLine));
         (IncreaseLineCommand as RelayCommand)?.NotifyCanExecuteChanged();
         (DecreaseLineCommand as RelayCommand)?.NotifyCanExecuteChanged();
         (RemoveLineCommand as RelayCommand)?.NotifyCanExecuteChanged();
@@ -363,10 +645,15 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private decimal _quantity = quantity;
     private string _settlementCurrency = settlementCurrency;
     private ExchangeRateInfo? _usdToVesRate = usdToVesRate;
+    private decimal? _unitPriceOverride;
+    private string? _priceOverrideReason;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProductInfo Product { get; } = product;
     public string SettlementCurrency => _settlementCurrency;
-    public decimal UnitPrice => PosViewModel.ConvertPrice(Product.UnitPrice, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
+    public decimal CatalogUnitPrice => PosViewModel.ConvertPrice(Product.UnitPrice, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
+    public decimal UnitPrice => _unitPriceOverride ?? CatalogUnitPrice;
+    public decimal? UnitPriceOverride => _unitPriceOverride;
+    public string? PriceOverrideReason => _priceOverrideReason;
     public Guid? ExchangeRateId => Product.Currency == SettlementCurrency ? null : _usdToVesRate?.Id;
     public decimal? AppliedExchangeRate => Product.Currency == SettlementCurrency || _usdToVesRate is null
         ? null
@@ -390,6 +677,17 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Quantity)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
         }
+    }
+    public void ApplyEdits(decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
+    {
+        _unitPriceOverride = unitPriceOverride;
+        _priceOverrideReason = priceOverrideReason;
+        Quantity = quantity;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CatalogUnitPrice)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPrice)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPriceOverride)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceOverrideReason)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
     }
     public decimal LineTotal => decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero);
 }

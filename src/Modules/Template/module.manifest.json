@@ -1,0 +1,16 @@
+{
+  "id": "example-module",
+  "version": "1.0.0",
+  "hostApi": {
+    "min": 1,
+    "max": 1
+  }, "clientApi": { "min": "1.0.0", "maxExclusive": "2.0.0" },
+  "dependencies": [],
+  "permissions": [
+    "Example.View"
+  ],
+  "entitlement": null,
+  "migrations": [
+    "example-module:0001"
+  ]
+}

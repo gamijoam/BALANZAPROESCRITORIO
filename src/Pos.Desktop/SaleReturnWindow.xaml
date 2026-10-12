@@ -1,0 +1,42 @@
+<Window x:Class="Pos.Desktop.SaleReturnWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Registrar devolución" Height="620" Width="960" MinHeight="540" MinWidth="800"
+        WindowStartupLocation="CenterOwner" Background="#EEF3F9" FontSize="14">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="DEVOLVER PRODUCTOS" FontSize="24" FontWeight="Bold" Foreground="#173F78"/>
+            <TextBlock x:Name="SaleSummary" Margin="0,5,0,12" Foreground="#52677F"/>
+        </StackPanel>
+        <TextBlock Grid.Row="1" Text="Indica la cantidad a devolver. Marca si el producto puede volver a venderse." Margin="0,0,0,8"/>
+        <DataGrid x:Name="ReturnLinesGrid" Grid.Row="2" AutoGenerateColumns="False" CanUserAddRows="False" RowHeaderWidth="0"
+                  CellEditEnding="ReturnLinesGrid_CellEditEnding" HeadersVisibility="Column" SelectionUnit="CellOrRowHeader">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Código" Binding="{Binding Sku}" IsReadOnly="True" Width="115"/>
+                <DataGridTextColumn Header="Producto" Binding="{Binding Description}" IsReadOnly="True" Width="*"/>
+                <DataGridTextColumn Header="Vendidos" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" IsReadOnly="True" Width="85"/>
+                <DataGridTextColumn Header="Ya devueltos" Binding="{Binding ReturnedQuantity, StringFormat={}{0:0.###}}" IsReadOnly="True" Width="105"/>
+                <DataGridTextColumn Header="Precio original" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" IsReadOnly="True" Width="115"/>
+                <DataGridTextColumn Header="A devolver" Binding="{Binding QuantityToReturn, UpdateSourceTrigger=PropertyChanged}" Width="100"/>
+                <DataGridCheckBoxColumn Header="Reingresar" Binding="{Binding Restock}" Width="95"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <StackPanel Grid.Row="3" Margin="0,14,0,0">
+            <TextBlock Text="Motivo de la devolución" FontWeight="SemiBold" Margin="0,0,0,5"/>
+            <TextBox x:Name="ReasonBox" Height="38" Padding="8" MaxLength="250"/>
+            <TextBlock Text="El sistema registrará el reintegro con los medios y monedas originales. Los reintegros bancarios o por terminal deben procesarse también en el proveedor de pago." TextWrapping="Wrap" Foreground="#52677F" Margin="0,8,0,0"/>
+        </StackPanel>
+        <TextBlock x:Name="PreviewLabel" Grid.Row="4" Margin="0,12,0,8" FontSize="18" FontWeight="Bold" Foreground="#173F78"/>
+        <DockPanel Grid.Row="5" LastChildFill="False">
+            <TextBlock x:Name="ErrorLabel" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#B4232E" TextWrapping="Wrap" Width="530"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Cancelar" Width="120" Height="42" Margin="0,0,10,0" Click="Cancel_Click"/>
+                <Button x:Name="ConfirmButton" Content="Confirmar devolución" Width="190" Height="42" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Confirm_Click"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

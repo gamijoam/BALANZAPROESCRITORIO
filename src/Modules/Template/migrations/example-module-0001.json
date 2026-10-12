@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "operations": [
+    {
+      "type": "createTable",
+      "table": "example_record",
+      "columns": [
+        {
+          "name": "id",
+          "dataType": "uuid",
+          "nullable": false,
+          "primaryKey": true
+        },
+        {
+          "name": "description",
+          "dataType": "text",
+          "nullable": false,
+          "primaryKey": false
+        },
+        {
+          "name": "created_at_utc",
+          "dataType": "timestamptz",
+          "nullable": false,
+          "primaryKey": false
+        }
+      ]
+    }
+  ]
+}

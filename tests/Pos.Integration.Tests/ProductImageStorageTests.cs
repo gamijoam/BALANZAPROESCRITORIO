@@ -39,4 +39,30 @@ public sealed class ProductImageStorageTests
             ProductImageStorage.MaximumBytes + 1, "image/png"));
         Assert.False(Directory.Exists(root));
     }
+
+    [Fact]
+    public async Task Delete_removes_only_the_named_product_image()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pos-image-tests", Guid.NewGuid().ToString("N"));
+        var store = new ProductImageStorage(root);
+        var firstProduct = Guid.NewGuid();
+        var secondProduct = Guid.NewGuid();
+        var png = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3 };
+        try
+        {
+            await using var firstStream = new MemoryStream(png);
+            var firstImage = await store.SaveAsync(firstProduct, firstStream, png.Length, "image/png");
+            await using var secondStream = new MemoryStream(png);
+            var secondImage = await store.SaveAsync(secondProduct, secondStream, png.Length, "image/png");
+
+            store.Delete(firstImage);
+
+            Assert.False(File.Exists(store.GetAbsolutePath(firstImage)));
+            Assert.True(File.Exists(store.GetAbsolutePath(secondImage)));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 }

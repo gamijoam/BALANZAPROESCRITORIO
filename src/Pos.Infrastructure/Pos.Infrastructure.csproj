@@ -3,6 +3,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Pos.Domain\Pos.Domain.csproj" />
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
+    <ProjectReference Include="..\Modules\Pos.Modules.Packaging\Pos.Modules.Packaging.csproj" />
+    <ProjectReference Include="..\Modules\Pos.Modules.Server.Abstractions\Pos.Modules.Server.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

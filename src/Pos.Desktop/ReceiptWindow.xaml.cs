@@ -25,6 +25,8 @@ public partial class ReceiptWindow : Window
         doc.Blocks.Add(new Paragraph(new Run("COMPROBANTE DE PRUEBA — NO FISCAL")) { FontSize = 16, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center });
         doc.Blocks.Add(new Paragraph(new Run("Punto de venta")) { TextAlignment = TextAlignment.Center, Foreground = Brushes.DimGray });
         doc.Blocks.Add(new Paragraph(new Run($"Venta: {receipt.SaleId:D}\nFecha: {receipt.IssuedAtUtc:dd/MM/yyyy HH:mm:ss}")));
+        if (!string.IsNullOrWhiteSpace(receipt.CustomerName))
+            doc.Blocks.Add(new Paragraph(new Run($"Cliente: {receipt.CustomerName}")) { Margin = new Thickness(0, 0, 0, 8) });
         var table = new Table();
         table.Columns.Add(new TableColumn { Width = new GridLength(3, GridUnitType.Star) });
         table.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
@@ -46,6 +48,8 @@ public partial class ReceiptWindow : Window
         }
         doc.Blocks.Add(table);
         doc.Blocks.Add(new Paragraph(new Run($"TOTAL: {receipt.Currency} {receipt.Total:N2}")) { FontSize = 17, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Right, Margin = new Thickness(0, 14, 0, 0) });
+        if (receipt.RoundingAdjustment != 0m)
+            doc.Blocks.Add(new Paragraph(new Run($"Ajuste de conversión: {receipt.Currency} {receipt.RoundingAdjustment:N2}")) { TextAlignment = TextAlignment.Right, Foreground = Brushes.DimGray });
         doc.Blocks.Add(new Paragraph(new Run("Pagos")) { FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 2) });
         foreach (var payment in receipt.Payments)
             doc.Blocks.Add(new Paragraph(new Run($"{payment.Method}: {payment.Currency} {payment.Amount:N2}")) { Margin = new Thickness(0, 1, 0, 1) });

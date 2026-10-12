@@ -136,6 +136,9 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActiveOperatorId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("ClosedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -207,6 +210,8 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,4)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActiveOperatorId");
 
                     b.HasIndex("OperatorId");
 
@@ -337,6 +342,39 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("idempotency_records", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.OperatorPermissionOverrideRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedByOperatorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OperatorId", "Permission")
+                        .IsUnique();
+
+                    b.ToTable("operator_permission_overrides", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.OperatorUserRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -381,6 +419,35 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("operator_users", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.PairedTerminalRecord", b =>
+                {
+                    b.Property<Guid>("TerminalId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CredentialHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("PairedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PairedByOperatorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("TerminalId");
+
+                    b.HasIndex("Active");
+
+                    b.HasIndex("PairedByOperatorId");
+
+                    b.ToTable("paired_terminals", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.PaymentRecord", b =>
@@ -518,6 +585,10 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
+                    b.Property<decimal?>("AppliedExchangeRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -533,6 +604,14 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("OccurredAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("OriginalCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
 
                     b.Property<string>("Reason")
                         .IsRequired()
@@ -552,6 +631,41 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasIndex("CustomerId", "OccurredAtUtc");
 
                     b.ToTable("receivable_entries", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ReturnIdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("SaleReturnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TerminalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SaleReturnId");
+
+                    b.HasIndex("TerminalId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("sale_return_idempotency", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleLineRecord", b =>
@@ -618,6 +732,10 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("AppliedUsdToVesRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
                     b.Property<Guid>("CashSessionId")
                         .HasColumnType("uuid");
 
@@ -634,6 +752,10 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("OperatorId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("RoundingAdjustment")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -654,6 +776,134 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasIndex("CustomerId");
 
                     b.ToTable("sales", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnLineRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<bool>("Restock")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("SaleLineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SaleReturnId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SaleLineId");
+
+                    b.HasIndex("SaleReturnId");
+
+                    b.ToTable("sale_return_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnPaymentRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal?>("AppliedExchangeRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("OriginalPaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("SaleReturnId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OriginalPaymentId");
+
+                    b.HasIndex("SaleReturnId");
+
+                    b.ToTable("sale_return_payments", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("CashSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<Guid>("SaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TerminalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashSessionId");
+
+                    b.HasIndex("SaleId", "CreatedAtUtc");
+
+                    b.ToTable("sale_returns", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.StockMovementRecord", b =>
@@ -708,6 +958,24 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("stocks", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.TerminalClientVersionRecord", b =>
+                {
+                    b.Property<Guid>("TerminalId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("LastReportedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TerminalId");
+
+                    b.ToTable("terminal_client_versions", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.AccessSessionRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
@@ -726,11 +994,37 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.CashSessionRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ActiveOperatorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.IdempotencyRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.SaleRecord", null)
                         .WithMany()
                         .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.OperatorPermissionOverrideRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.PairedTerminalRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PairedByOperatorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -772,6 +1066,15 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ReturnIdempotencyRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleReturnRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleLineRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.ExchangeRateRecord", null)
@@ -792,6 +1095,57 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnLineRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.ProductRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleLineRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleReturnRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnPaymentRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.PaymentRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalPaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleReturnRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.SaleReturnRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.CashSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CashSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.StockMovementRecord", b =>

@@ -12,34 +12,46 @@ El host es ASP.NET Core y consume la conexión PostgreSQL configurada fuera del 
 | `POST /api/v1/auth/login` | Público | Devuelve bearer token de sesión de 12 horas |
 | `GET /api/v1/auth/session` | Bearer | Operador, terminal y vencimiento de la sesión |
 | `POST /api/v1/auth/logout` | Bearer | Revoca la sesión actual |
-| `GET /api/v1/cash-sessions/current` | Bearer | Devuelve el turno abierto de la terminal, o `null` |
+| `GET /api/v1/cash-sessions/current` | Bearer | Devuelve el turno abierto de la terminal, quién lo abrió y quién lo tiene activo; oculta saldos esperados al operador que no lo tiene asignado |
 | `POST /api/v1/cash-sessions` | Bearer | Abre turno de caja para la terminal de la sesión |
-| `POST /api/v1/cash-sessions/{cashSessionId}/close` | Bearer | Cierra el turno propio abierto |
+| `POST /api/v1/cash-sessions/current/claim` | Bearer con permiso de venta | Reclama un turno liberado de esta terminal; responde conflicto si otro operador lo tiene activo |
+| `POST /api/v1/cash-sessions/current/release` | Bearer | Libera el turno activo para que otro operador autenticado pueda reclamarlo |
+| `POST /api/v1/cash-sessions/{cashSessionId}/close` | Bearer con permiso de caja | Cierra el turno asignado al operador activo de esta terminal |
 | `POST /api/v1/cash-sessions/{cashSessionId}/movements` | Bearer con permiso | Registra entrada o salida justificada de efectivo |
-| `GET /api/v1/products?query={texto}` | Bearer | Busca productos activos por SKU o nombre (hasta 30 resultados) |
-| `GET /api/v1/inventory` | Bearer con permiso | Consulta existencias |
+| `GET /api/v1/products?query={texto}` | Bearer | Busca productos activos por SKU o nombre (hasta 30 resultados), con existencia actual |
+| `GET /api/v1/inventory?query={texto}&status={active\|inactive\|all}&currency={VES\|USD}&stock={available\|out-of-stock}&hasImage={true\|false}` | Bearer con permiso de inventario | Busca por SKU/nombre y combina filtros; estado predeterminado: activo |
 | `POST /api/v1/inventory/{productId}/adjustments` | Bearer con permiso | Ajusta stock con motivo y movimiento inmutable |
 | `GET /api/v1/inventory/{productId}/movements` | Bearer con permiso | Consulta historial de movimientos de inventario |
 | `POST /api/v1/products` | Bearer con permiso | Crea producto con stock inicial trazable |
+| `PATCH /api/v1/products/{productId}` | Bearer con permiso de catálogo | Edita SKU y nombre; SKU duplicado devuelve 409; cambio auditado |
 | `POST /api/v1/products/{productId}/price-changes` | Bearer con permiso | Cambia precio con motivo e historial |
 | `GET /api/v1/products/{productId}/price-history` | Bearer con permiso | Consulta cambios de precio |
-| `PATCH /api/v1/products/{productId}/active` | Bearer con permiso | Activa/desactiva producto |
+| `PATCH /api/v1/products/{productId}/active` | Bearer con permiso de catálogo | Activa/desactiva producto sin eliminar historial; cambio auditado |
 | `GET/POST /api/v1/exchange-rates` | Bearer con permiso | Consulta e ingresa tasas con fecha y fuente |
 | `GET /api/v1/exchange-rates/current` | Bearer con permiso | Consulta tasa vigente |
-| `GET/POST /api/v1/customers` | Bearer con permiso | Busca/lista y registra clientes |
+| `GET/POST /api/v1/customers` | Bearer con permiso | Busca por nombre/documento/teléfono; las cuentas, límites y saldos son USD e incluyen equivalente VES a tasa actual |
 | `GET /api/v1/customers/{customerId}/receivables` | Bearer con permiso | Consulta saldo y movimientos por cobrar |
 | `POST /api/v1/customers/{customerId}/payments` | Bearer con permiso | Registra abono a cuenta por cobrar |
 | `GET /api/v1/reports/sales` | Bearer con permiso | Resumen de ventas por período |
+| `GET /api/v1/reports/sales/detail` | Bearer con permiso | Historial paginado; filtra por moneda, método de pago, usuario de operador y estado antes de contar y paginar |
+| `GET /api/v1/reports/cash-sessions?fromUtc={utc}&toUtc={utc}&status={Todas\|Abiertas\|Cerradas}` | Bearer con permiso | Arqueos por moneda y detalle de cobros/reintegros por método y moneda, más movimientos de caja por turno |
+| `GET /api/v1/reports/products/sales?fromUtc={utc}&toUtc={utc}&currency={Todas\|VES\|USD}` | Bearer con permiso | Unidades vendidas/devueltas y montos bruto/neto por producto y moneda para ventas del período; las devoluciones vinculadas se descuentan del resumen |
 | `GET /api/v1/reports/inventory` | Bearer con permiso | Valorización a precio de venta |
 | `GET /api/v1/audit` | Bearer con permiso sensible | Consulta eventos de auditoría |
 | `GET/POST /api/v1/operators` | Administrador | Lista y crea operadores con rol |
 | `PATCH /api/v1/operators/{operatorId}/role` | Administrador | Cambia rol con auditoría |
 | `PATCH /api/v1/operators/{operatorId}/active` | Administrador | Activa/desactiva y revoca sesiones |
-| `POST /api/v1/sales` | Bearer, turno abierto y `Idempotency-Key` | Confirma venta, pagos, auditoría y movimiento de stock |
+| `GET /api/v1/operators/{operatorId}/permissions` | Bearer con permiso `ManageUsers` | Consulta permisos heredados y excepciones del operador |
+| `PUT /api/v1/operators/{operatorId}/permissions` | Bearer con permiso `ManageUsers` | Reemplaza la matriz completa; modos `Inherit`, `Allow`, `RequireAdminPin` y `Deny`; cambio auditado |
+| `POST /api/v1/auth/authorize` | Bearer de cajero + credenciales de administrador | Emite una aprobación de 60 segundos ligada a permiso, operador, terminal, ruta, contenido y operación; solo se consume una vez |
+| `POST /api/v1/sales` | Bearer, turno abierto y `Idempotency-Key` | Confirma venta, pagos, auditoría y movimiento de stock; una línea puede incluir `unitPriceOverride` y `priceOverrideReason` para un precio especial de una sola venta |
+| `POST /api/v1/sales/{saleId}/returns` | Bearer, permiso `ReturnSale`, turno abierto e `Idempotency-Key` | Devuelve cantidades parciales o totales; conserva venta original, registra reintegros por medio/moneda original, caja, crédito, inventario y auditoría en una transacción |
 
 El alta inicial acepta `{"username":"cajero","pin":"1234"}`; el PIN debe tener de 4 a 12 dígitos. El login acepta `username`, `pin` y `terminalId` UUID. El token solo se devuelve al iniciar sesión; en PostgreSQL se conserva su hash.
 
-Abrir caja: `{"openingBalance":0,"currency":"VES"}`; solo se acepta `VES` o `USD`. Cerrar caja requiere `{"countedClosingBalance":123.45}`; el servidor registra saldo esperado, contado y diferencia. La venta recibe `cashSessionId` y `checkout`, con líneas `{productId, quantity}`, pagos `{method, amount, currency}` y `exchangeRateId` cuando alguna línea requiere conversión. La moneda de la caja es la moneda del comprobante, los pagos y los fiados; productos en la otra moneda se convierten con la tasa USD/VES vigente. Para fiado se envía `customerId` y un pago con método `credit` o `fiado`; el servidor valida límite y registra la cuenta por cobrar en la misma transacción.
+Un precio especial requiere importe mayor que cero, hasta cuatro decimales y motivo de 3 a 250 caracteres. Usa el permiso `OverrideSalePrice`; por defecto, todo operador que no sea administrador necesita el PIN de un administrador. La aprobación se vincula al contenido exacto de la venta. El importe aplicado queda en la línea histórica y el precio/motivo se guardan en el evento `sale.confirmed`; el precio del catálogo no cambia.
+
+Abrir caja: `{"openingBalance":0,"currency":"VES"}`; solo se acepta `VES` o `USD`. Cerrar caja requiere `{"countedClosingBalance":123.45}`; el servidor registra saldo esperado, contado y diferencia para cada moneda. La venta recibe `cashSessionId` y `checkout`, con líneas `{productId, quantity}`, pagos `{method, amount, currency}` y `exchangeRateId` cuando alguna línea, pago o crédito requiere conversión. La moneda de la caja determina la moneda del comprobante; se pueden combinar pagos en VES y USD. El pago conserva su importe y moneda recibidos, además de la tasa aplicada; el cierre cuenta ese efectivo en su moneda real. Los importes extranjeros se convierten por grupo de moneda y se redondean a centavos en la moneda de venta. Se acepta una diferencia máxima igual a medio centavo de la moneda extranjera convertida a la moneda de venta; la diferencia se guarda como ajuste visible y auditable. Diferencias superiores se rechazan. Para una venta a crédito se envía `customerId` y un pago con método `credit`; el monto del pago debe estar en moneda de la venta, pero el saldo de la cuenta siempre se registra en USD. Una venta en VES se convierte con la tasa vigente confirmada en esa venta y valida el límite en USD. Los abonos parciales se registran en `POST /api/v1/customers/{customerId}/payments`; aceptan USD o VES y convierten el importe VES a USD con la tasa vigente al registrar el abono. Cada movimiento guarda monto y moneda recibidos, importe USD aplicado y tasa usada. La consulta de clientes y cuentas devuelve el saldo en USD y su equivalente VES a la tasa vigente.
 
 ## Venta e idempotencia
 

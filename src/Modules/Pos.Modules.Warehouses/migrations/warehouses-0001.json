@@ -1,0 +1,65 @@
+{
+  "formatVersion": 1,
+  "operations": [
+    { "type": "createTable", "table": "warehouses", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "code", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "name", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "is_active", "dataType": "boolean", "nullable": false, "primaryKey": false },
+      { "name": "is_primary", "dataType": "boolean", "nullable": false, "primaryKey": false },
+      { "name": "created_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "warehouse_stock", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "warehouse_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "product_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "quantity", "dataType": "numeric(18,4)", "nullable": false, "primaryKey": false },
+      { "name": "version", "dataType": "bigint", "nullable": false, "primaryKey": false },
+      { "name": "updated_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "terminal_warehouses", "columns": [
+      { "name": "terminal_id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "warehouse_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "updated_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "sale_warehouses", "columns": [
+      { "name": "sale_id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "warehouse_id", "dataType": "uuid", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "warehouse_transfers", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "source_warehouse_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "destination_warehouse_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "status", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "created_by", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "created_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false },
+      { "name": "dispatched_by", "dataType": "uuid", "nullable": true, "primaryKey": false },
+      { "name": "dispatched_at_utc", "dataType": "timestamptz", "nullable": true, "primaryKey": false },
+      { "name": "received_by", "dataType": "uuid", "nullable": true, "primaryKey": false },
+      { "name": "received_at_utc", "dataType": "timestamptz", "nullable": true, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "warehouse_transfer_lines", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "transfer_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "product_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "sku_snapshot", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "name_snapshot", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "quantity", "dataType": "numeric(18,4)", "nullable": false, "primaryKey": false },
+      { "name": "received_quantity", "dataType": "numeric(18,4)", "nullable": true, "primaryKey": false },
+      { "name": "variance", "dataType": "numeric(18,4)", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createTable", "table": "warehouse_events", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "actor_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "terminal_id", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "action", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "payload", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "occurred_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+    ]},
+    { "type": "createIndex", "table": "warehouses", "name": "ux_warehouses_code", "columns": ["code"], "unique": true },
+    { "type": "createIndex", "table": "warehouse_stock", "name": "ux_warehouse_stock_item", "columns": ["warehouse_id", "product_id"], "unique": true },
+    { "type": "createIndex", "table": "warehouse_transfers", "name": "ix_warehouse_transfers_status_date", "columns": ["status", "created_at_utc"], "unique": false },
+    { "type": "createIndex", "table": "warehouse_transfer_lines", "name": "ux_warehouse_transfer_product", "columns": ["transfer_id", "product_id"], "unique": true },
+    { "type": "createIndex", "table": "warehouse_events", "name": "ix_warehouse_events_date", "columns": ["occurred_at_utc"], "unique": false }
+  ]
+}

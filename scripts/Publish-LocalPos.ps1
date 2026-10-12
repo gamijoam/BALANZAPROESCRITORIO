@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\local-pos'))
+param(
+    [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\local-pos'),
+    [string]$ArchivePath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\local-pos-win-x64.zip')
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -8,6 +11,14 @@ $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts')).TrimE
 if (-not $packageDirectory.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'El paquete debe generarse dentro de la carpeta artifacts del proyecto.'
 }
+$archiveFullPath = [IO.Path]::GetFullPath($ArchivePath)
+if (-not $archiveFullPath.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    [IO.Path]::GetExtension($archiveFullPath) -ine '.zip' -or
+    $archiveFullPath.StartsWith($packageDirectory.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'El archivo ZIP debe guardarse en artifacts, fuera de la carpeta del paquete.'
+}
+$archiveParent = Split-Path -Parent $archiveFullPath
+New-Item -ItemType Directory -Path $archiveParent -Force | Out-Null
 $serverOutput = Join-Path $packageDirectory 'server'
 $desktopOutput = Join-Path $packageDirectory 'desktop'
 $buildRoot = "$($packageDirectory.TrimEnd('\'))-build"
@@ -39,14 +50,73 @@ if ($LASTEXITCODE -ne 0) { throw 'Falló la publicación del servidor POS.' }
 & $dotnet publish (Join-Path $repoRoot 'src\Pos.Desktop\Pos.Desktop.csproj') --configuration Release --output $desktopOutput "-p:BaseOutputPath=$desktopBuildRoot\"
 if ($LASTEXITCODE -ne 0) { throw 'Falló la publicación del punto de venta.' }
 
+function Remove-PublishedBuildArtifacts {
+    param([Parameter(Mandatory)][string]$PublishRoot)
+    $resolvedRoot = [IO.Path]::GetFullPath($PublishRoot).TrimEnd('\') + '\'
+    if (-not $resolvedRoot.StartsWith($packageDirectory.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Se rechazó limpiar contenido fuera de la carpeta publicada del POS.'
+    }
+    foreach ($directory in @(Get-ChildItem -LiteralPath $PublishRoot -Directory -Recurse -Force | Where-Object Name -eq 'bin' | Sort-Object FullName)) {
+        $fullDirectory = [IO.Path]::GetFullPath($directory.FullName)
+        if ($fullDirectory.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $fullDirectory)) {
+            Remove-Item -LiteralPath $fullDirectory -Recurse -Force
+        }
+    }
+    foreach ($developmentSettings in @(Get-ChildItem -LiteralPath $PublishRoot -Filter 'appsettings.Development.json' -File -Recurse -Force)) {
+        $fullFile = [IO.Path]::GetFullPath($developmentSettings.FullName)
+        if ($fullFile.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $fullFile -Force
+        }
+    }
+}
+Remove-PublishedBuildArtifacts -PublishRoot $serverOutput
+Remove-PublishedBuildArtifacts -PublishRoot $desktopOutput
+
 $scriptsOutput = Join-Path $packageDirectory 'scripts'
 New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
 foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
 }
-Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\specs\hito-5-instalacion-local-y-respaldo.md') -Destination (Join-Path $packageDirectory 'INSTRUCCIONES.md') -Force
-$archivePath = Join-Path (Split-Path -Parent $packageDirectory) 'local-pos-win-x64.zip'
-Compress-Archive -Path (Join-Path $packageDirectory '*') -DestinationPath $archivePath -CompressionLevel Optimal -Force
+$launcherPath = Join-Path $packageDirectory 'Iniciar POS.cmd'
+$launcherContent = @'
+@echo off
+setlocal
+set "STARTER=%~dp0scripts\Start-LocalPos.ps1"
+if not exist "%STARTER%" (
+  echo No se encontro la aplicacion del punto de venta.
+  pause
+  exit /b 1
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%STARTER%"
+if errorlevel 1 (
+  echo No se pudo iniciar el punto de venta. Revisa el mensaje anterior.
+  pause
+  exit /b 1
+)
+'@
+[IO.File]::WriteAllText($launcherPath, $launcherContent, [Text.Encoding]::ASCII)
+$updateLauncherPath = Join-Path $packageDirectory 'Actualizar POS.cmd'
+$updateLauncherContent = @'
+@echo off
+setlocal
+set "UPDATER=%~dp0scripts\Install-LocalPos.ps1"
+if not exist "%UPDATER%" (
+  echo No se encontro el actualizador del punto de venta.
+  pause
+  exit /b 1
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%UPDATER%" -PackageDirectory "%~dp0."
+if errorlevel 1 (
+  echo No se completo la actualizacion. Lee el mensaje anterior y vuelve a intentarlo.
+  pause
+  exit /b 1
+)
+'@
+[IO.File]::WriteAllText($updateLauncherPath, $updateLauncherContent, [Text.Encoding]::ASCII)
+Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\manuales\INSTRUCCIONES-INSTALACION-POS.md') -Destination (Join-Path $packageDirectory 'INSTRUCCIONES.md') -Force
+$legacyModesGuide = Join-Path $packageDirectory 'MODOS DE INSTALACION.md'
+if (Test-Path -LiteralPath $legacyModesGuide) { Remove-Item -LiteralPath $legacyModesGuide -Force }
+Compress-Archive -Path (Join-Path $packageDirectory '*') -DestinationPath $archiveFullPath -CompressionLevel Optimal -Force
 
 Write-Output "Paquete local listo en: $packageDirectory"
-Write-Output "Archivo para trasladarlo a la PC de instalación: $archivePath"
+Write-Output "Archivo para trasladarlo a la PC de instalación: $archiveFullPath"

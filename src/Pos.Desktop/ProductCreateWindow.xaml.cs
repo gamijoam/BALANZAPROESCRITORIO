@@ -11,6 +11,8 @@ public partial class ProductCreateWindow : Window
 {
     private readonly PosViewModel _viewModel;
     private string? _imagePath;
+    public Guid? CreatedProductId { get; private set; }
+    public string CompletionMessage { get; private set; } = "Producto creado.";
     public ProductCreateWindow(PosViewModel viewModel) { InitializeComponent(); _viewModel = viewModel; }
     private async void Create_Click(object sender, RoutedEventArgs e)
     {
@@ -21,11 +23,22 @@ public partial class ProductCreateWindow : Window
         try
         {
             var product = await _viewModel.CreateProductAsync(SkuBox.Text.Trim(), NameBox.Text.Trim(), price, currency, stock);
+            CreatedProductId = product.Id;
             if (_imagePath is not null)
             {
-                try { await _viewModel.UploadProductImageAsync(product.Id, _imagePath); }
-                catch (Exception imageError) { ErrorLabel.Text = $"Producto creado, pero la foto no se guardó: {PosUserMessage.ForException(imageError)}"; DialogResult = true; return; }
+                try
+                {
+                    await _viewModel.UploadProductImageAsync(product.Id, _imagePath);
+                    CompletionMessage = "Producto y foto guardados.";
+                }
+                catch (Exception imageError)
+                {
+                    CompletionMessage = $"Producto creado, pero no se guardó la foto. Puedes reintentarla desde Inventario. {PosUserMessage.ForException(imageError)}";
+                    DialogResult = true;
+                    return;
+                }
             }
+            else CompletionMessage = "Producto creado sin foto.";
             DialogResult = true;
         }
         catch (Exception ex) { ErrorLabel.Text = PosUserMessage.ForException(ex); }

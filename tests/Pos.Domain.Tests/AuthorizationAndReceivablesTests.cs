@@ -41,6 +41,14 @@ public class AuthorizationAndReceivablesTests
     }
 
     [Fact]
+    public void Return_permission_is_limited_to_supervisor_and_administrator()
+    {
+        Assert.False(RolePermissionPolicy.For(OperatorRole.Cashier).Can(Permission.ReturnSale));
+        Assert.True(RolePermissionPolicy.For(OperatorRole.Supervisor).Can(Permission.ReturnSale));
+        Assert.True(RolePermissionPolicy.For(OperatorRole.Administrator).Can(Permission.ReturnSale));
+    }
+
+    [Fact]
     public void Supervisor_approval_is_scoped_to_one_operation_and_consumed_once()
     {
         var operationId = Guid.NewGuid();
