@@ -11,15 +11,15 @@
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Background" Value="#214F91"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding" Value="14,9"/>
-            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="MinHeight" Value="34"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -88,7 +88,7 @@
 
         <Border Grid.Row="0" Grid.ColumnSpan="3" Background="#102B4D" Padding="16,12">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="1.0*"/><ColumnDefinition Width="2.1*"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="2.2*"/></Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="PUNTO DE VENTA" Foreground="White" FontSize="24" FontWeight="Bold"/>
                     <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
@@ -232,21 +232,38 @@
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="SECCIONES" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" Margin="4,6,0,9"/>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
+                <StackPanel Grid.Row="1">
                     <Button Style="{StaticResource ToolButton}" Content="▣   _Venta" Click="SaleTool_Click" AutomationProperties.Name="Venta" AutomationProperties.AutomationId="NavigateSale"/>
                     <Button Style="{StaticResource ToolButton}" Content="▤   _Historial de ventas" Click="SalesHistoryTool_Click" AutomationProperties.Name="Historial de ventas" AutomationProperties.AutomationId="NavigateSalesHistory"/>
                     <Button Style="{StaticResource ToolButton}" Content="▤   _Caja" Click="CashTool_Click" AutomationProperties.Name="Caja" AutomationProperties.AutomationId="NavigateCash"/>
                     <Button Style="{StaticResource ToolButton}" Content="♙   C_lientes" Click="Customer_Click" AutomationProperties.Name="Clientes" AutomationProperties.AutomationId="NavigateCustomers"/>
                     <Button Style="{StaticResource ToolButton}" Content="▦   _Inventario" Click="InventoryTool_Click" AutomationProperties.Name="Inventario" AutomationProperties.AutomationId="NavigateInventory"/>
-                    <StackPanel x:Name="ModuleMenuHost"/>
                     <Button Style="{StaticResource ToolButton}" Content="＄   Precios y _tasa" Tag="Tasa" Click="ManagementTool_Click" AutomationProperties.Name="Precios y tasa" AutomationProperties.AutomationId="NavigateExchangeRate"/>
                     <Button Style="{StaticResource ToolButton}" Content="◷   _Auditoría" Tag="Auditoría" Click="ManagementTool_Click" AutomationProperties.Name="Auditoría" AutomationProperties.AutomationId="NavigateAudit"/>
                     <Button Style="{StaticResource ToolButton}" Content="▥   _Reportes" Tag="Reportes" Click="ManagementTool_Click" AutomationProperties.Name="Reportes" AutomationProperties.AutomationId="NavigateReports"/>
                     <Button Style="{StaticResource ToolButton}" Content="⚙   _Operadores" Tag="Operadores" Click="ManagementTool_Click" AutomationProperties.Name="Operadores" AutomationProperties.AutomationId="NavigateOperators"/>
-                    <Button Style="{StaticResource ToolButton}" Content="▣   _Módulos" Tag="Módulos" Click="ManagementTool_Click" AutomationProperties.Name="Módulos" AutomationProperties.AutomationId="NavigateModules"/>
+                    <Button x:Name="ModulesButton" Style="{StaticResource ToolButton}" Content="▣   _Módulos" Click="ModulesButton_Click" AutomationProperties.Name="Módulos y extensiones" AutomationProperties.AutomationId="NavigateModules" ToolTip="Abre las funciones de módulos instalados">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="ModulesPopup" Placement="Left" StaysOpen="False" HasDropShadow="True"
+                                         Opened="ModulesPopup_Opened" PreviewKeyDown="ModulesPopup_PreviewKeyDown"
+                                         AutomationProperties.Name="Accesos de módulos">
+                                <ContextMenu.Resources>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="FontSize" Value="14"/>
+                                        <Setter Property="Padding" Value="14,8"/>
+                                        <Setter Property="Foreground" Value="#172B45"/>
+                                        <Setter Property="MinWidth" Value="210"/>
+                                    </Style>
+                                </ContextMenu.Resources>
+                                <MenuItem x:Name="ModuleMenuEmpty" Header="No hay módulos disponibles" IsEnabled="False"/>
+                                <Separator/>
+                                <MenuItem x:Name="AdminModulesMenuItem" Header="Administrar módulos" Tag="Módulos"
+                                          Visibility="Collapsed" Click="ManagementTool_Click"
+                                          AutomationProperties.Name="Administrar módulos" AutomationProperties.AutomationId="ManageModules"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
-                </ScrollViewer>
                     <Button Grid.Row="2" Style="{StaticResource ChargeButton}" Command="{Binding ChargeCommand}" Height="72" MinWidth="218" HorizontalAlignment="Stretch" Margin="0,12,0,2" ToolTip="Abre los medios de pago para confirmar la venta" AutomationProperties.Name="Cobrar venta. Atajo F4" AutomationProperties.AutomationId="ChargeSale">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="Cobrar venta" FontSize="19" FontWeight="Bold" HorizontalAlignment="Center"/>

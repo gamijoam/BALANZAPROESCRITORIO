@@ -3,17 +3,17 @@
 ## Paquetes generados
 
 - `artifacts/pos-modules-core-clean.zip`: POS base con el cargador de módulos y el contrato de extensiones. No incluye la pantalla ni la DLL de Almacenes.
-- `artifacts/modules/warehouses/1.2.0.zip`: módulo firmado con el servicio, la pantalla WPF, el filtro de inventario y la migración declarada.
-- `artifacts/modules/warehouses/1.2.0-publisher-public.pem`: clave pública para instalar en el anillo de confianza del servidor. No es una clave privada.
+- `artifacts/modules/warehouses/1.3.1.zip`: módulo firmado con el servicio, la pantalla WPF, el filtro de inventario y la migración declarada.
+- `artifacts/modules/warehouses/1.3.1-publisher-public.pem`: clave pública para instalar en el anillo de confianza del servidor. No es una clave privada.
 
-El usuario de PostgreSQL y los datos del comercio no van dentro de estos paquetes. El archivo base incluye el lanzador que usa el perfil local ya configurado. El módulo 1.2.0 conserva `warehouses:0001`; al actualizar desde 1.1.0 no vuelve a aplicar esa migración.
+El usuario de PostgreSQL y los datos del comercio no van dentro de estos paquetes. El archivo base incluye el lanzador que usa el perfil local ya configurado. El módulo 1.3.1 conserva `warehouses:0001`; al actualizar no vuelve a aplicar esa migración.
 
 ## Instalación para validar
 
 1. Conserva una copia de seguridad externa de la base antes de probar una instalación/actualización de módulo.
 2. En la computadora que ejecuta el servicio, actualiza el anfitrión con el paquete `pos-modules-core-clean.zip` usando `Actualizar POS.cmd`. Esto instala el cargador nuevo sin incluir Almacenes en el POS base. El actualizador coordina respaldo, servicio y migraciones base.
-3. Inicia el POS y entra como administrador. En **Administración → Módulos**, selecciona `1.2.0.zip`. El ID se obtiene del manifiesto: `warehouses`; no hay que escribirlo a mano.
-4. Pulsa **Validar paquete** y revisa el nombre **Almacenes y traslados**, el ID interno `warehouses`, versión `1.2.0`, componentes y permisos. Instala y reinicia el servicio cuando termine el respaldo.
+3. Inicia el POS y entra como administrador. En **Administración → Módulos**, selecciona `1.3.1.zip`. El ID se obtiene del manifiesto: `warehouses`; no hay que escribirlo a mano.
+4. Pulsa **Validar paquete** y revisa el nombre **Almacenes y traslados**, el ID interno `warehouses`, versión `1.3.1`, componentes y permisos. Instala y reinicia el servicio cuando termine el respaldo.
 5. Reinicia también las terminales POS. Tras iniciar sesión con un usuario que tenga `Warehouse.View`, debe aparecer **Almacenes**. `Warehouse.Manage` controla creación, desactivación y asignación de terminal; `Warehouse.Transfer` controla traslados.
 6. Abre **Inventario**. El filtro **Almacén: todos** debe aparecer junto con los filtros del anfitrión. Elegir un almacén consulta existencias por el servicio; el POS de escritorio no usa PostgreSQL.
 
@@ -23,6 +23,9 @@ El usuario de PostgreSQL y los datos del comercio no van dentro de estos paquete
 - Con el módulo activo, aparecen desde el ZIP sin recompilar ni reemplazar la DLL del POS escritorio.
 - El menú y las acciones se muestran según permisos, y cada llamada continúa protegida en el servidor.
 - Si la firma o `desktopApi` no coincide, ese módulo no se carga; el POS base conserva sus funciones.
+- En **Almacenes → Traslados → Nuevo traslado**, busca el artículo, selecciona la fila, confirma nombre/código/existencia y luego pulsa **Agregar producto**. En **Traslados recientes**, seleccionar una fila carga el detalle de sus productos.
+- En las tablas, una cantidad entera de 90 se muestra como `90`; una cantidad de 1,25 como `1,25`. La tabla de existencias identifica por separado el valor y la moneda del precio.
+- En **Nuevo traslado**, la búsqueda y el borrador quedan lado a lado y el pie de cada panel permanece visible en la ventana normal de escritorio.
 
 ## Generar otra versión
 

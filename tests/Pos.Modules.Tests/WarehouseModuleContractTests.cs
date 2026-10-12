@@ -17,7 +17,7 @@ public sealed class WarehouseModuleContractTests
             .ToArray();
 
         Assert.Equal("warehouses", manifest.Id);
-        Assert.Equal(new Version(1, 2, 0), manifest.Version);
+        Assert.Equal(new Version(1, 3, 1), manifest.Version);
         Assert.Null(manifest.Entitlement);
         Assert.Empty(manifest.Dependencies);
         Assert.All(endpointPermissions, permission => Assert.Contains(permission, manifest.Permissions));

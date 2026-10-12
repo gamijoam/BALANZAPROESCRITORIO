@@ -18,7 +18,7 @@ El host es ASP.NET Core y consume la conexión PostgreSQL configurada fuera del 
 | `POST /api/v1/cash-sessions/current/release` | Bearer | Libera el turno activo para que otro operador autenticado pueda reclamarlo |
 | `POST /api/v1/cash-sessions/{cashSessionId}/close` | Bearer con permiso de caja | Cierra el turno asignado al operador activo de esta terminal |
 | `POST /api/v1/cash-sessions/{cashSessionId}/movements` | Bearer con permiso | Registra entrada o salida justificada de efectivo |
-| `GET /api/v1/products?query={texto}` | Bearer | Busca productos activos por SKU o nombre (hasta 30 resultados), con existencia actual |
+| `GET /api/v1/products?query={texto}` | Bearer | Busca productos activos por SKU o nombre (hasta 30 resultados). `quantity` es el saldo del almacén asignado a la terminal autenticada (principal si no tiene asignación); cuando el módulo Almacenes no está instalado, conserva la existencia global. |
 | `GET /api/v1/inventory?query={texto}&status={active\|inactive\|all}&currency={VES\|USD}&stock={available\|out-of-stock}&hasImage={true\|false}` | Bearer con permiso de inventario | Busca por SKU/nombre y combina filtros; estado predeterminado: activo |
 | `POST /api/v1/inventory/{productId}/adjustments` | Bearer con permiso | Ajusta stock con motivo y movimiento inmutable |
 | `GET /api/v1/inventory/{productId}/movements` | Bearer con permiso | Consulta historial de movimientos de inventario |

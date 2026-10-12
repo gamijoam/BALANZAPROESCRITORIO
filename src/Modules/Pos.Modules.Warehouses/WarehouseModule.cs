@@ -28,6 +28,7 @@ public sealed class WarehouseModule : IPosServerModule
         new("GET", "warehouses/{id:guid}/stock", GetStockAsync, "Warehouse.View"),
         new("PUT", "terminals/{id:guid}/warehouse", AssignTerminalAsync, "Warehouse.Manage"),
         new("GET", "transfers", ListTransfersAsync, "Warehouse.View"),
+        new("GET", "transfers/{id:guid}", GetTransferDetailsAsync, "Warehouse.View"),
         new("POST", "transfers", CreateTransferAsync, "Warehouse.Transfer"),
         new("POST", "transfers/{id:guid}/dispatch", DispatchTransferAsync, "Warehouse.Transfer"),
         new("POST", "transfers/{id:guid}/receive", ReceiveTransferAsync, "Warehouse.Transfer")
@@ -122,6 +123,41 @@ public sealed class WarehouseModule : IPosServerModule
         while (await reader.ReadAsync(context.RequestAborted))
             rows.Add(new { id = reader.GetGuid(0), status = reader.GetString(1), sourceWarehouseId = reader.GetGuid(2), source = reader.GetString(3), destinationWarehouseId = reader.GetGuid(4), destination = reader.GetString(5), createdAtUtc = reader.GetDateTime(6), lineCount = reader.GetInt64(7), quantity = reader.GetDecimal(8), variance = reader.GetDecimal(9) });
         return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> GetTransferDetailsAsync(HttpContext context)
+    {
+        var transferId = Guid.Parse((string)context.Request.RouteValues["id"]!);
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        await using var command = new NpgsqlCommand($"SELECT t.id,t.status,t.source_warehouse_id,s.name,t.destination_warehouse_id,d.name,t.created_at_utc,l.product_id,l.sku_snapshot,l.name_snapshot,l.quantity,l.received_quantity,l.variance FROM {Table("warehouse_transfers")} t JOIN {Table("warehouses")} s ON s.id=t.source_warehouse_id JOIN {Table("warehouses")} d ON d.id=t.destination_warehouse_id LEFT JOIN {Table("warehouse_transfer_lines")} l ON l.transfer_id=t.id WHERE t.id=@id ORDER BY l.name_snapshot,l.sku_snapshot", connection);
+        command.Parameters.AddWithValue("id", transferId);
+        await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
+        if (!await reader.ReadAsync(context.RequestAborted)) return Results.NotFound(new { error = "transfer_not_found" });
+
+        var id = reader.GetGuid(0);
+        var status = reader.GetString(1);
+        var sourceId = reader.GetGuid(2);
+        var source = reader.GetString(3);
+        var destinationId = reader.GetGuid(4);
+        var destination = reader.GetString(5);
+        var createdAtUtc = reader.GetDateTime(6);
+        var lines = new List<object>();
+        do
+        {
+            if (reader.IsDBNull(7)) continue;
+            lines.Add(new
+            {
+                productId = reader.GetGuid(7),
+                sku = reader.GetString(8),
+                name = reader.GetString(9),
+                quantity = reader.GetDecimal(10),
+                receivedQuantity = reader.IsDBNull(11) ? (decimal?)null : reader.GetDecimal(11),
+                variance = reader.GetDecimal(12)
+            });
+        } while (await reader.ReadAsync(context.RequestAborted));
+
+        return Results.Ok(new { id, status, sourceWarehouseId = sourceId, source, destinationWarehouseId = destinationId,
+            destination, createdAtUtc, lines });
     }
 
     private static async Task<IResult> CreateTransferAsync(HttpContext context)

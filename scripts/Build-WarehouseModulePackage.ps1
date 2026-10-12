@@ -2,13 +2,14 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[A-Fa-f0-9]{40}$')][string]$CertificateThumbprint,
     [string]$KeyId = 'pos-warehouses-dev-2026',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.3.1',
     [string]$OutputZip
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($OutputZip)) {
-    $OutputZip = Join-Path $repoRoot 'artifacts\modules\warehouses\1.2.0.zip'
+    $OutputZip = Join-Path $repoRoot ("artifacts\modules\warehouses\$Version.zip")
 }
 $outputPath = [IO.Path]::GetFullPath($OutputZip)
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts')).TrimEnd('\') + '\'
@@ -24,7 +25,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación del módulo de servidor
 dotnet build $desktopProject --configuration Release
 if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación del módulo WPF.' }
 
-$stage = Join-Path $repoRoot ('artifacts\module-staging\warehouses-1.2.0-' + [Guid]::NewGuid().ToString('N'))
+$stage = Join-Path $repoRoot ("artifacts\module-staging\warehouses-$Version-" + [Guid]::NewGuid().ToString('N'))
 $migrationStage = Join-Path $stage 'migrations'
 New-Item -ItemType Directory -Force -Path $migrationStage | Out-Null
 Copy-Item (Join-Path $repoRoot 'src\Modules\Pos.Modules.Warehouses\bin\Release\net10.0\Pos.Modules.Warehouses.dll') $stage
@@ -54,5 +55,17 @@ dotnet $publisherOutput build `
     --store CurrentUser
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo firmar el ZIP de Almacenes.' }
 
+$certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$CertificateThumbprint" -ErrorAction Stop
+if (-not $certificate.HasPrivateKey) { throw 'El certificado no tiene clave privada para firmar el módulo.' }
+$publicKey = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($certificate)
+try {
+    if ($null -eq $publicKey) { throw 'El certificado de publicación no contiene una clave RSA.' }
+    $publicKeyPath = Join-Path (Split-Path -Parent $outputPath) "$Version-publisher-public.pem"
+    [IO.File]::WriteAllText($publicKeyPath, $publicKey.ExportSubjectPublicKeyInfoPem(), [Text.Encoding]::ASCII)
+} finally {
+    if ($null -ne $publicKey) { $publicKey.Dispose() }
+}
+
 Write-Output "Paquete firmado: $outputPath"
+Write-Output "Clave pública de verificación: $publicKeyPath"
 Write-Output "Staging reproducible: $stage"

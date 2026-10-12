@@ -17,6 +17,133 @@ namespace Pos.Integration.Tests;
 public sealed class ModulePostgresActivationTests
 {
     [Fact]
+    public async Task ProductSearch_UsesAuthenticatedTerminalsWarehouseAndFallsBackToGlobalStockWithoutModule()
+    {
+        var adminConnectionString = Environment.GetEnvironmentVariable("POS_MODULE_VALIDATION_ADMIN_CONNECTION");
+        if (string.IsNullOrWhiteSpace(adminConnectionString))
+            throw Xunit.Sdk.SkipException.ForSkip("Configura POS_MODULE_VALIDATION_ADMIN_CONNECTION para habilitar la prueba PostgreSQL aislada de existencias F2.");
+
+        var databaseName = "pos_f2_stock_" + Guid.NewGuid().ToString("N");
+        var adminBuilder = new NpgsqlConnectionStringBuilder(adminConnectionString);
+        var databaseCreated = false;
+        string? tempRoot = null;
+        Process? server = null;
+        try
+        {
+            await using (var admin = new NpgsqlConnection(adminBuilder.ConnectionString))
+            {
+                await admin.OpenAsync();
+                await using var create = new NpgsqlCommand($"CREATE DATABASE \"{databaseName}\";", admin);
+                await create.ExecuteNonQueryAsync();
+                databaseCreated = true;
+            }
+
+            var databaseBuilder = new NpgsqlConnectionStringBuilder(adminBuilder.ConnectionString) { Database = databaseName };
+            var connectionString = databaseBuilder.ConnectionString;
+            var options = new DbContextOptionsBuilder<PosDbContext>()
+                .UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly(typeof(PosDbContext).Assembly.FullName)).Options;
+            var productId = Guid.NewGuid();
+            await using (var db = new PosDbContext(options))
+            {
+                await db.Database.MigrateAsync();
+                db.Products.Add(new ProductRecord { Id = productId, Sku = "F2-STOCK", Name = "Producto de prueba", UnitPrice = 1m, Currency = "VES", Active = true, CreatedAtUtc = DateTime.UtcNow });
+                db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 90m, Version = 1 });
+                await db.SaveChangesAsync();
+            }
+
+            var terminalA = Guid.NewGuid();
+            var terminalB = Guid.NewGuid();
+            var terminalC = Guid.NewGuid();
+            var warehouseId = Guid.NewGuid();
+            var emptyWarehouseId = Guid.NewGuid();
+            var schema = ModuleMigrationSqlGenerator.SchemaForModule(WarehouseStockBridge.ModuleId);
+
+            tempRoot = Path.Combine(Path.GetTempPath(), "pos-f2-stock-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            var endpoint = ReserveLoopbackEndpoint();
+            var serverDll = Path.Combine(FindRepositoryRoot(), "src", "Pos.Server", "bin", "Debug", "net10.0", "Pos.Server.dll");
+            Assert.True(File.Exists(serverDll), $"No se encontró el servidor compilado: {serverDll}");
+            using var signer = RSA.Create(2048);
+            var keyRingPath = Path.Combine(tempRoot, "module-trust.json");
+            await File.WriteAllTextAsync(keyRingPath, $$"""
+                {"schemaVersion":1,"keys":[{"keyId":"test","publicKeyPem":{{JsonSerializer.Serialize(signer.ExportSubjectPublicKeyInfoPem())}},"status":"Active"}]}
+                """);
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            server = StartServer(serverDll, connectionString, "Development", endpoint,
+                keyRingPath, Path.Combine(tempRoot, "Modules"));
+            await WaitForReadyAsync(client, endpoint, server);
+            using (var setup = await client.PostAsJsonAsync(endpoint + "/api/v1/setup/first-operator", new { username = "f2-admin", pin = "4826" }))
+                Assert.Equal(HttpStatusCode.Created, setup.StatusCode);
+
+            async Task<decimal> SearchQuantityAsync(Guid terminalId)
+            {
+                using var login = await client.PostAsJsonAsync(endpoint + "/api/v1/auth/login", new { username = "f2-admin", pin = "4826", terminalId, clientVersion = "1.0.0" });
+                Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+                using var loginJson = await JsonDocument.ParseAsync(await login.Content.ReadAsStreamAsync());
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginJson.RootElement.GetProperty("accessToken").GetString()!);
+                using var response = await client.GetAsync(endpoint + "/api/v1/products?query=F2-STOCK");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                using var result = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+                var product = Assert.Single(result.RootElement.EnumerateArray());
+                return product.GetProperty("quantity").GetDecimal();
+            }
+
+            Assert.Equal(90m, await SearchQuantityAsync(terminalA));
+
+            await using (var adminDb = new NpgsqlConnection(connectionString))
+            {
+                await adminDb.OpenAsync();
+                await using var createModuleTables = new NpgsqlCommand($"""
+                    CREATE SCHEMA "{schema}";
+                    CREATE TABLE "{schema}".warehouses (id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, is_active boolean NOT NULL, is_primary boolean NOT NULL, created_at_utc timestamptz NOT NULL);
+                    CREATE TABLE "{schema}".warehouse_stock (id uuid PRIMARY KEY, warehouse_id uuid NOT NULL, product_id uuid NOT NULL, quantity numeric(18,4) NOT NULL, version bigint NOT NULL, updated_at_utc timestamptz NOT NULL, UNIQUE (warehouse_id,product_id));
+                    CREATE TABLE "{schema}".terminal_warehouses (terminal_id uuid PRIMARY KEY, warehouse_id uuid NOT NULL, updated_at_utc timestamptz NOT NULL);
+                    INSERT INTO "{schema}".warehouses (id,code,name,is_active,is_primary,created_at_utc) VALUES ('{WarehouseStockBridge.MainWarehouseId}','PRINCIPAL','Principal',TRUE,TRUE,NOW()), ('{warehouseId}','SECUNDARIO','Secundario',TRUE,FALSE,NOW()), ('{emptyWarehouseId}','AGOTADO','Agotado',TRUE,FALSE,NOW());
+                    INSERT INTO "{schema}".warehouse_stock (id,warehouse_id,product_id,quantity,version,updated_at_utc) VALUES
+                        (gen_random_uuid(),'{WarehouseStockBridge.MainWarehouseId}','{productId}',90,0,NOW()),
+                        (gen_random_uuid(),'{warehouseId}','{productId}',12,0,NOW()),
+                        (gen_random_uuid(),'{emptyWarehouseId}','{productId}',0,0,NOW());
+                    INSERT INTO "{schema}".terminal_warehouses (terminal_id,warehouse_id,updated_at_utc) VALUES
+                        ('{terminalA}','{warehouseId}',NOW()), ('{terminalC}','{emptyWarehouseId}',NOW());
+                    """, adminDb);
+                await createModuleTables.ExecuteNonQueryAsync();
+            }
+
+            Assert.Equal(12m, await SearchQuantityAsync(terminalA));
+            Assert.Equal(90m, await SearchQuantityAsync(terminalB));
+            Assert.Equal(0m, await SearchQuantityAsync(terminalC));
+
+            await using (var db = new PosDbContext(options))
+            {
+                await db.Database.OpenConnectionAsync();
+                Assert.False(await WarehouseStockBridge.ConsumeAsync(db, warehouseId, productId, 13m, CancellationToken.None));
+                await db.Database.CloseConnectionAsync();
+            }
+        }
+        finally
+        {
+            if (server is { HasExited: false })
+            {
+                try { server.Kill(entireProcessTree: true); await server.WaitForExitAsync(); }
+                catch (InvalidOperationException) { }
+            }
+            server?.Dispose();
+            await using var admin = new NpgsqlConnection(adminBuilder.ConnectionString);
+            await admin.OpenAsync();
+            if (databaseCreated)
+            {
+                await using var terminate = new NpgsqlCommand("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @database AND pid <> pg_backend_pid();", admin);
+                terminate.Parameters.AddWithValue("database", databaseName);
+                await terminate.ExecuteNonQueryAsync();
+                await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{databaseName}\";", admin);
+                await drop.ExecuteNonQueryAsync();
+            }
+            adminBuilder.Password = string.Empty;
+            if (tempRoot is not null && Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ModulePlan_RecoversAfterApplicationRoleReceivesReadAccessToLegacyTerminalTable()
     {
         var adminConnectionString = Environment.GetEnvironmentVariable("POS_MODULE_VALIDATION_ADMIN_CONNECTION");

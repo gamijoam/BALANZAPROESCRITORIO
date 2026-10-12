@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly IPosApiClient _apiClient;
     private readonly Func<CancellationToken, Task>? _restartLocalServiceAsync;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
+    private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow(PosViewModel viewModel, IPosApiClient apiClient,
@@ -190,6 +191,26 @@ public partial class MainWindow : Window
         _viewModel.RemoveProduct(line);
     }
 
+    private void ModulesButton_Click(object sender, RoutedEventArgs e)
+    {
+        ModulesPopup.PlacementTarget = ModulesButton;
+        ModulesPopup.IsOpen = !ModulesPopup.IsOpen;
+    }
+
+    private void ModulesPopup_Opened(object? sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => ModulesPopup.Items.OfType<MenuItem>()
+            .FirstOrDefault(item => item.IsEnabled && item.Visibility == Visibility.Visible)?.Focus(), DispatcherPriority.Input);
+    }
+
+    private void ModulesPopup_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        e.Handled = true;
+        ModulesPopup.IsOpen = false;
+        ModulesButton.Focus();
+    }
+
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.None) return;
@@ -338,7 +359,27 @@ public partial class MainWindow : Window
 
     public async Task<bool> ReloadDesktopModulesAsync(CancellationToken cancellationToken = default)
     {
-        ModuleMenuHost.Children.Clear();
+        foreach (var item in _moduleMenuItems) ModulesPopup.Items.Remove(item);
+        _moduleMenuItems.Clear();
+        ModuleMenuEmpty.Visibility = Visibility.Visible;
+        AdminModulesMenuItem.Visibility = Visibility.Collapsed;
+        AdminModulesMenuItem.Header = "Administrar módulos";
+        try
+        {
+            var managementAccess = await _apiClient.GetModuleManagementAccessAsync(cancellationToken);
+            if (managementAccess.CanOpenManagement)
+            {
+                AdminModulesMenuItem.Visibility = Visibility.Visible;
+                if (managementAccess.RequiresAdministratorPin)
+                    AdminModulesMenuItem.Header = "Administrar módulos (requiere PIN)";
+            }
+        }
+        catch (NotSupportedException) { }
+        catch (Exception exception)
+        {
+            _viewModel.SetStatus($"No se pudo consultar el acceso a módulos: {PosUserMessage.ForException(exception)}");
+        }
+
         foreach (var loaded in _desktopModules) loaded.LoadContext.Unload();
         _desktopModules.Clear();
         IReadOnlyList<DesktopModuleClientInfo> descriptors;
@@ -361,16 +402,17 @@ public partial class MainWindow : Window
                 foreach (var menu in module.Registry.Menus)
                 {
                     if (!module.Context.GrantedPermissions.Contains(menu.RequiredPermission)) continue;
-                    var button = new Button
+                    ModuleMenuEmpty.Visibility = Visibility.Collapsed;
+                    var menuItem = new MenuItem
                     {
-                        Style = (Style)FindResource("ToolButton"),
-                        Content = $"▣   {menu.Label}",
+                        Header = menu.Label,
                         Tag = (module, menu)
                     };
-                    System.Windows.Automation.AutomationProperties.SetName(button, menu.Label);
-                    System.Windows.Automation.AutomationProperties.SetAutomationId(button, $"Module_{module.ModuleId}_{menu.Id}");
-                    button.Click += ModuleMenu_Click;
-                    ModuleMenuHost.Children.Add(button);
+                    System.Windows.Automation.AutomationProperties.SetName(menuItem, menu.Label);
+                    System.Windows.Automation.AutomationProperties.SetAutomationId(menuItem, $"Module_{module.ModuleId}_{menu.Id}");
+                    menuItem.Click += ModuleMenu_Click;
+                    ModulesPopup.Items.Insert(1 + _moduleMenuItems.Count, menuItem);
+                    _moduleMenuItems.Add(menuItem);
                 }
             }
             catch (Exception exception)
@@ -384,9 +426,10 @@ public partial class MainWindow : Window
 
     private void ModuleMenu_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: ValueTuple<LoadedDesktopModule, PosDesktopMenuContribution> pair }) return;
+        if (sender is not MenuItem { Tag: ValueTuple<LoadedDesktopModule, PosDesktopMenuContribution> pair }) return;
         var (module, menu) = pair;
         if (!module.Context.GrantedPermissions.Contains(menu.RequiredPermission)) return;
+        ModulesPopup.IsOpen = false;
         try
         {
             var window = menu.CreateWindow(module.Context);

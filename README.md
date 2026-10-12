@@ -1,36 +1,47 @@
-# POS de escritorio para comercios venezolanos
+# Balanzapro — POS de escritorio
 
-Proyecto de POS para Windows, diseñado alrededor de la pantalla de venta. La arquitectura aprobada inicialmente usa WPF como cliente de un servicio .NET y PostgreSQL como base de datos tanto en una instalación de una PC como en una instalación multicaja.
+Sistema de punto de venta para Windows con cliente WPF, servicio ASP.NET Core y PostgreSQL. El servidor es la autoridad para ventas, existencias, permisos y auditoría; el cliente de escritorio se comunica con él mediante HTTP y no se conecta directamente a PostgreSQL.
 
-## Estado
+## Estado del proyecto
 
-El **Hito 0 está aprobado**; los hitos 1 a 3 entregaron el dominio inicial, persistencia PostgreSQL/API y pantalla de venta. El **Hito 4 incorpora inventario, caja y arqueo, productos y precios, tasa de cambio, clientes y fiado/abonos, reportes, auditoría y permisos por rol**. El primer tramo del **Hito 5** prepara una instalación local y respaldo/restauración PostgreSQL. El comprobante sigue siendo de prueba y no fiscal.
+- POS operativo con ventas, pagos mixtos, caja, clientes y crédito, inventario, precios y tasa, reportes, auditoría, operadores y permisos.
+- Arquitectura de módulos firmados para agregar funciones de servidor, pantallas WPF, menús y extensiones declaradas por el anfitrión.
+- **Almacenes y traslados 1.3.1** es el módulo piloto funcional. Incluye existencias por almacén, asignación de terminal, traslados con despacho/recepción, historial y pantalla propia. El ZIP firmado listo para instalar está en [`modulos/warehouses/1.3.1`](modulos/warehouses/1.3.1/README.md).
+- La búsqueda F2 muestra la existencia asignada a la terminal; el cambio requiere actualizar el servidor POS principal. Ver [Hito 17](docs/specs/hito-17-f2-stock-por-terminal.md).
+- El comprobante actual es de prueba y **no es una factura fiscal certificada**.
+
+## Organización del repositorio
+
+```text
+src/
+  Pos.Server/                     Servicio HTTP y lógica de anfitrión
+  Pos.Desktop/                    Aplicación WPF del POS
+  Pos.Infrastructure/             PostgreSQL, identidad y servicios
+  Modules/                         Contratos, ejemplos y código fuente de módulos
+modulos/                           Paquetes firmados listos para distribuir/instalar
+docs/
+  adr/                             Decisiones de arquitectura
+  specs/                           Hitos, contratos y criterios de aceptación
+  manuales/                        Guías de instalación, prueba y desarrollo
+  security/                        Firma y custodia de claves
+scripts/                           Compilación, publicación, instalación y pruebas
+tests/                             Pruebas de dominio, aplicación, módulos e integración
+artifacts/                         Compilaciones y paquetes locales (no se suben a Git)
+```
+
+El código fuente de Almacenes se mantiene en `src/Modules/Pos.Modules.Warehouses` y `src/Modules/Pos.Modules.Warehouses.Desktop`, porque esos proyectos forman parte de `Pos.sln`. La carpeta `modulos/` es el catálogo de entregas firmadas: conserva cada versión distribuible sin duplicar su código fuente.
 
 ## Requisitos de desarrollo
 
 - Windows x64 y .NET 10 SDK.
-- PostgreSQL local para los hitos de persistencia e integración.
-- Docker Desktop cuando se incorporen pruebas Testcontainers.
+- PostgreSQL para desarrollo e integración.
 - Git.
 
-Visual Studio es opcional: el proyecto puede compilarse desde la CLI de .NET. Docker no es un requisito de instalación para el comercio.
+Docker es opcional. Nunca configures las pruebas de integración contra la base activa de un comercio. Las pruebas que requieren PostgreSQL deben crear una base temporal desechable.
 
-## Documentación
+## Compilar y probar
 
-- [ADR-001 Arquitectura](docs/adr/ADR-001-arquitectura.md)
-- [Alcance del Hito 0](docs/specs/hito-0-diseno-verificable.md)
-- [Matriz de permisos](docs/specs/matriz-permisos.md)
-- [Contrato inicial de API](docs/specs/contrato-api-v1.md)
-- [Modelo conceptual de datos](docs/specs/modelo-datos-inicial.md)
-- [Riesgos y decisiones pendientes](docs/specs/riesgos-y-decisiones.md)
-- [Reglas del dominio del Hito 1](docs/specs/hito-1-reglas-dominio.md)
-- [Persistencia PostgreSQL del Hito 2](docs/specs/hito-2-persistencia.md)
-- [POS de escritorio del Hito 3](docs/specs/hito-3-pos-escritorio.md)
-- [Funciones operativas del Hito 4](docs/specs/hito-4-funciones-operativas.md)
-- [Instalación local y respaldo del Hito 5](docs/specs/hito-5-instalacion-local-y-respaldo.md)
-- [Módulos del POS: arquitectura, creación, firma, instalación y actualización](docs/manuales/MODULOS-POS.md)
-
-## Compilar
+Desde la raíz del repositorio:
 
 ```powershell
 dotnet restore .\Pos.sln
@@ -38,65 +49,50 @@ dotnet build .\Pos.sln --no-restore
 dotnet test .\Pos.sln --no-build
 ```
 
-## Iniciar el servicio local
+Las pruebas de integración PostgreSQL pueden requerir variables descritas por cada fixture. Usa siempre una instancia y credenciales de prueba con permiso para crear y eliminar bases temporales; nunca reutilices la conexión de producción.
 
-```powershell
-dotnet run --project .\src\Pos.Server\Pos.Server.csproj
-```
+## Ejecutar el POS
 
-En otra consola, crea el primer operador (solo se permite en Development y desde localhost):
+Para una instalación local, sigue [las instrucciones de instalación](docs/manuales/INSTRUCCIONES-INSTALACION-POS.md). El flujo de desarrollo requiere configurar la conexión PostgreSQL en el almacén seguro de .NET User Secrets o en la configuración segura local; no agregues contraseñas a `appsettings.json`, scripts ni Git.
 
-```powershell
-.\scripts\Configure-InitialOperator.ps1
-```
-
-Este script solicita el PIN sin mostrarlo. El cliente puede iniciar sesión contra `http://localhost:5155/api/v1/auth/login`.
-
-## Instalar en una sola PC
-
-Con PostgreSQL instalado y los runtimes .NET 10 requeridos, publica el paquete para Windows x64:
+Para preparar una distribución nueva de escritorio/servidor:
 
 ```powershell
 .\scripts\Publish-LocalPos.ps1
-.\artifacts\local-pos\scripts\Configure-LocalDatabase.ps1
-.\scripts\Install-LocalPos.ps1 -ScheduleDailyBackup
 ```
 
-La configuración solicita la contraseña administrativa de PostgreSQL y guarda una contraseña de aplicación aleatoria en la configuración segura del usuario de Windows. La instalación se guarda en el perfil actual y requiere los runtimes .NET 10 de escritorio, ASP.NET Core y .NET; crea accesos directos para iniciar el servidor enlazado solo a `127.0.0.1` y el POS. Para crear el primer operador, ejecuta una vez:
+El paquete se genera bajo `artifacts/`. `Actualizar POS.cmd` debe ejecutarse en la PC servidor con todas las ventanas del POS cerradas; verifica la conexión, crea el respaldo, prepara el esquema y reemplaza la instalación. No copies archivos sobre un servidor activo.
 
-```powershell
-& "$env:LOCALAPPDATA\Programs\Punto de Venta\scripts\Initialize-LocalPosOperator.ps1"
-```
+## Módulos
 
-El paquete no contiene PostgreSQL, datos del comercio ni secretos. La configuración inicial no abre puertos LAN.
+### Probar Almacenes y traslados
 
-## Respaldo y restauración
+El paquete funcional actual es [`warehouses-1.3.1.zip`](modulos/warehouses/1.3.1/warehouses-1.3.1.zip). En la PC servidor, abre **Administración → Módulos**, elige el ZIP y pulsa **Validar paquete**. Revisa el plan y luego pulsa **Instalar módulo**. Después reinicia el servidor desde el botón de módulos y verifica que su estado cambie a `Active`.
 
-El respaldo manual crea un archivo comprimido de PostgreSQL en Documentos y verifica su integridad y SHA-256:
+La activación necesita un anfitrión POS compatible, respaldo PostgreSQL válido y reinicio del servicio. La terminal presenta la función cuando el módulo está activo y el usuario tiene permisos. Consulta [la guía del módulo](modulos/warehouses/1.3.1/README.md) y el [manual para crear módulos](docs/manuales/crear-modulos-pos.md).
 
-```powershell
-& "$env:LOCALAPPDATA\Programs\Punto de Venta\scripts\Backup-LocalDatabase.ps1" -KeepLast 14
-```
+### Crear, firmar y actualizar
 
-Con `-ScheduleDailyBackup`, la instalación configura respaldos diarios a las 20:00. Windows los ejecuta con el usuario que guarda la conexión segura, cuando ese usuario ha iniciado sesión. Los archivos no llevan cifrado propio: protégelos con BitLocker y conserva copias en otro dispositivo.
+1. Define un hito y criterios de aceptación antes de agregar comportamiento.
+2. Crea el código bajo `src/Modules/Pos.Modules.<Nombre>` y, si aplica, `src/Modules/Pos.Modules.<Nombre>.Desktop`.
+3. Añade pruebas, manifiesto y migraciones inmutables.
+4. Construye el paquete firmado con el publicador oficial. La clave privada nunca se guarda en el repositorio; se puede distribuir la clave pública.
+5. Verifica el ZIP firmado, documenta sus requisitos y agrega el release bajo `modulos/<id>/<versión>/`.
+6. Actualiza la guía de módulos y el índice del README en el mismo cambio.
 
-Para ensayar la restauración sin sobrescribir la base activa, usa un nombre de base nuevo. El script verifica el checksum y solicita la contraseña administrativa de PostgreSQL:
+Una actualización de módulo conserva el mismo ID y usa una versión semántica mayor. Incluye los archivos de la versión completa y agrega una migración nueva si cambia el esquema; nunca alteres migraciones publicadas. El servidor realiza respaldo, migraciones y activación coordinada.
 
-```powershell
-& "$env:LOCALAPPDATA\Programs\Punto de Venta\scripts\Restore-LocalDatabase.ps1" `
-  -BackupFile "$env:USERPROFILE\Documents\PuntoDeVenta\Respaldos\pos-pos_dev-AAAAmmdd-HHmmss.backup" `
-  -TargetDatabaseName pos_recuperacion
-```
+## Documentación principal
 
-La restauración deja intacta la base original y no cambia automáticamente la conexión activa del POS. Si ya se revisó la base recuperada y se quiere usarla, cierra el servicio, agrega `-Activate` y confirma escribiendo `ACTIVAR pos_recuperacion`.
+- [Arquitectura](docs/adr/ADR-001-arquitectura.md)
+- [Módulos: arquitectura, instalación y actualización](docs/manuales/MODULOS-POS.md)
+- [Guía paso a paso para programadores de módulos](docs/manuales/crear-modulos-pos.md)
+- [Almacenes y traslados: entrega 1.3.1](modulos/warehouses/1.3.1/README.md)
+- [Contrato API v1](docs/specs/contrato-api-v1.md)
+- [Matriz de permisos](docs/specs/matriz-permisos.md)
+- [Criterios de F2 por almacén de terminal](docs/specs/hito-17-f2-stock-por-terminal.md)
+- [Reglas de contribución para agentes y programadores](AGENTS.md)
 
-Prueba de mutación del dominio, ejecutada desde el directorio de pruebas:
+## Seguridad y archivos locales
 
-```powershell
-Push-Location .\tests\Pos.Domain.Tests
-dotnet tool restore
-dotnet tool run dotnet-stryker
-Pop-Location
-```
-
-Las pruebas de integración ejercitan PostgreSQL real. El script `scripts/Test-LocalCheckout.ps1` verifica el flujo API del Hito 4, incluyendo permisos, inventario, arqueo, precios/tasa, clientes/fiado, reportes y auditoría; limpia los datos temporales al terminar. Las reglas están en `docs/specs/hito-1-reglas-dominio.md` y `docs/specs/hito-4-funciones-operativas.md`.
+No subas tokens, contraseñas, cadenas de conexión, certificados privados, claves de firma privadas, respaldos, datos de comercios ni resultados de compilación. `.gitignore` excluye los artefactos locales y secretos conocidos; antes de cada commit revisa `git status` y el contenido staged.

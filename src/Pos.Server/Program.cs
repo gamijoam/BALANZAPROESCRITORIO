@@ -227,6 +227,20 @@ app.MapGet("/api/v1/modules", async (HttpContext context, AuthenticationService 
     catch (Exception exception) when (exception is NpgsqlException or InvalidOperationException)
     { return Results.Problem("No se pudo consultar el registro de módulos.", statusCode: StatusCodes.Status503ServiceUnavailable); }
 });
+app.MapGet("/api/v1/modules/management-access", async (HttpContext context, AuthenticationService auth, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+
+    var mode = await auth.GetPermissionAccessModeAsync(access.OperatorId, Permission.ManageModules, cancellationToken);
+    return Results.Ok(new
+    {
+        canOpenManagement = mode != PermissionAccessMode.Deny,
+        requiresAdministratorPin = mode == PermissionAccessMode.RequireAdminPin
+    });
+});
 app.MapGet("/api/v1/modules/desktop", async (HttpContext context, AuthenticationService auth, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
@@ -845,16 +859,33 @@ app.MapPost("/api/v1/sales/{saleId:guid}/returns", async (Guid saleId, HttpConte
 app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, AuthenticationService auth, string? query, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
-    if (token is null || await auth.FindValidSessionAsync(token, cancellationToken) is null) return Results.Unauthorized();
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
     var search = (query ?? string.Empty).Trim();
     if (search.Length > 100) return Results.BadRequest(new { error = "Search text is too long." });
     var products = await db.Products.AsNoTracking()
         .Where(x => x.Active && (search == "" || EF.Functions.ILike(x.Sku, search + "%") || EF.Functions.ILike(x.Name, "%" + search + "%")))
         .OrderBy(x => x.Name).Take(30)
-        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Currency, hasImage = x.ImageFileName != null,
-            quantity = db.Stocks.Where(stock => stock.ProductId == x.Id).Select(stock => (decimal?)stock.Quantity).FirstOrDefault() ?? 0m })
+        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Currency, hasImage = x.ImageFileName != null })
         .ToListAsync(cancellationToken);
-    return Results.Ok(products);
+    var productIds = products.Select(x => x.Id).ToArray();
+    var quantities = await WarehouseStockBridge.GetStockForTerminalAsync(db, access.TerminalId, productIds, cancellationToken);
+    if (quantities is null)
+    {
+        quantities = await db.Stocks.AsNoTracking().Where(x => productIds.Contains(x.ProductId))
+            .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, cancellationToken);
+    }
+    return Results.Ok(products.Select(product => new
+    {
+        product.Id,
+        product.Sku,
+        product.Name,
+        product.UnitPrice,
+        product.Currency,
+        product.hasImage,
+        quantity = quantities.GetValueOrDefault(product.Id)
+    }));
 });
 app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, AuthenticationService auth, SupervisorAuthorizationStore approvals, string? query, string? status, string? currency, string? stockStatus, bool? hasImage, CancellationToken cancellationToken) =>
 {

@@ -38,6 +38,7 @@ public sealed record ModuleInstallationPlanClientEntry(string Id, string Version
 public sealed record ModuleClientApiRangeClient(string Min, string MaxExclusive);
 public sealed record DesktopModuleClientInfo(string ModuleId, string Version, string SignerKeyId,
     string SignerPublicKeyPem, IReadOnlyList<string> GrantedPermissions);
+public sealed record ModuleManagementAccessInfo(bool CanOpenManagement, bool RequiresAdministratorPin);
 public sealed record ModuleTerminalCompatibilityClientResult(bool IsCompatible, int RegisteredTerminalCount,
     int UnreportedTerminalCount, IReadOnlyList<string> IncompatibleVersions)
 {
@@ -225,6 +226,8 @@ public interface IPosApiClient : IPosModuleApiClient
         => throw new NotSupportedException("El cliente no consulta los módulos instalados.");
     Task<IReadOnlyList<DesktopModuleClientInfo>> GetDesktopModulesAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no consulta los módulos de escritorio activos.");
+    Task<ModuleManagementAccessInfo> GetModuleManagementAccessAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta el permiso para administrar módulos.");
     Task<byte[]> DownloadDesktopModulePackageAsync(string moduleId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no descarga paquetes de módulos de escritorio.");
     Task DeactivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)

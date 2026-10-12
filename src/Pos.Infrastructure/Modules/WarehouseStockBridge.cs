@@ -29,6 +29,48 @@ public static class WarehouseStockBridge
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
     }
 
+    /// <summary>
+    /// Returns the warehouse-specific quantities for a terminal. A null result means the
+    /// warehouse module has never been installed, so callers should use the legacy global stock.
+    /// Missing product rows in an installed module intentionally resolve to zero.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<Guid, decimal>?> GetStockForTerminalAsync(
+        PosDbContext db, Guid terminalId, IReadOnlyCollection<Guid> productIds, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(productIds);
+        if (productIds.Count == 0) return new Dictionary<Guid, decimal>();
+
+        var connection = db.Database.GetDbConnection();
+        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        if (openedHere) await connection.OpenAsync(ct);
+        try
+        {
+            var transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            if (!await IsInstalledAsync(connection, transaction, ct)) return null;
+
+            await EnsureInitializedAsync(connection, transaction, ct);
+            await using var warehouseCommand = Command(connection, transaction,
+                $"SELECT COALESCE((SELECT warehouse_id FROM {Q("terminal_warehouses")} WHERE terminal_id = @terminal), @main)");
+            warehouseCommand.Parameters.AddWithValue("terminal", terminalId);
+            warehouseCommand.Parameters.AddWithValue("main", MainWarehouseId);
+            var warehouseId = (Guid)(await warehouseCommand.ExecuteScalarAsync(ct))!;
+
+            var quantities = new Dictionary<Guid, decimal>();
+            await using var stockCommand = Command(connection, transaction,
+                $"SELECT product_id, quantity FROM {Q("warehouse_stock")} WHERE warehouse_id = @warehouse AND product_id = ANY(@products)");
+            stockCommand.Parameters.AddWithValue("warehouse", warehouseId);
+            stockCommand.Parameters.AddWithValue("products", productIds.Distinct().ToArray());
+            await using var reader = await stockCommand.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) quantities[reader.GetGuid(0)] = reader.GetDecimal(1);
+            return quantities;
+        }
+        finally
+        {
+            if (openedHere) await connection.CloseAsync();
+        }
+    }
+
     public static async Task RecordSaleAsync(PosDbContext db, Guid saleId, Guid warehouseId, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();

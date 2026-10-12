@@ -1,22 +1,44 @@
-# Build output
+# .NET build, test and IDE output
 **/bin/
 **/obj/
+**/TestResults/
 **/StrykerOutput/
 .vs/
+.vscode/
 *.user
 *.suo
+*.cache
+*.coverage
+*.coveragexml
 
-# Local configuration and data
+# Local application settings and secrets
 appsettings.Local.json
+**/appsettings.Local.json
+.env
+.env.*
+!.env.example
+secrets.json
+**/secrets.json
+*.secret.json
+**/*.secret.json
+
+# Private certificates and signing material (public .pem keys may be committed)
+*.pfx
+*.p12
+*.snk
+*.key
+*_private.pem
+*-private.pem
+private*.pem
+
+# Local logs, databases, backups and dumps
+logs/
+**/logs/
+*.log
 *.db
 *.dump
 *.backup
-secrets.json
+*.bak
 
-# IDE and OS
-.vscode/
-Thumbs.db
-Desktop.ini
-
-# Local installation package
+# Local build and installation output; signed module releases live under modulos/
 artifacts/

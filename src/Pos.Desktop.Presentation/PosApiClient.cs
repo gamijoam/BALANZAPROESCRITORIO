@@ -422,6 +422,15 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         return await response.Content.ReadFromJsonAsync<List<DesktopModuleClientInfo>>(JsonOptions, cancellationToken) ?? [];
     }
 
+    public async Task<ModuleManagementAccessInfo> GetModuleManagementAccessAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/modules/management-access");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ModuleManagementAccessInfo>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió un estado vacío de permisos para módulos.");
+    }
+
     public async Task<byte[]> DownloadDesktopModulePackageAsync(string moduleId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(moduleId) || moduleId.Any(character => !(char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '-')))
