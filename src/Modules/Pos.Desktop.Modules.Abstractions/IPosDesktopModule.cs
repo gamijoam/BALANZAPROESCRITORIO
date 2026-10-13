@@ -45,6 +45,18 @@ public sealed record PosDesktopReportSourceInstance(PosDesktopModuleContext Cont
 public sealed record PosDesktopReportCenterContribution(string Id, string Label, string RequiredPermission,
     Func<PosDesktopModuleContext, Window> CreateWindow);
 
+public sealed record PosDesktopReceiptPrintResult(bool Accepted, string? Message = null);
+
+/// <summary>Controlled hook used only after a sale has committed or when the operator explicitly opens a saved receipt.</summary>
+public interface IPosReceiptExtension
+{
+    Task<PosDesktopReceiptPrintResult> PrintAsync(PosDesktopModuleContext context, SaleReceipt receipt,
+        CancellationToken cancellationToken = default);
+    Window CreatePreviewWindow(PosDesktopModuleContext context, SaleReceipt receipt);
+}
+
+public sealed record PosDesktopReceiptContribution(string RequiredPermission, IPosReceiptExtension Extension);
+
 public static class ReportColumnProjection
 {
     public static IReadOnlyList<PosDesktopReportColumn> Apply(IReadOnlyList<PosDesktopReportColumn> definitions,
@@ -86,6 +98,7 @@ public sealed class PosDesktopModuleRegistry
     private readonly List<IPosInventoryScreenExtension> _inventoryExtensions = [];
     private readonly List<IPosInventoryHistoryExtension> _inventoryHistoryExtensions = [];
     private readonly List<PosDesktopReportSource> _reportSources = [];
+    private PosDesktopReceiptContribution? _receiptExtension;
 
     public PosDesktopModuleRegistry(string moduleId, IEnumerable<string> declaredPermissions)
     {
@@ -98,6 +111,16 @@ public sealed class PosDesktopModuleRegistry
     public IReadOnlyList<IPosInventoryHistoryExtension> InventoryHistoryExtensions => _inventoryHistoryExtensions;
     public IReadOnlyList<PosDesktopReportSource> ReportSources => _reportSources;
     public PosDesktopReportCenterContribution? ReportCenter { get; private set; }
+    public PosDesktopReceiptContribution? ReceiptExtension => _receiptExtension;
+
+    public void RegisterReceiptExtension(string requiredPermission, IPosReceiptExtension extension)
+    {
+        if (_receiptExtension is not null)
+            throw new InvalidOperationException("Solo se puede registrar una extensión de comprobantes.");
+        ValidatePermission(requiredPermission);
+        ArgumentNullException.ThrowIfNull(extension);
+        _receiptExtension = new PosDesktopReceiptContribution(requiredPermission, extension);
+    }
 
     public void RegisterReportCenter(string id, string label, string requiredPermission,
         Func<PosDesktopModuleContext, Window> createWindow)

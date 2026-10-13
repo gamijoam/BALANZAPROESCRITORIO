@@ -1080,6 +1080,8 @@ async Task ActivateInstalledModulesAsync()
                     "Warehouse.View" => Permission.ViewWarehouses,
                     "Warehouse.Manage" => Permission.ManageWarehouses,
                     "Warehouse.Transfer" => Permission.TransferInventory,
+                    "ThermalReceipts.Print" => Permission.ConfirmSale,
+                    "ThermalReceipts.Configure" => Permission.ManageModules,
                     _ => throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' declara un permiso no compatible: '{endpoint.RequiredPermission}'.")
                 };
                 if (endpoint.RequiredPermission is not null && !item.Runtime.Package.Module.Permissions.Contains(endpoint.RequiredPermission, StringComparer.Ordinal))
@@ -1187,6 +1189,8 @@ static Permission? ResolveModulePermission(string permission) => permission swit
     "Warehouse.View" => Permission.ViewWarehouses,
     "Warehouse.Manage" => Permission.ManageWarehouses,
     "Warehouse.Transfer" => Permission.TransferInventory,
+    "ThermalReceipts.Print" => Permission.ConfirmSale,
+    "ThermalReceipts.Configure" => Permission.ManageModules,
     _ => null
 };
 

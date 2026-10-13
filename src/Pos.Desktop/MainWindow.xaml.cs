@@ -347,7 +347,7 @@ public partial class MainWindow : Window
 
     private void SalesHistoryTool_Click(object sender, RoutedEventArgs e)
     {
-        new SalesHistoryWindow(_viewModel) { Owner = this }.ShowDialog();
+        new SalesHistoryWindow(_viewModel, CreateReceiptPreviewWindow) { Owner = this }.ShowDialog();
         RefocusScanner();
     }
 
@@ -405,6 +405,11 @@ public partial class MainWindow : Window
                     module.LoadContext.Unload();
                     throw new InvalidDataException("Solo puede estar activo un centro de reportes avanzado.");
                 }
+                if (module.Registry.ReceiptExtension is not null && _desktopModules.Any(item => item.Registry.ReceiptExtension is not null))
+                {
+                    module.LoadContext.Unload();
+                    throw new InvalidDataException("Solo puede estar activa una extensión de comprobantes.");
+                }
                 var registeredReportIds = _desktopModules.SelectMany(item => item.Registry.ReportSources)
                     .Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 if (module.Registry.ReportSources.Any(item => registeredReportIds.Contains(item.Id)))
@@ -452,6 +457,28 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) { MessageBox.Show(this, PosUserMessage.ForException(exception), "No se pudo abrir el módulo", MessageBoxButton.OK, MessageBoxImage.Warning); }
         RefocusScanner();
+    }
+
+    private bool TryGetReceiptExtension(out LoadedDesktopModule module, out PosDesktopReceiptContribution contribution)
+    {
+        foreach (var loaded in _desktopModules)
+        {
+            var candidate = loaded.Registry.ReceiptExtension;
+            if (candidate is null || !loaded.Context.GrantedPermissions.Contains(candidate.RequiredPermission)) continue;
+            module = loaded;
+            contribution = candidate;
+            return true;
+        }
+        module = null!;
+        contribution = null!;
+        return false;
+    }
+
+    private Window CreateReceiptPreviewWindow(SaleReceipt receipt)
+    {
+        if (TryGetReceiptExtension(out var module, out var contribution))
+            return contribution.Extension.CreatePreviewWindow(module.Context, receipt);
+        return new ReceiptWindow(receipt);
     }
 
     private void ManagementTool_Click(object sender, RoutedEventArgs e)
@@ -545,7 +572,28 @@ public partial class MainWindow : Window
         try
         {
             var receipt = await _viewModel.CompleteSaleAsync(dialog.Payments);
-            new ReceiptWindow(receipt) { Owner = this }.ShowDialog();
+            if (TryGetReceiptExtension(out var receiptModule, out var receiptContribution))
+            {
+                try
+                {
+                    var print = await receiptContribution.Extension.PrintAsync(receiptModule.Context, receipt);
+                    if (!print.Accepted)
+                    {
+                        var message = string.IsNullOrWhiteSpace(print.Message) ? "Revisa la impresora de esta terminal." : print.Message;
+                        _viewModel.SetStatus($"Venta {receipt.SaleId.ToString("N")[..8]} confirmada; impresión pendiente.");
+                        MessageBox.Show(this, $"La venta quedó confirmada, pero el ticket no se pudo enviar a la impresora. {message} Puedes reimprimirlo desde Historial de ventas.",
+                            "Impresión pendiente", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    else _viewModel.SetStatus($"Venta {receipt.SaleId.ToString("N")[..8]} confirmada e impresión enviada a la cola de Windows.");
+                }
+                catch (Exception printException)
+                {
+                    _viewModel.SetStatus($"Venta {receipt.SaleId.ToString("N")[..8]} confirmada; impresión pendiente.");
+                    MessageBox.Show(this, $"La venta quedó confirmada, pero falló la impresión. {PosUserMessage.ForException(printException)} Puedes reimprimirla desde Historial de ventas.",
+                        "Impresión pendiente", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            else CreateReceiptPreviewWindow(receipt).ShowDialog();
             SearchBox.Focus();
         }
         catch (ArgumentException ex) { MessageBox.Show(this, PosUserMessage.ForException(ex), "Revisa los pagos", MessageBoxButton.OK, MessageBoxImage.Warning); }

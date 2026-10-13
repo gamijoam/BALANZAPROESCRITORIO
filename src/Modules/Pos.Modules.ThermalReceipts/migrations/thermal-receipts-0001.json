@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "operations": [
+    { "type": "createTable", "table": "receipt_templates", "columns": [
+      { "name": "id", "dataType": "uuid", "nullable": false, "primaryKey": true },
+      { "name": "template_json", "dataType": "text", "nullable": false, "primaryKey": false },
+      { "name": "revision", "dataType": "bigint", "nullable": false, "primaryKey": false },
+      { "name": "updated_by", "dataType": "uuid", "nullable": false, "primaryKey": false },
+      { "name": "updated_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+    ]}
+  ]
+}

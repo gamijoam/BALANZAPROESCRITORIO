@@ -21,6 +21,7 @@
     <ProjectReference Include="../../src/Modules/Pos.Modules.Packaging/Pos.Modules.Packaging.csproj" />
     <ProjectReference Include="../../src/Modules/Pos.Modules.Publisher/Pos.Modules.Publisher.csproj" />
     <ProjectReference Include="../../src/Modules/Pos.Modules.Warehouses/Pos.Modules.Warehouses.csproj" />
+    <ProjectReference Include="../../src/Modules/Pos.Modules.ThermalReceipts/Pos.Modules.ThermalReceipts.csproj" />
     <None Include="../../src/Modules/Pos.Modules.Warehouses/module.manifest.json" Link="warehouses/module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Warehouses/migrations/warehouses-0001.json" Link="warehouses/warehouses-0001.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

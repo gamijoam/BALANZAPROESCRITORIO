@@ -7,6 +7,7 @@ namespace Pos.Desktop;
 public partial class SalesHistoryWindow : Window
 {
     private readonly PosViewModel _viewModel;
+    private readonly Func<SaleReceipt, Window>? _receiptPreviewFactory;
     private IReadOnlyList<SaleDetailRow> _sales = [];
     private int _page = 1;
     private int _totalCount;
@@ -14,10 +15,11 @@ public partial class SalesHistoryWindow : Window
     private DateTime _fromUtc;
     private DateTime _toUtc;
 
-    public SalesHistoryWindow(PosViewModel viewModel)
+    public SalesHistoryWindow(PosViewModel viewModel, Func<SaleReceipt, Window>? receiptPreviewFactory = null)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _receiptPreviewFactory = receiptPreviewFactory;
         FromDatePicker.SelectedDate = DateTime.Today.AddDays(-30);
         ToDatePicker.SelectedDate = DateTime.Today;
         Loaded += async (_, _) => await LoadSalesAsync();
@@ -153,7 +155,9 @@ public partial class SalesHistoryWindow : Window
     {
         if (SelectedSale is not { } sale) return;
         var receipt = SaleHistoryReceiptMapper.ToReceipt(sale);
-        new ReceiptWindow(receipt) { Owner = this }.ShowDialog();
+        var preview = _receiptPreviewFactory?.Invoke(receipt) ?? new ReceiptWindow(receipt);
+        preview.Owner = this;
+        preview.ShowDialog();
     }
 
     private async void ReturnSale_Click(object sender, RoutedEventArgs e)

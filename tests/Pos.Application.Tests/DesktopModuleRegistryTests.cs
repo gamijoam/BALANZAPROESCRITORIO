@@ -40,11 +40,30 @@ public sealed class DesktopModuleRegistryTests
         Assert.Single(registry.InventoryExtensions);
     }
 
+    [Fact]
+    public void RegisterReceiptExtension_RequiresDeclaredPrintPermissionAndAllowsOnlyOne()
+    {
+        var missingPermission = new PosDesktopModuleRegistry("thermal-receipts", []);
+        Assert.Throws<InvalidOperationException>(() => missingPermission.RegisterReceiptExtension("ThermalReceipts.Print", new TestReceiptExtension()));
+
+        var registry = new PosDesktopModuleRegistry("thermal-receipts", ["ThermalReceipts.Print"]);
+        registry.RegisterReceiptExtension("ThermalReceipts.Print", new TestReceiptExtension());
+        Assert.Equal("ThermalReceipts.Print", registry.ReceiptExtension!.RequiredPermission);
+        Assert.Throws<InvalidOperationException>(() => registry.RegisterReceiptExtension("ThermalReceipts.Print", new TestReceiptExtension()));
+    }
+
     private sealed class TestInventoryExtension : IPosInventoryScreenExtension
     {
         public string RequiredPermission => "Warehouse.View";
         public FrameworkElement CreateFilterControl(PosDesktopModuleContext context, Func<Task> refreshInventory) => null!;
         public Task<IReadOnlyList<InventoryItemInfo>> ApplyFilterAsync(PosDesktopModuleContext context,
             IReadOnlyList<InventoryItemInfo> products, CancellationToken cancellationToken = default) => Task.FromResult(products);
+    }
+
+    private sealed class TestReceiptExtension : IPosReceiptExtension
+    {
+        public Task<PosDesktopReceiptPrintResult> PrintAsync(PosDesktopModuleContext context, SaleReceipt receipt,
+            CancellationToken cancellationToken = default) => Task.FromResult(new PosDesktopReceiptPrintResult(true));
+        public Window CreatePreviewWindow(PosDesktopModuleContext context, SaleReceipt receipt) => null!;
     }
 }
