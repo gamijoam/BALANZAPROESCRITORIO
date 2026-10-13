@@ -1,4 +1,5 @@
 using System.Net;
+using Pos.Shared.Contracts;
 
 namespace Pos.Desktop.Presentation;
 
@@ -74,7 +75,21 @@ public sealed record InventoryItemInfo(Guid Id, string Sku, string Name, decimal
     public bool Active { get; init; } = true;
     public string ActiveStatusLabel => Active ? "Activo" : "Inactivo";
 }
-public sealed record StockMovementInfo(Guid Id, decimal QuantityDelta, string Reason, Guid ActorId, DateTime OccurredAtUtc);
+public sealed record StockMovementInfo(Guid Id, decimal QuantityDelta, string Reason, Guid ActorId, Guid TerminalId, DateTime OccurredAtUtc, string? ActorUsername = null)
+{
+    public DateTime OccurredAtLocal => DateTime.SpecifyKind(OccurredAtUtc, DateTimeKind.Utc).ToLocalTime();
+    public string OperatorLabel => string.IsNullOrWhiteSpace(ActorUsername) ? $"Operador {ActorId.ToString("N")[..8]}" : ActorUsername;
+}
+public sealed record StockMovementPageInfo(IReadOnlyList<StockMovementInfo> Items, bool HasMore);
+public sealed record ModuleInventoryMovementInfo(Guid Id, decimal QuantityDelta, string Reason, Guid ActorId,
+    Guid TerminalId, DateTime OccurredAtUtc, string? ActorUsername, string Reference, string SourceWarehouse,
+    string DestinationWarehouse, string MovementType)
+{
+    public DateTime OccurredAtLocal => DateTime.SpecifyKind(OccurredAtUtc, DateTimeKind.Utc).ToLocalTime();
+    public string OperatorLabel => string.IsNullOrWhiteSpace(ActorUsername) ? $"Operador {ActorId.ToString("N")[..8]}" : ActorUsername;
+    public string WarehouseRoute => $"{SourceWarehouse} → {DestinationWarehouse}";
+}
+public sealed record ModuleInventoryMovementPageInfo(IReadOnlyList<ModuleInventoryMovementInfo> Items, bool HasMore);
 public sealed record CustomerInfo(Guid Id, string Name, string? DocumentNumber, string? Phone, string Currency, decimal CreditLimit)
 {
     public decimal Balance { get; init; }
@@ -214,7 +229,7 @@ public interface IPosModuleApiClient
         => throw new NotSupportedException("El cliente no ejecuta rutas de módulos.");
 }
 
-public interface IPosApiClient : IPosModuleApiClient
+public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
 {
     Uri BaseAddress { get; set; }
     string? AccessToken { get; }
@@ -280,7 +295,7 @@ public interface IPosApiClient : IPosModuleApiClient
     Task RemoveProductImageAsync(Guid productId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no admite eliminar fotos de productos.");
     Task<decimal> AdjustStockAsync(Guid productId, decimal quantityDelta, string reason, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<StockMovementInfo>> GetStockMovementsAsync(Guid productId, CancellationToken cancellationToken = default);
+    Task<StockMovementPageInfo> GetStockMovementsAsync(Guid productId, int offset = 0, int limit = 100, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProductInfo>> SearchProductsAsync(string query, CancellationToken cancellationToken = default);
     Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId = null, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CustomerInfo>> GetCustomersAsync(string? query, CancellationToken cancellationToken = default);
@@ -301,6 +316,8 @@ public interface IPosApiClient : IPosModuleApiClient
         => throw new NotSupportedException("El cliente no implementa devoluciones.");
     Task<CashSessionReportInfo> GetCashSessionReportAsync(DateTime fromUtc, DateTime toUtc, string? status, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no implementa el reporte de cierres de caja.");
+    Task<CashSessionReportInfo> GetCashSessionReportPageAsync(DateTime fromUtc, DateTime toUtc, string? status, int page, int pageSize, CancellationToken cancellationToken = default)
+        => GetCashSessionReportAsync(fromUtc, toUtc, status, cancellationToken);
     Task<IReadOnlyList<OperatorInfo>> GetOperatorsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OperatorPermissionSetting>> GetOperatorPermissionsAsync(Guid operatorId, CancellationToken cancellationToken = default);
     Task SetOperatorPermissionsAsync(Guid operatorId, IReadOnlyList<OperatorPermissionSetting> permissions, CancellationToken cancellationToken = default);
@@ -312,6 +329,19 @@ public interface IPosApiClient : IPosModuleApiClient
     Task<ReceivableInfo> GetReceivablesAsync(Guid customerId, CancellationToken cancellationToken = default);
     Task RecordReceivablePaymentAsync(Guid customerId, decimal amount, string currency, string? reference, CancellationToken cancellationToken = default);
     Task LogoutAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IPosReportApiClient
+{
+    Task<IReadOnlyList<SavedReportViewInfo>> GetReportViewsAsync(string reportId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta las vistas guardadas de reportes.");
+    Task<SavedReportViewInfo> SaveReportViewAsync(string reportId, SavedReportViewDefinition view, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no guarda vistas de reportes.");
+    Task DeleteReportViewAsync(Guid viewId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no elimina vistas de reportes.");
+    Task<IReadOnlyList<InventoryMovementReportRow>> GetInventoryMovementReportAsync(DateTime fromUtc, DateTime toUtc,
+        int page = 1, int pageSize = 250, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta movimientos globales del inventario.");
 }
 
 public sealed class PosApiException(HttpStatusCode statusCode, string code, string? detail = null, string? diagnosticId = null) : Exception(code)

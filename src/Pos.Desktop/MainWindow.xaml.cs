@@ -397,7 +397,21 @@ public partial class MainWindow : Window
             {
                 var bytes = await _apiClient.DownloadDesktopModulePackageAsync(descriptor.ModuleId, cancellationToken);
                 var module = PosDesktopModuleLoader.Load(bytes, descriptor, _apiClient, TerminalIdentity.GetOrCreate(),
-                    (query, token) => _apiClient.SearchProductsAsync(query, token));
+                    (query, token) => _apiClient.SearchProductsAsync(query, token),
+                    () => _desktopModules.SelectMany(loaded => loaded.Registry.ReportSources
+                        .Select(source => new PosDesktopReportSourceInstance(loaded.Context, source))).ToArray());
+                if (module.Registry.ReportCenter is not null && _desktopModules.Any(item => item.Registry.ReportCenter is not null))
+                {
+                    module.LoadContext.Unload();
+                    throw new InvalidDataException("Solo puede estar activo un centro de reportes avanzado.");
+                }
+                var registeredReportIds = _desktopModules.SelectMany(item => item.Registry.ReportSources)
+                    .Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (module.Registry.ReportSources.Any(item => registeredReportIds.Contains(item.Id)))
+                {
+                    module.LoadContext.Unload();
+                    throw new InvalidDataException("Otro módulo ya registró una fuente con el mismo ID de reporte.");
+                }
                 _desktopModules.Add(module);
                 foreach (var menu in module.Registry.Menus)
                 {
@@ -443,6 +457,22 @@ public partial class MainWindow : Window
     private void ManagementTool_Click(object sender, RoutedEventArgs e)
     {
         var section = (sender as FrameworkElement)?.Tag?.ToString() ?? "Tasa";
+        if (section == "Reportes" && _desktopModules.Select(item => (Module: item, Center: item.Registry.ReportCenter))
+            .FirstOrDefault(item => item.Center is not null && item.Module.Context.GrantedPermissions.Contains(item.Center.RequiredPermission)) is { Center: { } reportCenter, Module: var reportModule })
+        {
+            try
+            {
+                var window = reportCenter.CreateWindow(reportModule.Context);
+                window.Owner = this;
+                window.ShowDialog();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(this, PosUserMessage.ForException(exception), "No se pudo abrir reportes", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            RefocusScanner();
+            return;
+        }
         new ManagementWindow(_viewModel, section, _restartLocalServiceAsync) { Owner = this }.ShowDialog();
         RefocusScanner();
     }

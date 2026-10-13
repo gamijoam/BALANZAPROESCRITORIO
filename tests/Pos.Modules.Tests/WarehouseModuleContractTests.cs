@@ -17,7 +17,8 @@ public sealed class WarehouseModuleContractTests
             .ToArray();
 
         Assert.Equal("warehouses", manifest.Id);
-        Assert.Equal(new Version(1, 3, 1), manifest.Version);
+        Assert.Equal(new Version(1, 3, 3), manifest.Version);
+        Assert.Equal(new Version(1, 1, 0), manifest.DesktopApi!.Min);
         Assert.Null(manifest.Entitlement);
         Assert.Empty(manifest.Dependencies);
         Assert.All(endpointPermissions, permission => Assert.Contains(permission, manifest.Permissions));
@@ -37,5 +38,29 @@ public sealed class WarehouseModuleContractTests
         Assert.Contains("terminal_warehouses", tables);
         Assert.Contains("sale_warehouses", tables);
         Assert.DoesNotContain(definition.Operations, operation => operation is not CreateModuleTable and not CreateModuleIndex);
+    }
+
+    [Fact]
+    public void Transfer_history_endpoint_is_read_only_and_requires_warehouse_view()
+    {
+        var endpoint = Assert.Single(new WarehouseModule().GetEndpoints(), item =>
+            item.Method == "GET" && item.Route == "inventory/{productId:guid}/movements");
+
+        Assert.Equal("Warehouse.View", endpoint.RequiredPermission);
+    }
+
+    [Theory]
+    [InlineData("Draft", "transfer.dispatched", "5", "", "")]
+    [InlineData("Received", "transfer.dispatched", "5", "", "-5")]
+    [InlineData("Received", "transfer.received", "5", "4", "4")]
+    [InlineData("Received", "transfer.received", "5", "0", "")]
+    [InlineData("Draft", "transfer.received", "5", "5", "")]
+    public void Transfer_history_uses_actual_dispatch_and_receipt_quantities(
+        string status, string action, string sent, string received, string expectedDelta)
+    {
+        var delta = WarehouseTransferMovementProjector.GetQuantityDelta(status, action, decimal.Parse(sent),
+            string.IsNullOrEmpty(received) ? null : decimal.Parse(received));
+
+        Assert.Equal(string.IsNullOrEmpty(expectedDelta) ? null : decimal.Parse(expectedDelta), delta);
     }
 }

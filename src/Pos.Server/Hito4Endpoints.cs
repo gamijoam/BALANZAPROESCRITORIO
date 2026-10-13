@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using Pos.Domain.Finance;
 using Pos.Domain.Identity;
+using Pos.Application.Reporting;
 using Pos.Infrastructure.Identity;
 using Pos.Infrastructure.Modules;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.ProductImages;
+using Pos.Shared.Contracts;
 
 internal static class Hito4Endpoints
 {
@@ -599,6 +601,69 @@ internal static class Hito4Endpoints
                               select new { product.Currency, Quantity = stock == null ? 0m : stock.Quantity, RetailValue = (stock == null ? 0m : stock.Quantity) * product.UnitPrice }).ToListAsync(ct);
             return Results.Ok(rows.GroupBy(x => x.Currency).Select(x => new { currency = x.Key, productCount = x.Count(), units = x.Sum(y => y.Quantity), retailValue = x.Sum(y => y.RetailValue) }));
         });
+        app.MapGet("/api/v1/reports/inventory/movements", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, DateTime fromUtc, DateTime toUtc, int? page, int? pageSize, CancellationToken ct) =>
+        {
+            if (await AuthorizedAsync(context, auth, Permission.ViewReports, ct) is null) return PermissionFailure(context);
+            if (fromUtc.Kind != DateTimeKind.Utc || toUtc.Kind != DateTimeKind.Utc || toUtc <= fromUtc || toUtc - fromUtc > TimeSpan.FromDays(92))
+                return Results.BadRequest(new { error = "invalid_report_range" });
+            var pageNumber = Math.Max(1, page ?? 1); var take = Math.Clamp(pageSize ?? 100, 1, 250);
+            var rows = await (from movement in db.StockMovements.AsNoTracking()
+                              join product in db.Products.AsNoTracking() on movement.ProductId equals product.Id
+                              join actorRow in db.OperatorUsers.AsNoTracking() on movement.ActorId equals actorRow.Id into actors
+                              from actor in actors.DefaultIfEmpty()
+                              where movement.OccurredAtUtc >= fromUtc && movement.OccurredAtUtc < toUtc
+                              orderby movement.OccurredAtUtc descending, movement.Id descending
+                              select new { movement.Id, movement.OccurredAtUtc, product.Sku, ProductName = product.Name,
+                                  movement.QuantityDelta, movement.Reason, Actor = actor == null ? "—" : actor.Username,
+                                  movement.TerminalId, Reference = (string?)null })
+                .Skip((pageNumber - 1) * take).Take(take).ToListAsync(ct);
+            return Results.Ok(rows);
+        });
+        app.MapGet("/api/v1/reports/views", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, string reportId, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ViewReports, ct);
+            if (access is null) return PermissionFailure(context);
+            if (!ReportViewPolicy.IsValidReportId(reportId)) return Results.BadRequest(new { error = "invalid_report_id" });
+            var rows = await db.OperatorReportViews.AsNoTracking()
+                .Where(item => item.OperatorId == access.OperatorId && item.ReportId == reportId)
+                .OrderBy(item => item.Name).ToListAsync(ct);
+            return Results.Ok(rows.Select(ToSavedReportView));
+        });
+        app.MapPost("/api/v1/reports/views", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, SaveReportViewRequest request, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ViewReports, ct);
+            if (access is null) return PermissionFailure(context);
+            var validation = ReportViewPolicy.Validate(request.ReportId, request.View);
+            if (validation is not null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["view"] = [validation] });
+            var normalizedName = request.View.Name.Trim();
+            var row = await db.OperatorReportViews.SingleOrDefaultAsync(item => item.OperatorId == access.OperatorId &&
+                item.ReportId == request.ReportId && item.Name == normalizedName, ct);
+            if (row is null)
+            {
+                row = new OperatorReportViewRecord { Id = Guid.NewGuid(), OperatorId = access.OperatorId,
+                    ReportId = request.ReportId, Name = normalizedName };
+                db.OperatorReportViews.Add(row);
+            }
+            row.ColumnsJson = JsonSerializer.Serialize(request.View.Columns);
+            row.FiltersJson = JsonSerializer.Serialize(request.View.Filters);
+            row.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(ToSavedReportView(row));
+        });
+        app.MapDelete("/api/v1/reports/views/{viewId:guid}", async (Guid viewId, HttpContext context,
+            PosDbContext db, AuthenticationService auth, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ViewReports, ct);
+            if (access is null) return PermissionFailure(context);
+            var row = await db.OperatorReportViews.SingleOrDefaultAsync(item => item.Id == viewId && item.OperatorId == access.OperatorId, ct);
+            if (row is null) return Results.NotFound();
+            db.OperatorReportViews.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        });
         app.MapGet("/api/v1/audit", async (HttpContext context, PosDbContext db, AuthenticationService auth, int? limit, CancellationToken ct) =>
         {
             var access = await GetAccessAsync(context, auth, ct);
@@ -659,6 +724,12 @@ internal static class Hito4Endpoints
         var text = (raw ?? string.Empty).Trim().ToUpperInvariant();
         return Enum.TryParse<Currency>(text, out var currency) && Enum.IsDefined(currency) ? currency.ToString() : null;
     }
+
+    private static SavedReportViewInfo ToSavedReportView(OperatorReportViewRecord row)
+        => new(row.Id, row.ReportId, row.Name,
+            JsonSerializer.Deserialize<IReadOnlyList<ReportColumnLayout>>(row.ColumnsJson) ?? [],
+            JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(row.FiltersJson) ?? new Dictionary<string, string>(),
+            row.UpdatedAtUtc);
 
     private static string ProductImageRoot()
     {

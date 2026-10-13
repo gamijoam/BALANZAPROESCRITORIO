@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.IO;
 using System.Text.Json;
+using Pos.Shared.Contracts;
 
 namespace Pos.Desktop.Presentation;
 
@@ -241,12 +242,17 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         return result.Quantity;
     }
 
-    public async Task<IReadOnlyList<StockMovementInfo>> GetStockMovementsAsync(Guid productId, CancellationToken cancellationToken = default)
+    public async Task<StockMovementPageInfo> GetStockMovementsAsync(Guid productId, int offset = 0, int limit = 100, CancellationToken cancellationToken = default)
     {
-        using var request = CreateRequest(HttpMethod.Get, $"api/v1/inventory/{productId}/movements");
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        using var request = CreateRequest(HttpMethod.Get, $"api/v1/inventory/{productId}/movements?offset={offset}&limit={limit}");
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<List<StockMovementInfo>>(JsonOptions, cancellationToken) ?? [];
+        var items = await response.Content.ReadFromJsonAsync<List<StockMovementInfo>>(JsonOptions, cancellationToken) ?? [];
+        var hasMore = response.Headers.TryGetValues("X-Has-More", out var values) &&
+            bool.TryParse(values.FirstOrDefault(), out var parsed) && parsed;
+        return new StockMovementPageInfo(items, hasMore);
     }
 
     public async Task<IReadOnlyList<CustomerInfo>> GetCustomersAsync(string? query, CancellationToken cancellationToken = default)
@@ -352,8 +358,11 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     }
 
     public async Task<CashSessionReportInfo> GetCashSessionReportAsync(DateTime fromUtc, DateTime toUtc, string? status, CancellationToken cancellationToken = default)
+        => await GetCashSessionReportPageAsync(fromUtc, toUtc, status, 1, 250, cancellationToken);
+
+    public async Task<CashSessionReportInfo> GetCashSessionReportPageAsync(DateTime fromUtc, DateTime toUtc, string? status, int page, int pageSize, CancellationToken cancellationToken = default)
     {
-        var path = $"api/v1/reports/cash-sessions?fromUtc={Uri.EscapeDataString(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc).ToString("O"))}&toUtc={Uri.EscapeDataString(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc).ToString("O"))}&page=1&pageSize=250&status={Uri.EscapeDataString(string.IsNullOrWhiteSpace(status) ? "Todas" : status)}";
+        var path = $"api/v1/reports/cash-sessions?fromUtc={Uri.EscapeDataString(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc).ToString("O"))}&toUtc={Uri.EscapeDataString(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc).ToString("O"))}&page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}&status={Uri.EscapeDataString(string.IsNullOrWhiteSpace(status) ? "Todas" : status)}";
         using var request = CreateRequest(HttpMethod.Get, path); using var response = await SendAuthorizedAsync(request, cancellationToken); await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CashSessionReportInfo>(JsonOptions, cancellationToken) ?? throw new InvalidDataException("El servicio devolvió un reporte vacío.");
     }
@@ -636,6 +645,41 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
             catch { response.Dispose(); throw; }
         }
         finally { form?.Dispose(); }
+    }
+
+    public async Task<IReadOnlyList<SavedReportViewInfo>> GetReportViewsAsync(string reportId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, $"api/v1/reports/views?reportId={Uri.EscapeDataString(reportId)}");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<List<SavedReportViewInfo>>(JsonOptions, cancellationToken) ?? [];
+    }
+
+    public async Task<SavedReportViewInfo> SaveReportViewAsync(string reportId, SavedReportViewDefinition view, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/reports/views");
+        request.Content = JsonContent.Create(new { reportId, view }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<SavedReportViewInfo>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió una vista guardada vacía.");
+    }
+
+    public async Task DeleteReportViewAsync(Guid viewId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"api/v1/reports/views/{viewId:D}");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<InventoryMovementReportRow>> GetInventoryMovementReportAsync(DateTime fromUtc, DateTime toUtc,
+        int page = 1, int pageSize = 250, CancellationToken cancellationToken = default)
+    {
+        var path = $"api/v1/reports/inventory/movements?fromUtc={Uri.EscapeDataString(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc).ToString("O"))}&toUtc={Uri.EscapeDataString(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc).ToString("O"))}&page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}";
+        using var request = CreateRequest(HttpMethod.Get, path);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<List<InventoryMovementReportRow>>(JsonOptions, cancellationToken) ?? [];
     }
 
     public async Task<IReadOnlyList<InventoryReportRow>> GetInventoryReportAsync(CancellationToken cancellationToken = default)

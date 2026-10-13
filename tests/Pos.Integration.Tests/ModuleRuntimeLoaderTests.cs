@@ -33,7 +33,7 @@ public sealed class ModuleRuntimeLoaderTests
         var loaded = ModuleRuntimeLoader.Load(package, TrustRing("warehouse-test-publisher", signer));
 
         Assert.Equal("warehouses", loaded.Instance.ModuleId);
-        Assert.Equal(10, loaded.Endpoints.Count);
+        Assert.Equal(11, loaded.Endpoints.Count);
         Assert.Contains(loaded.Endpoints, endpoint => endpoint.RequiredPermission == "Warehouse.View");
         Assert.Contains(loaded.Endpoints, endpoint => endpoint.RequiredPermission == "Warehouse.Manage");
         Assert.Contains(loaded.Endpoints, endpoint => endpoint.RequiredPermission == "Warehouse.Transfer");

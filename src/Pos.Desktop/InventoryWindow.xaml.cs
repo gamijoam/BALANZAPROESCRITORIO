@@ -49,13 +49,16 @@ public partial class InventoryWindow : Window
             var currency = CurrencyFilter.SelectedIndex switch { 1 => "VES", 2 => "USD", _ => "" };
             var stock = StockFilter.SelectedIndex switch { 1 => "available", 2 => "out-of-stock", _ => "" };
             bool? hasImage = ImageFilter.SelectedIndex switch { 1 => true, 2 => false, _ => null };
-            var items = await _viewModel.GetInventoryAsync(FilterQueryBox.Text, status, currency, stock, hasImage);
+            // Extensions can replace catalog quantities with a location-specific balance. Fetch
+            // the full stock set first, then evaluate availability against the displayed quantity.
+            var items = await _viewModel.GetInventoryAsync(FilterQueryBox.Text, status, currency, "", hasImage);
             foreach (var module in _modules)
             foreach (var extension in module.Registry.InventoryExtensions)
             {
                 if (!module.Context.GrantedPermissions.Contains(extension.RequiredPermission)) continue;
                 items = await extension.ApplyFilterAsync(module.Context, items);
             }
+            items = InventoryStockFilter.Apply(items, stock);
             var id = selectedProductId ?? (InventoryGrid.SelectedItem as InventoryItemInfo)?.Id;
             InventoryGrid.ItemsSource = items;
             var activeCount = items.Count(x => x.Active);
@@ -263,15 +266,15 @@ public partial class InventoryWindow : Window
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
     }
 
-    private async void History_Click(object sender, RoutedEventArgs e)
+    private void History_Click(object sender, RoutedEventArgs e)
     {
         if (InventoryGrid.SelectedItem is not InventoryItemInfo item) { StatusLabel.Text = "Selecciona un producto."; return; }
-        try
-        {
-            var movements = await _viewModel.GetStockMovementsAsync(item.Id);
-            var text = movements.Count == 0 ? "Sin movimientos." : string.Join(Environment.NewLine, movements.Select(x => $"{x.OccurredAtUtc:dd/MM/yyyy HH:mm}  {x.QuantityDelta:+0.###;-0.###}  {x.Reason}"));
-            MessageBox.Show(this, text, $"Historial · {item.Sku}", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
+        var historyExtension = _modules
+            .SelectMany(module => module.Registry.InventoryHistoryExtensions
+                .Where(extension => module.Context.GrantedPermissions.Contains(extension.RequiredPermission))
+                .Select(extension => (module.Context, Extension: extension)))
+            .FirstOrDefault();
+        new InventoryMovementsWindow(_viewModel, item, historyExtension.Extension is null ? null : historyExtension.Context,
+            historyExtension.Extension) { Owner = this }.ShowDialog();
     }
 }

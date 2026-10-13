@@ -22,3 +22,17 @@ public static class WarehouseInventoryFilter
         };
     }
 }
+
+/// <summary>Applies availability filters to the quantity currently displayed in inventory.</summary>
+public static class InventoryStockFilter
+{
+    public static IReadOnlyList<InventoryItemInfo> Apply(
+        IReadOnlyList<InventoryItemInfo> inventory,
+        string stockFilter)
+        => stockFilter switch
+        {
+            "available" => inventory.Where(item => item.Quantity > 0m).ToArray(),
+            "out-of-stock" => inventory.Where(item => item.Quantity <= 0m).ToArray(),
+            _ => inventory
+        };
+}

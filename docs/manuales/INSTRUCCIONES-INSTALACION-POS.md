@@ -21,6 +21,8 @@ PostgreSQL no viene dentro del paquete. Una PC configurada como **independiente*
 
 Si no aparece una IP, conecta primero la computadora a la red y abre nuevamente el POS. La caja servidor debe permanecer encendida, con PostgreSQL activo, para que las demás puedan facturar.
 
+Si el servidor detecta que la IP guardada ya no pertenece a esta computadora, actualizará automáticamente su dirección y el certificado HTTPS. Anota la dirección nueva y vuelve a configurar la confianza del servidor en cada terminal cliente.
+
 ## Conectar otra computadora
 
 1. Extrae el mismo ZIP en la computadora cliente y abre `Iniciar POS.cmd`.
@@ -54,6 +56,8 @@ No hace falta instalar PostgreSQL, escribir la contraseña de `postgres`, copiar
 Si falla el respaldo o la autenticación, corrige el problema antes de continuar: el actualizador no debe detener el servidor cuando el respaldo no pudo completarse. La actualización conserva el perfil cifrado y no cambia contraseñas PostgreSQL.
 
 Al abrir `Iniciar POS.cmd`, el POS comprueba que el servicio local que responde en el puerto configurado corresponda al servidor incluido junto a esa aplicación. Si detecta una instancia POS de una carpeta anterior o un ejecutable reemplazado mientras seguía abierto, detiene únicamente el `Pos.Server.exe` verificado y arranca el actual. Si no puede identificarlo con seguridad, conserva el proceso y muestra el motivo.
+
+Ejecuta `Detener proceso por puerto.cmd` y elige **1** para liberar un puerto TCP o **2** para cerrar `Pos.Desktop.exe`, incluso si quedó ejecutándose sin ventana visible. La herramienta muestra los PID y las rutas, solicita confirmación y comprueba que la acción se completó. Si necesita permisos elevados, Windows los solicitará. Consulta `DETENER-PROCESOS-POS.md` para más detalles.
 
 ## Módulos oficiales
 

@@ -976,6 +976,20 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("terminal_client_versions", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.OperatorReportViewRecord", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<string>("ColumnsJson").IsRequired().HasColumnType("jsonb");
+                    b.Property<string>("FiltersJson").IsRequired().HasColumnType("jsonb");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(80).HasColumnType("character varying(80)");
+                    b.Property<Guid>("OperatorId").HasColumnType("uuid");
+                    b.Property<string>("ReportId").IsRequired().HasMaxLength(96).HasColumnType("character varying(96)");
+                    b.Property<DateTime>("UpdatedAtUtc").HasColumnType("timestamp with time zone");
+                    b.HasKey("Id");
+                    b.HasIndex("OperatorId", "ReportId", "Name").IsUnique();
+                    b.ToTable("operator_report_views", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.AccessSessionRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
@@ -983,6 +997,13 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OperatorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.OperatorReportViewRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
+                        .WithMany().HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Cascade).IsRequired();
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.CashMovementRecord", b =>

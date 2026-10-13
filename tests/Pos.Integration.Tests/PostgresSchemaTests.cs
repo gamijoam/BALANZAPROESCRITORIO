@@ -138,6 +138,14 @@ public sealed class PostgresSchemaTests
             Assert.Equal(1, await verify.Sales.CountAsync(x => x.Id == firstSaleId));
             Assert.Equal(1, await verify.IdempotencyRecords.CountAsync(x => x.TerminalId == terminalId));
             Assert.Equal(1, await verify.AuditEvents.CountAsync(x => x.TerminalId == terminalId && x.Action == "sale.confirmed"));
+            var saleMovement = await verify.StockMovements.SingleAsync(x => x.ProductId == productId);
+            Assert.Equal(-1m, saleMovement.QuantityDelta);
+            Assert.Equal(operatorId, saleMovement.ActorId);
+            Assert.Equal(terminalId, saleMovement.TerminalId);
+            Assert.Equal($"Venta {firstSaleId:N}", saleMovement.Reason);
+            Assert.True(saleMovement.OccurredAtUtc > DateTime.UtcNow.AddMinutes(-5));
+            Assert.Equal(1, await verify.StockMovements.CountAsync(x => x.ProductId == productId));
+            await verify.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await verify.SaleLines.Where(x => x.SaleId == firstSaleId).ExecuteDeleteAsync();
             await verify.Payments.Where(x => x.SaleId == firstSaleId).ExecuteDeleteAsync();
             await verify.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();

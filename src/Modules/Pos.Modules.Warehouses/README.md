@@ -2,7 +2,20 @@
 
 Módulo oficial opcional para organizar las existencias existentes por ubicación y registrar traslados.
 
-## Qué incluye 1.3.1
+## Cambios de la versión 1.3.3
+
+- El historial de cada producto incorpora una pestaña **Traslados** cuando el módulo está activo y el operador tiene `Warehouse.View`.
+- Registra una salida negativa al despachar y una entrada positiva con las unidades realmente recibidas; cada fila muestra ruta, referencia, fecha y operador. Los borradores no aparecen como movimientos.
+- La consulta pagina los eventos del servicio; el POS de escritorio no accede a PostgreSQL.
+- No requiere migración. Actualiza el POS anfitrión a Desktop API 1.1.0 y el ZIP firmado `warehouses` 1.3.3, luego reinicia servicio y terminales.
+
+## Cambios de la versión 1.3.2
+
+- El filtro de Inventario muestra la existencia del almacén seleccionado, incluso cuando es cero.
+- Los filtros “Con existencia” y “Agotados” se aplican al saldo del almacén mostrado; “Almacén: todos” usa el saldo global.
+- No modifica saldos ni agrega migraciones; conserva `warehouses:0001`.
+
+## Funciones visuales de la versión 1.3.1
 
 - Vista de traslado en dos paneles: búsqueda y selección a la izquierda; borrador y acción de creación a la derecha. Los almacenes de origen y destino quedan arriba.
 - El resultado seleccionado, su existencia en origen, la cantidad y el botón Agregar permanecen visibles sin depender de desplazamiento vertical.
@@ -32,6 +45,6 @@ Módulo oficial opcional para organizar las existencias existentes por ubicació
 - El almacén principal no se puede desactivar. Un almacén no se puede desactivar si conserva unidades o traslados borrador/en tránsito.
 - Venta y Cobro no son reemplazables por el módulo. Para una extensión nueva hace falta que el anfitrión publique primero un contrato compatible.
 
-La versión 1.3.1 conserva la migración `warehouses:0001`; no requiere una migración nueva. Actualiza el ZIP firmado del módulo y reinicia el servicio y las terminales para cargar la nueva presentación.
+La versión 1.3.3 conserva la migración `warehouses:0001`; no requiere una migración nueva. Actualiza el POS anfitrión y el ZIP firmado del módulo. Reinicia el servicio y las terminales para cargar ambos cambios.
 
 Ver [guía para futuros desarrolladores](../../../docs/manuales/crear-modulos-pos.md) para compilar, firmar, instalar, actualizar y probar el módulo.

@@ -308,8 +308,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
         => _api.RemoveProductImageAsync(productId, cancellationToken);
     public Task<decimal> AdjustStockAsync(Guid productId, decimal quantityDelta, string reason, CancellationToken cancellationToken = default)
         => _api.AdjustStockAsync(productId, quantityDelta, reason, cancellationToken);
-    public Task<IReadOnlyList<StockMovementInfo>> GetStockMovementsAsync(Guid productId, CancellationToken cancellationToken = default)
-        => _api.GetStockMovementsAsync(productId, cancellationToken);
+    public Task<StockMovementPageInfo> GetStockMovementsAsync(Guid productId, int offset = 0, int limit = 100, CancellationToken cancellationToken = default)
+        => _api.GetStockMovementsAsync(productId, offset, limit, cancellationToken);
     public Task<IReadOnlyList<CustomerInfo>> GetCustomersAsync(string? query = null, CancellationToken cancellationToken = default) => _api.GetCustomersAsync(query, cancellationToken);
     public Task<CustomerInfo> CreateCustomerAsync(string name, string? documentNumber, string? phone, string currency, decimal creditLimit, CancellationToken cancellationToken = default)
         => _api.CreateCustomerAsync(name, documentNumber, phone, currency, creditLimit, cancellationToken);

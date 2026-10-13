@@ -12,6 +12,7 @@ Los roles son perfiles iniciales; la autorización efectiva se expresa por permi
 | Cambiar precio o costo | No | Según permiso explícito | Sí | Motivo y valores anterior/nuevo auditados |
 | Devolución/anulación | No por defecto | Sí | Sí | Referencia a venta, motivo y contramovimiento |
 | Ajuste manual de inventario | No | Según permiso explícito | Sí | Motivo, cantidad y actor; movimiento inmutable |
+| Consultar inventario e historial de movimientos | No | Sí | Sí | Permiso de lectura separado de los ajustes |
 | Crear/modificar tasa | No | Según política | Sí | Origen, vigencia, responsable y valores auditados |
 | Consultar tasa vigente para calcular precios | Sí | Sí | Sí | La venta conserva la tasa y el factor usados |
 | Autorizar fiado/abono/cambio de límite | Según límite | Sí | Sí | Cliente, saldo y decisión registrados |

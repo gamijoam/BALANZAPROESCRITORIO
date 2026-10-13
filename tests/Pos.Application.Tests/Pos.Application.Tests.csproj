@@ -19,9 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\..\src\Pos.Desktop\Pos.Desktop.csproj" />
     <ProjectReference Include="..\..\src\Pos.Desktop.Presentation\Pos.Desktop.Presentation.csproj" />
     <ProjectReference Include="..\..\src\Modules\Pos.Modules.Warehouses.Desktop\Pos.Modules.Warehouses.Desktop.csproj" />
+    <ProjectReference Include="..\..\src\Modules\Pos.Modules.Reporting.Desktop\Pos.Modules.Reporting.Desktop.csproj" />
   </ItemGroup>
 
 </Project>

@@ -893,7 +893,7 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
     if (token is null) return Results.Unauthorized();
     var access = await auth.FindValidSessionAsync(token, cancellationToken);
     if (access is null) return Results.Unauthorized();
-    if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.AdjustStock, cancellationToken)) return PermissionFailure(context);
+    if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.ViewInventory, cancellationToken)) return PermissionFailure(context);
     var term = (query ?? string.Empty).Trim();
     var stateFilter = string.IsNullOrWhiteSpace(status) ? "active" : status.Trim().ToLowerInvariant();
     var currencyFilter = (currency ?? string.Empty).Trim().ToUpperInvariant();
@@ -950,16 +950,28 @@ app.MapPost("/api/v1/inventory/{productId:guid}/adjustments", async (Guid produc
     var quantity = await db.Stocks.AsNoTracking().Where(x => x.ProductId == productId).Select(x => x.Quantity).SingleAsync(cancellationToken);
     return Results.Created($"/api/v1/inventory/{productId}/movements/{record.Id}", new { record.Id, record.ProductId, record.QuantityDelta, quantity, record.Reason, record.OccurredAtUtc });
 });
-app.MapGet("/api/v1/inventory/{productId:guid}/movements", async (Guid productId, HttpContext context, PosDbContext db, AuthenticationService auth, SupervisorAuthorizationStore approvals, CancellationToken cancellationToken) =>
+app.MapGet("/api/v1/inventory/{productId:guid}/movements", async (Guid productId, HttpContext context, PosDbContext db, AuthenticationService auth, SupervisorAuthorizationStore approvals, [FromQuery] int offset = 0, [FromQuery] int limit = 100, CancellationToken cancellationToken = default) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
     var access = await auth.FindValidSessionAsync(token, cancellationToken);
     if (access is null) return Results.Unauthorized();
-    if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.AdjustStock, cancellationToken)) return PermissionFailure(context);
-    var movements = await db.StockMovements.AsNoTracking().Where(x => x.ProductId == productId).OrderByDescending(x => x.OccurredAtUtc).Take(100)
-        .Select(x => new { x.Id, x.QuantityDelta, x.Reason, x.ActorId, x.OccurredAtUtc }).ToListAsync(cancellationToken);
-    return Results.Ok(movements);
+    if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.ViewInventory, cancellationToken)) return PermissionFailure(context);
+    if (offset < 0 || limit is < 1 or > 100)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["paging"] = ["El desplazamiento debe ser cero o mayor y el límite debe estar entre 1 y 100."] });
+    var movements = await (from movement in db.StockMovements.AsNoTracking()
+        join actorRow in db.OperatorUsers.AsNoTracking() on movement.ActorId equals actorRow.Id into actorRows
+        from actor in actorRows.DefaultIfEmpty()
+        where movement.ProductId == productId
+        orderby movement.OccurredAtUtc descending, movement.Id descending
+        select new
+        {
+            movement.Id, movement.QuantityDelta, movement.Reason, movement.ActorId,
+            ActorUsername = actor == null ? null : actor.Username,
+            movement.TerminalId, movement.OccurredAtUtc
+        }).Skip(offset).Take(limit + 1).ToListAsync(cancellationToken);
+    context.Response.Headers["X-Has-More"] = (movements.Count > limit).ToString().ToLowerInvariant();
+    return Results.Ok(movements.Take(limit));
 });
 app.MapHito4();
 await ActivateInstalledModulesAsync();
@@ -1170,6 +1182,8 @@ static string ResolveConfiguredModulePath(string? configuredPath, string setting
 
 static Permission? ResolveModulePermission(string permission) => permission switch
 {
+    "Reports.View" => Permission.ViewReports,
+    "Reports.Inventory" => Permission.ViewInventory,
     "Warehouse.View" => Permission.ViewWarehouses,
     "Warehouse.Manage" => Permission.ManageWarehouses,
     "Warehouse.Transfer" => Permission.TransferInventory,

@@ -14,6 +14,35 @@ public sealed class LocalPosUpdateWorkflowTests
     }
 
     [Fact]
+    public void Port_stopper_stops_a_windows_service_instead_of_killing_its_restartable_process()
+    {
+        var root = FindRepositoryRoot();
+        var stopper = File.ReadAllText(Path.Combine(root, "scripts", "Stop-ProcessByPort.ps1"));
+        var stopLauncher = File.ReadAllText(Path.Combine(root, "Detener proceso por puerto.cmd"));
+        var publisher = File.ReadAllText(Path.Combine(root, "scripts", "Publish-LocalPos.ps1"));
+
+        Assert.Contains("Win32_Service", stopper, StringComparison.Ordinal);
+        Assert.Contains("Stop-Service", stopper, StringComparison.Ordinal);
+        Assert.Contains("ProcessId", stopper, StringComparison.Ordinal);
+        Assert.Contains("El puerto sigue ocupado", stopper, StringComparison.Ordinal);
+        Assert.Contains("Pos.Desktop.exe", stopper, StringComparison.Ordinal);
+        Assert.Contains("aunque no tenga ventana visible", stopper, StringComparison.Ordinal);
+        Assert.Contains("Start-Process -FilePath '%~f0' -Verb RunAs", stopLauncher, StringComparison.Ordinal);
+        Assert.Contains("Start-Process -FilePath '%~f0' -Verb RunAs", publisher, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Installer_reports_the_process_id_and_path_blocking_the_update()
+    {
+        var root = FindRepositoryRoot();
+        var installer = File.ReadAllText(Path.Combine(root, "scripts", "Install-LocalPos.ps1"));
+
+        Assert.Contains("Win32_Process", installer, StringComparison.Ordinal);
+        Assert.Contains("Detener proceso por puerto.cmd", installer, StringComparison.Ordinal);
+        Assert.Contains("PID", installer, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Installer_validates_backup_before_stopping_local_server_and_migrates_before_launching_desktop()
     {
         var root = FindRepositoryRoot();
@@ -39,7 +68,7 @@ public sealed class LocalPosUpdateWorkflowTests
         Assert.Contains("INSTRUCCIONES.md", publisher, StringComparison.Ordinal);
         Assert.DoesNotContain("-Destination (Join-Path $packageDirectory 'MODOS DE INSTALACION.md')", publisher, StringComparison.Ordinal);
         Assert.Contains("-PackageDirectory \"%~dp0.\"", publisher, StringComparison.Ordinal);
-        Assert.Contains("Cierra todas las ventanas", installer, StringComparison.Ordinal);
+        Assert.Contains("aunque no haya una ventana visible", installer, StringComparison.Ordinal);
         Assert.Contains("Get-NetTCPConnection", installer, StringComparison.Ordinal);
         Assert.Contains("base-datos.dpapi", databaseSupport, StringComparison.Ordinal);
         Assert.Contains("Get-PosInstallationProfile", databaseSupport, StringComparison.Ordinal);

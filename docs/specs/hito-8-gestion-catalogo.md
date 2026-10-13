@@ -9,6 +9,7 @@ Permitir que personal autorizado encuentre y mantenga productos sin alterar vent
 ### Buscar y filtrar inventario
 
 - Dado un usuario con permiso de inventario, cuando consulta Inventario, entonces puede buscar por coincidencia de SKU o nombre y filtrar por estado, moneda, disponibilidad de existencia y presencia de foto.
+- El permiso de consulta de inventario es independiente de `AdjustStock`; autoriza consultas de existencias e historial de movimientos, y no autoriza ajustes.
 - Dado un producto inactivo, cuando se filtra por inactivos o todos, entonces se puede consultar y seleccionar para reactivarlo.
 - Dado un usuario sin permiso, cuando solicita inventario, entonces el servicio rechaza la petición.
 - Los filtros se combinan y las consultas inválidas o demasiado largas se rechazan con un error claro.

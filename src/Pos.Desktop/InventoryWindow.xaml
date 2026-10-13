@@ -1,79 +1,80 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.InventoryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inventario" Width="1120" Height="720" MinWidth="980" MinHeight="600" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
-    <Grid Margin="18">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Grid Margin="0,0,0,12">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <DockPanel>
-                <StackPanel><TextBlock Text="INVENTARIO" Foreground="#173F78" FontSize="24" FontWeight="Bold"/><TextBlock x:Name="InventorySummary" Foreground="#63758B" Margin="0,4,0,0"/></StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Nuevo producto" Width="135" Height="38" Margin="0,0,8,0" Click="NewProduct_Click"/>
-                    <Button Content="Actualizar" Width="105" Height="38" Click="Refresh_Click"/>
-                </StackPanel>
-            </DockPanel>
-            <WrapPanel Grid.Row="1" Margin="0,12,0,0" VerticalAlignment="Center">
-                <TextBox x:Name="FilterQueryBox" Width="205" Height="34" Padding="7" VerticalContentAlignment="Center" ToolTip="Buscar por SKU o nombre" KeyDown="FilterQuery_KeyDown"/>
-                <ComboBox x:Name="StatusFilter" Width="130" Height="34" Margin="7,0,0,0" SelectedIndex="0"><ComboBoxItem Content="Activos"/><ComboBoxItem Content="Inactivos"/><ComboBoxItem Content="Todos"/></ComboBox>
-                <ComboBox x:Name="CurrencyFilter" Width="100" Height="34" Margin="7,0,0,0" SelectedIndex="0"><ComboBoxItem Content="Moneda: todas"/><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox>
-                <ComboBox x:Name="StockFilter" Width="145" Height="34" Margin="7,0,0,0" SelectedIndex="0"><ComboBoxItem Content="Existencia: todas"/><ComboBoxItem Content="Con existencia"/><ComboBoxItem Content="Agotados"/></ComboBox>
-                <ComboBox x:Name="ImageFilter" Width="125" Height="34" Margin="7,0,0,0" SelectedIndex="0"><ComboBoxItem Content="Foto: todas"/><ComboBoxItem Content="Con foto"/><ComboBoxItem Content="Sin foto"/></ComboBox>
-                <Button Content="Filtrar" Width="82" Height="34" Margin="7,0,0,0" Click="ApplyFilters_Click" Background="#2858A2" Foreground="White"/>
-                <Button Content="Limpiar" Width="82" Height="34" Margin="7,0,0,0" Click="ClearFilters_Click"/>
-            </WrapPanel>
-            <WrapPanel x:Name="InventoryExtensionsPanel" Grid.Row="2" Margin="0,8,0,0" VerticalAlignment="Center"/>
+        Title="Inventario" Width="1260" Height="700" MinWidth="1060" MinHeight="620" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
+    <Grid Margin="14">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,9">
+            <StackPanel><TextBlock Text="INVENTARIO" Foreground="#173F78" FontSize="23" FontWeight="Bold"/><TextBlock x:Name="InventorySummary" Foreground="#63758B" Margin="0,3,0,0"/></StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="Nuevo producto" Width="135" Height="36" Margin="0,0,8,0" Click="NewProduct_Click" AutomationProperties.Name="Crear producto nuevo"/>
+                <Button Content="Actualizar" Width="100" Height="36" Click="Refresh_Click" AutomationProperties.Name="Actualizar inventario"/>
+            </StackPanel>
+        </DockPanel>
+        <Grid Grid.Row="1" Margin="0,0,0,7">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="0.95*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox x:Name="FilterQueryBox" Height="34" Padding="7" VerticalContentAlignment="Center" ToolTip="Buscar por SKU o nombre" KeyDown="FilterQuery_KeyDown" AutomationProperties.Name="Buscar por SKU o nombre"/>
+            <ComboBox x:Name="StatusFilter" Grid.Column="1" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por estado"><ComboBoxItem Content="Activos"/><ComboBoxItem Content="Inactivos"/><ComboBoxItem Content="Todos"/></ComboBox>
+            <ComboBox x:Name="CurrencyFilter" Grid.Column="2" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por moneda"><ComboBoxItem Content="Moneda: todas"/><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox>
+            <ComboBox x:Name="StockFilter" Grid.Column="3" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por existencia"><ComboBoxItem Content="Existencia: todas"/><ComboBoxItem Content="Con existencia"/><ComboBoxItem Content="Agotados"/></ComboBox>
+            <ComboBox x:Name="ImageFilter" Grid.Column="4" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por foto"><ComboBoxItem Content="Foto: todas"/><ComboBoxItem Content="Con foto"/><ComboBoxItem Content="Sin foto"/></ComboBox>
+            <Button Grid.Column="5" Content="Filtrar" Width="75" Height="34" Margin="7,0,0,0" Click="ApplyFilters_Click" Background="#2858A2" Foreground="White" AutomationProperties.Name="Aplicar filtros"/>
+            <Button Grid.Column="6" Content="Limpiar" Width="75" Height="34" Margin="7,0,0,0" Click="ClearFilters_Click" AutomationProperties.Name="Limpiar filtros"/>
         </Grid>
-
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="320"/></Grid.ColumnDefinitions>
+        <WrapPanel x:Name="InventoryExtensionsPanel" Grid.Row="2" Margin="0,0,0,7" VerticalAlignment="Center"/>
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="350"/></Grid.ColumnDefinitions>
             <DataGrid x:Name="InventoryGrid" SelectionChanged="InventoryGrid_SelectionChanged" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
-                      SelectionMode="Single" SelectionUnit="FullRow" RowHeaderWidth="0" Background="White" BorderBrush="#D7DFEA" FontSize="14">
+                      EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" ScrollViewer.CanContentScroll="True"
+                      SelectionMode="Single" SelectionUnit="FullRow" RowHeaderWidth="0" Background="White" BorderBrush="#D7DFEA" FontSize="14" AutomationProperties.Name="Productos del inventario">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="125"/>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="130"/>
                     <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*"/>
                     <DataGridTextColumn Header="Existencia" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="105"/>
                     <DataGridTextColumn Header="Precio" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="105"/>
-                    <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="75"/>
-                    <DataGridTextColumn Header="Foto" Binding="{Binding ImageStatusLabel}" Width="75"/>
-                    <DataGridTextColumn Header="Estado" Binding="{Binding ActiveStatusLabel}" Width="85"/>
+                    <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="72"/>
+                    <DataGridTextColumn Header="Foto" Binding="{Binding ImageStatusLabel}" Width="62"/>
+                    <DataGridTextColumn Header="Estado" Binding="{Binding ActiveStatusLabel}" Width="82"/>
                 </DataGrid.Columns>
             </DataGrid>
-
-            <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="14" Margin="12,0,0,0">
+            <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="12" Margin="10,0,0,0">
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="150"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <TextBlock Text="FOTO DEL PRODUCTO" Foreground="#173F78" FontSize="16" FontWeight="Bold"/>
-                    <StackPanel Grid.Row="1" Margin="0,5,0,10">
-                        <TextBlock x:Name="SelectedProductName" Text="Selecciona un producto" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="100"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock Text="PRODUCTO SELECCIONADO" Foreground="#173F78" FontSize="15" FontWeight="Bold"/>
+                    <StackPanel Grid.Row="1" Margin="0,4,0,7">
+                        <TextBlock x:Name="SelectedProductName" Text="Selecciona un producto" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="SelectedProductSku" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
                     </StackPanel>
-                    <Border Grid.Row="2" Background="#F2F5F9" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="5" MinHeight="150">
+                    <Border Grid.Row="2" Background="#F2F5F9" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="5">
                         <Grid>
-                            <Image x:Name="ProductImagePreview" Stretch="Uniform" MaxWidth="280" MaxHeight="250" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Margin="6"/>
-                            <TextBlock x:Name="ProductImagePlaceholder" Text="Selecciona un producto para consultar su foto." Foreground="#63758B" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="18"/>
+                            <Image x:Name="ProductImagePreview" Stretch="Uniform" MaxWidth="260" MaxHeight="100" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Margin="5"/>
+                            <TextBlock x:Name="ProductImagePlaceholder" Text="Selecciona un producto para consultar su foto." Foreground="#63758B" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12"/>
                         </Grid>
                     </Border>
-                    <TextBlock x:Name="ImageStatusLabel" Grid.Row="3" Text="" Foreground="#52677F" TextWrapping="Wrap" Margin="0,8,0,10" MinHeight="32"/>
-                    <Grid Grid.Row="4" Margin="0,7,0,0">
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock x:Name="ImageStatusLabel" Grid.Row="3" Text="" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,5"/>
+                    <Grid Grid.Row="4" Margin="0,2,0,4">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Button x:Name="UploadImageButton" Content="Subir/cambiar foto" Height="36" Margin="0,0,5,5" Background="#2858A2" Foreground="White" FontWeight="SemiBold" Click="ProductImage_Click" IsEnabled="False"/>
-                        <Button x:Name="RemoveImageButton" Grid.Column="1" Content="Quitar foto" Height="36" Margin="5,0,0,5" Click="RemoveImage_Click" IsEnabled="False"/>
-                        <Button x:Name="EditProductButton" Grid.Row="1" Content="Editar SKU/nombre" Height="36" Margin="0,0,5,5" Click="EditProduct_Click" IsEnabled="False"/>
-                        <Button x:Name="ChangePriceButton" Grid.Row="1" Grid.Column="1" Content="Cambiar precio" Height="36" Margin="5,0,0,5" Click="ChangePrice_Click" IsEnabled="False"/>
-                        <Button x:Name="ToggleProductActiveButton" Grid.Row="2" Grid.ColumnSpan="2" Content="Desactivar producto" Height="36" Click="ToggleProductActive_Click" IsEnabled="False"/>
+                        <Button x:Name="UploadImageButton" Content="Subir/cambiar foto" Height="32" Margin="0,0,4,0" Background="#2858A2" Foreground="White" FontWeight="SemiBold" Click="ProductImage_Click" IsEnabled="False"/>
+                        <Button x:Name="RemoveImageButton" Grid.Column="1" Content="Quitar foto" Height="32" Margin="4,0,0,0" Click="RemoveImage_Click" IsEnabled="False"/>
                     </Grid>
+                    <Grid Grid.Row="5" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Button x:Name="EditProductButton" Content="Editar SKU/nombre" Height="32" Margin="0,0,4,0" Click="EditProduct_Click" IsEnabled="False"/>
+                        <Button x:Name="ChangePriceButton" Grid.Column="1" Content="Cambiar precio" Height="32" Margin="4,0,0,0" Click="ChangePrice_Click" IsEnabled="False"/>
+                    </Grid>
+                    <Button x:Name="ToggleProductActiveButton" Grid.Row="6" Content="Desactivar producto" Height="32" Click="ToggleProductActive_Click" IsEnabled="False"/>
+                    <Button Grid.Row="7" Content="Historial de movimientos" Height="32" Margin="0,7,0,0" Click="History_Click" AutomationProperties.Name="Ver historial de movimientos"/>
                 </Grid>
             </Border>
         </Grid>
-
-        <Border Grid.Row="2" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="145"/><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel><TextBlock Text="Ajuste firmado" FontWeight="SemiBold"/><TextBox x:Name="DeltaBox" Text="1" Height="34" Padding="6"/></StackPanel>
-                <StackPanel Grid.Column="1" Margin="10,0"><TextBlock Text="Motivo" FontWeight="SemiBold"/><TextBox x:Name="ReasonBox" Height="34" Padding="6"/></StackPanel>
-                <TextBlock x:Name="StatusLabel" Grid.Column="2" Foreground="#52677F" TextWrapping="Wrap" VerticalAlignment="Center" Margin="10,0"/>
-                <Button Grid.Column="3" Content="Historial" Width="95" Height="40" Margin="6,0" Click="History_Click"/>
-                <Button x:Name="AdjustButton" Grid.Column="4" Content="Aplicar ajuste" Width="130" Height="40" Margin="6,0,0,0" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Adjust_Click"/>
+        <Border Grid.Row="4" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="145"/><ColumnDefinition Width="250"/><ColumnDefinition Width="*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center"><TextBlock Text="AJUSTE DE EXISTENCIA" Foreground="#173F78" FontWeight="Bold"/><TextBlock Text="+ repone · − descuenta" Foreground="#63758B" FontSize="11" Margin="0,2,0,0"/></StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Unidades (+/−)" FontWeight="SemiBold" FontSize="11"/><TextBox x:Name="DeltaBox" Text="1" Height="32" Padding="6" AutomationProperties.Name="Cantidad de unidades a sumar o descontar"/></StackPanel>
+                <StackPanel Grid.Column="2" Margin="8,0,0,0"><TextBlock Text="Motivo del ajuste" FontWeight="SemiBold" FontSize="11"/><TextBox x:Name="ReasonBox" Height="32" Padding="6" AutomationProperties.Name="Motivo del ajuste de existencia"/></StackPanel>
+                <TextBlock x:Name="StatusLabel" Grid.Column="3" Foreground="#52677F" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0"/>
+                <Button x:Name="AdjustButton" Grid.Column="4" Content="Aplicar ajuste" Height="36" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Adjust_Click" IsEnabled="False" AutomationProperties.Name="Aplicar ajuste de existencia"/>
             </Grid>
         </Border>
+        <TextBlock Grid.Row="5" Text="Selecciona un producto para ver sus datos y movimientos." Foreground="#63758B" Margin="0,6,0,0"/>
     </Grid>
 </Window>

@@ -65,12 +65,32 @@ public partial class App : Application
                         .Where(network => network.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
                         .SelectMany(network => network.GetIPProperties().UnicastAddresses)
                         .Select(address => address.Address);
-                    if (!System.Net.Dns.GetHostAddresses(listenAddress.Host).Any(resolved => localAddresses.Any(local => local.Equals(resolved))))
-                        throw new InvalidOperationException("La dirección del servidor no resuelve a una dirección asignada a esta computadora.");
+                    var resolvedAddresses = System.Net.Dns.GetHostAddresses(listenAddress.Host);
+                    if (LocalLanServerConfiguration.RequiresAddressRepair(resolvedAddresses, localAddresses))
+                    {
+                        var previousAddress = listenAddress.Host;
+                        var currentAddress = LocalLanServerConfiguration.FindServerAddress();
+                        var certificateFileName = $"servidor-lan-{Guid.NewGuid():N}.pfx";
+                        var certificate = LocalLanServerConfiguration.CreateServerCertificate(currentAddress, configurationDirectory, certificateFileName);
+                        var currentEndpoint = new UriBuilder(Uri.UriSchemeHttps, currentAddress.ToString(), LocalLanServerConfiguration.Port).Uri;
+                        profile = profile with
+                        {
+                            ApiBaseUrl = currentEndpoint.ToString(),
+                            ServerCertificatePath = certificate.CertificatePath,
+                            ServerCertificatePassword = certificate.CertificatePassword,
+                            ServerCertificateSha256 = certificate.CertificateSha256
+                        };
+                        profileStore.Save(profile);
+                        apiBaseUrl = profile.ApiBaseUrl;
+                        listenAddress = new Uri(profile.ApiBaseUrl);
+                        MessageBox.Show(
+                            $"La dirección guardada ({previousAddress}) ya no está asignada a esta computadora. El POS se reconfiguró para usar {currentAddress}:{LocalLanServerConfiguration.Port} y renovó el certificado HTTPS.\n\nActualiza la dirección y confirma el nuevo certificado en cada terminal cliente.",
+                            "Se actualizó la dirección del servidor", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
                     if (listenAddress.AbsolutePath != "/" || !string.IsNullOrEmpty(listenAddress.Query))
                         throw new InvalidOperationException("La dirección HTTPS del servidor debe ser raíz, sin ruta ni parámetros.");
                 }
-                catch (Exception exception) when (exception is System.Net.Sockets.SocketException or InvalidOperationException)
+                catch (Exception exception) when (exception is System.Net.Sockets.SocketException or InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
                 {
                     MessageBox.Show(exception.Message, "Dirección de servidor no válida", MessageBoxButton.OK, MessageBoxImage.Error);
                     Shutdown(1);

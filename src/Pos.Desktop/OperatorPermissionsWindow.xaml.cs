@@ -68,6 +68,7 @@ public partial class OperatorPermissionsWindow : Window
         "ChangePrice" => "Cambiar precios",
         "OverrideSalePrice" => "Autorizar precio especial en una venta",
         "AdjustStock" => "Ajustar inventario",
+        "ViewInventory" => "Consultar inventario y movimientos",
         "ReturnSale" => "Devolver ventas",
         "ManageUsers" => "Administrar operadores",
         "ManageExchangeRate" => "Cambiar tasa",

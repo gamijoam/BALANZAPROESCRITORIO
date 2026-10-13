@@ -32,6 +32,7 @@ public partial class AdminPinApprovalWindow : Window
         "ChangePrice" => "cambiar un precio",
         "OverrideSalePrice" => "autorizar un precio especial para esta venta",
         "AdjustStock" => "ajustar inventario",
+        "ViewInventory" => "consultar inventario y movimientos",
         "ReturnSale" => "registrar una devolución",
         "ManageExchangeRate" => "cambiar la tasa",
         "ManageCatalog" => "administrar productos",

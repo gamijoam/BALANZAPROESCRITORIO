@@ -21,7 +21,11 @@ El host es ASP.NET Core y consume la conexión PostgreSQL configurada fuera del 
 | `GET /api/v1/products?query={texto}` | Bearer | Busca productos activos por SKU o nombre (hasta 30 resultados). `quantity` es el saldo del almacén asignado a la terminal autenticada (principal si no tiene asignación); cuando el módulo Almacenes no está instalado, conserva la existencia global. |
 | `GET /api/v1/inventory?query={texto}&status={active\|inactive\|all}&currency={VES\|USD}&stock={available\|out-of-stock}&hasImage={true\|false}` | Bearer con permiso de inventario | Busca por SKU/nombre y combina filtros; estado predeterminado: activo |
 | `POST /api/v1/inventory/{productId}/adjustments` | Bearer con permiso | Ajusta stock con motivo y movimiento inmutable |
-| `GET /api/v1/inventory/{productId}/movements` | Bearer con permiso | Consulta historial de movimientos de inventario |
+| `GET /api/v1/inventory/{productId}/movements?offset={0+}&limit={1..100}` | Bearer con permiso de inventario | Consulta historial paginado en orden descendente por fecha e ID. `offset` predeterminado 0; `limit` predeterminado 100 y máximo 100. Conserva un arreglo JSON de movimientos y entrega `X-Has-More: true/false`; cada movimiento incluye `actorId`, `actorUsername` y `terminalId`. |
+| `GET /api/v1/reports/inventory/movements?fromUtc={utc}&toUtc={utc}&page={1+}&pageSize={1..250}` | Bearer con `ViewReports` | Consulta movimientos globales de inventario paginados para reportes; máximo 92 días por consulta. |
+| `GET /api/v1/reports/views?reportId={id}` | Bearer con `ViewReports` | Devuelve únicamente las vistas personales del operador autenticado para el reporte indicado. |
+| `POST /api/v1/reports/views` | Bearer con `ViewReports` | Crea o actualiza por nombre una vista personal; acepta solo columnas y filtros de presentación, con límites de tamaño. |
+| `DELETE /api/v1/reports/views/{viewId}` | Bearer con `ViewReports` | Elimina una vista del operador autenticado; los IDs de otros usuarios responden 404. |
 | `POST /api/v1/products` | Bearer con permiso | Crea producto con stock inicial trazable |
 | `PATCH /api/v1/products/{productId}` | Bearer con permiso de catálogo | Edita SKU y nombre; SKU duplicado devuelve 409; cambio auditado |
 | `POST /api/v1/products/{productId}/price-changes` | Bearer con permiso | Cambia precio con motivo e historial |

@@ -125,6 +125,16 @@ public sealed class SalesService(PosDbContext db)
                 throw new CheckoutRejectedException("insufficient_stock");
             var affected = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" - {line.Quantity}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {line.ProductId} AND \"Quantity\" >= {line.Quantity}", cancellationToken);
             if (affected != 1) throw new CheckoutRejectedException("insufficient_stock");
+            db.StockMovements.Add(new StockMovementRecord
+            {
+                Id = Guid.NewGuid(),
+                ProductId = line.ProductId,
+                QuantityDelta = -line.Quantity,
+                Reason = $"Venta {saleId:N}",
+                ActorId = operatorId,
+                TerminalId = terminalId,
+                OccurredAtUtc = sale.CreatedAtUtc
+            });
         }
         if (warehouseId.HasValue)
             await WarehouseStockBridge.RecordSaleAsync(db, saleId, warehouseId.Value, cancellationToken);

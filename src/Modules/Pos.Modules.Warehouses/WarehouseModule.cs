@@ -29,6 +29,7 @@ public sealed class WarehouseModule : IPosServerModule
         new("PUT", "terminals/{id:guid}/warehouse", AssignTerminalAsync, "Warehouse.Manage"),
         new("GET", "transfers", ListTransfersAsync, "Warehouse.View"),
         new("GET", "transfers/{id:guid}", GetTransferDetailsAsync, "Warehouse.View"),
+        new("GET", "inventory/{productId:guid}/movements", GetProductTransferMovementsAsync, "Warehouse.View"),
         new("POST", "transfers", CreateTransferAsync, "Warehouse.Transfer"),
         new("POST", "transfers/{id:guid}/dispatch", DispatchTransferAsync, "Warehouse.Transfer"),
         new("POST", "transfers/{id:guid}/receive", ReceiveTransferAsync, "Warehouse.Transfer")
@@ -158,6 +159,58 @@ public sealed class WarehouseModule : IPosServerModule
 
         return Results.Ok(new { id, status, sourceWarehouseId = sourceId, source, destinationWarehouseId = destinationId,
             destination, createdAtUtc, lines });
+    }
+
+    private static async Task<IResult> GetProductTransferMovementsAsync(HttpContext context)
+    {
+        var productId = Guid.Parse((string)context.Request.RouteValues["productId"]!);
+        if (!int.TryParse(context.Request.Query["offset"], out var offset)) offset = 0;
+        if (!int.TryParse(context.Request.Query["limit"], out var limit)) limit = 100;
+        if (offset < 0 || limit is < 1 or > 100) return Results.BadRequest(new { error = "invalid_pagination" });
+
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        await using var command = new NpgsqlCommand($"""
+            SELECT e.id,e.action,t.status,l.quantity,l.received_quantity,s.name,d.name,t.id,
+                   e.actor_id,e.terminal_id,e.occurred_at_utc,u."Username"
+            FROM {Table("warehouse_events")} e
+            JOIN {Table("warehouse_transfers")} t ON t.id=(e.payload::jsonb ->> 'transferId')::uuid
+            JOIN {Table("warehouse_transfer_lines")} l ON l.transfer_id=t.id AND l.product_id=@product
+            JOIN {Table("warehouses")} s ON s.id=t.source_warehouse_id
+            JOIN {Table("warehouses")} d ON d.id=t.destination_warehouse_id
+            LEFT JOIN operator_users u ON u."Id"=e.actor_id
+            WHERE e.action IN ('transfer.dispatched','transfer.received')
+              AND (e.action <> 'transfer.received' OR l.received_quantity > 0)
+            ORDER BY e.occurred_at_utc DESC,e.id DESC
+            LIMIT @limit OFFSET @offset
+            """, connection);
+        command.Parameters.AddWithValue("product", productId);
+        command.Parameters.AddWithValue("limit", limit + 1);
+        command.Parameters.AddWithValue("offset", offset);
+        await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
+        var rows = new List<object>();
+        while (await reader.ReadAsync(context.RequestAborted))
+        {
+            var status = reader.GetString(2);
+            var sent = reader.GetDecimal(3);
+            var received = reader.IsDBNull(4) ? (decimal?)null : reader.GetDecimal(4);
+            var delta = WarehouseTransferMovementProjector.GetQuantityDelta(status, reader.GetString(1), sent, received);
+            if (delta is null) continue;
+            var transferId = reader.GetGuid(7);
+            var action = reader.GetString(1);
+            rows.Add(new
+            {
+                id = reader.GetGuid(0), quantityDelta = delta.Value,
+                reason = action == "transfer.dispatched" ? "Salida por traslado" : "Entrada recibida por traslado",
+                actorId = reader.GetGuid(8), terminalId = reader.GetGuid(9), occurredAtUtc = reader.GetDateTime(10),
+                actorUsername = reader.IsDBNull(11) ? null : reader.GetString(11),
+                reference = $"TRF-{transferId.ToString("N")[..8].ToUpperInvariant()}",
+                sourceWarehouse = reader.GetString(5), destinationWarehouse = reader.GetString(6),
+                movementType = action == "transfer.dispatched" ? "Despacho" : "Recepción"
+            });
+        }
+        var hasMore = rows.Count > limit;
+        if (hasMore) rows.RemoveAt(rows.Count - 1);
+        return Results.Ok(new { items = rows, hasMore });
     }
 
     private static async Task<IResult> CreateTransferAsync(HttpContext context)

@@ -35,14 +35,26 @@ public static class LocalLanServerConfiguration
             ?? throw new InvalidOperationException("Conecta esta PC a la red local y vuelve a iniciar el POS para configurar las otras cajas.");
     }
 
-    public static (string CertificatePath, string CertificatePassword, string CertificateSha256) CreateServerCertificate(IPAddress address, string configurationDirectory)
+    public static bool RequiresAddressRepair(IEnumerable<IPAddress> resolvedServerAddresses, IEnumerable<IPAddress> assignedLocalAddresses)
+    {
+        ArgumentNullException.ThrowIfNull(resolvedServerAddresses);
+        ArgumentNullException.ThrowIfNull(assignedLocalAddresses);
+        var local = assignedLocalAddresses.ToHashSet();
+        return !resolvedServerAddresses.Any(local.Contains);
+    }
+
+    public static (string CertificatePath, string CertificatePassword, string CertificateSha256) CreateServerCertificate(
+        IPAddress address, string configurationDirectory, string? certificateFileName = null)
     {
         ArgumentNullException.ThrowIfNull(address);
         if (address.AddressFamily != AddressFamily.InterNetwork || !IsPrivateIpv4(address))
             throw new ArgumentException("El certificado de red debe usar una dirección IPv4 privada.", nameof(address));
 
         Directory.CreateDirectory(configurationDirectory);
-        var certificatePath = Path.Combine(configurationDirectory, "servidor-lan.pfx");
+        var fileName = certificateFileName ?? "servidor-lan.pfx";
+        if (Path.GetFileName(fileName) != fileName || !fileName.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("El nombre del certificado no es válido.", nameof(certificateFileName));
+        var certificatePath = Path.Combine(configurationDirectory, fileName);
         var certificatePassword = Convert.ToBase64String(RandomNumberGenerator.GetBytes(36));
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest($"CN={address}", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);

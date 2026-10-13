@@ -74,7 +74,7 @@ Remove-PublishedBuildArtifacts -PublishRoot $desktopOutput
 
 $scriptsOutput = Join-Path $packageDirectory 'scripts'
 New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
-foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1')) {
+foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
 }
 $launcherPath = Join-Path $packageDirectory 'Iniciar POS.cmd'
@@ -95,6 +95,29 @@ if errorlevel 1 (
 )
 '@
 [IO.File]::WriteAllText($launcherPath, $launcherContent, [Text.Encoding]::ASCII)
+$stopperPath = Join-Path $packageDirectory 'Detener proceso por puerto.cmd'
+$stopperContent = @'
+@echo off
+setlocal EnableDelayedExpansion
+net session >nul 2>&1
+if errorlevel 1 (
+  echo Solicitando permisos de administrador para detener servicios o procesos protegidos...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  exit /b !ERRORLEVEL!
+)
+set "STOPPER=%~dp0scripts\Stop-ProcessByPort.ps1"
+if not exist "%STOPPER%" (
+  echo No se encontro scripts\Stop-ProcessByPort.ps1 junto a este archivo.
+  pause
+  exit /b 1
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%STOPPER%"
+set "RESULT=%ERRORLEVEL%"
+echo.
+pause
+exit /b %RESULT%
+'@
+[IO.File]::WriteAllText($stopperPath, $stopperContent, [Text.Encoding]::ASCII)
 $updateLauncherPath = Join-Path $packageDirectory 'Actualizar POS.cmd'
 $updateLauncherContent = @'
 @echo off

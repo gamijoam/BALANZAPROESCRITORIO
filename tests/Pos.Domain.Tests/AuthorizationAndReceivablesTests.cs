@@ -34,7 +34,9 @@ public class AuthorizationAndReceivablesTests
         Assert.True(cashier.Can(Permission.ViewExchangeRate));
         Assert.False(cashier.Can(Permission.ManageExchangeRate));
         Assert.False(cashier.Can(Permission.AdjustStock));
+        Assert.False(cashier.Can(Permission.ViewInventory));
         Assert.False(cashier.Can(Permission.ChangePrice));
+        Assert.True(supervisor.Can(Permission.ViewInventory));
         Assert.True(supervisor.Can(Permission.AdjustStock));
         Assert.False(supervisor.Can(Permission.ManageUsers));
         Assert.True(administrator.Can(Permission.ManageUsers));

@@ -365,7 +365,7 @@ public sealed class PosViewModelTests
         public Task<IReadOnlyList<InventoryItemInfo>> GetInventoryAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<InventoryItemInfo>>([]);
         public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default) => Task.FromResult(new InventoryItemInfo(Guid.NewGuid(), sku, name, unitPrice, currency, initialStock));
         public Task<decimal> AdjustStockAsync(Guid productId, decimal quantityDelta, string reason, CancellationToken cancellationToken = default) => Task.FromResult(quantityDelta);
-        public Task<IReadOnlyList<StockMovementInfo>> GetStockMovementsAsync(Guid productId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StockMovementInfo>>([]);
+        public Task<StockMovementPageInfo> GetStockMovementsAsync(Guid productId, int offset = 0, int limit = 100, CancellationToken cancellationToken = default) => Task.FromResult(new StockMovementPageInfo([], false));
         public Task<IReadOnlyList<ProductInfo>> SearchProductsAsync(string query, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId = null, CancellationToken cancellationToken = default)
         {

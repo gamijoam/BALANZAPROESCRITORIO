@@ -21,7 +21,8 @@ public enum Permission
     ManageModules,
     ViewWarehouses,
     ManageWarehouses,
-    TransferInventory
+    TransferInventory,
+    ViewInventory
 }
 
 public enum PermissionOverrideMode { Inherit, Allow, RequireAdminPin, Deny }
@@ -59,7 +60,7 @@ public static class RolePermissionPolicy
             Permission.ConfirmSale, Permission.CreateCreditSale, Permission.ApplyDiscount, Permission.ChangePrice, Permission.AdjustStock,
             Permission.ReturnSale, Permission.ManageExchangeRate, Permission.CloseCashSession,
             Permission.ViewSensitiveReports, Permission.ManageCatalog, Permission.ManageCustomers,
-            Permission.ManageReceivables, Permission.ViewReports, Permission.ViewExchangeRate,
+            Permission.ManageReceivables, Permission.ViewReports, Permission.ViewExchangeRate, Permission.ViewInventory,
             Permission.ViewWarehouses, Permission.ManageWarehouses, Permission.TransferInventory),
         OperatorRole.Administrator => new PermissionSet(Enum.GetValues<Permission>()),
         _ => throw new ArgumentOutOfRangeException(nameof(role))

@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Pos.Desktop.Presentation/Pos.Desktop.Presentation.csproj" />
+    <ProjectReference Include="../../Pos.Shared.Contracts/Pos.Shared.Contracts.csproj" />
   </ItemGroup>
 </Project>

@@ -14,7 +14,8 @@ internal sealed record LoadedDesktopModule(string ModuleId, PosDesktopModuleCont
 internal static class PosDesktopModuleLoader
 {
     public static LoadedDesktopModule Load(byte[] packageBytes, DesktopModuleClientInfo descriptor,
-        IPosApiClient apiClient, Guid terminalId, Func<string, CancellationToken, Task<IReadOnlyList<ProductInfo>>> searchProductsAsync)
+        IPosApiClient apiClient, Guid terminalId, Func<string, CancellationToken, Task<IReadOnlyList<ProductInfo>>> searchProductsAsync,
+        Func<IReadOnlyList<PosDesktopReportSourceInstance>>? getReportSources = null)
     {
         ArgumentNullException.ThrowIfNull(packageBytes);
         ArgumentNullException.ThrowIfNull(descriptor);
@@ -31,7 +32,7 @@ internal static class PosDesktopModuleLoader
             throw new InvalidDataException("La identidad, versión o publicador del paquete no coincide con el módulo anunciado por el servidor.");
         if (manifest.DesktopEntryAssembly is null || manifest.DesktopEntryType is null || manifest.DesktopApi is null)
             throw new InvalidDataException("El paquete no declara un punto de entrada de escritorio.");
-        var hostApi = new Version(1, 0, 0);
+        var hostApi = new Version(1, 2, 0);
         if (!manifest.DesktopApi.Accepts(hostApi))
             throw new InvalidDataException($"El módulo requiere Desktop API {manifest.DesktopApi.Min}–{manifest.DesktopApi.MaxExclusive}; este POS ofrece {hostApi}.");
 
@@ -56,7 +57,11 @@ internal static class PosDesktopModuleLoader
                 throw new InvalidDataException("El ID del punto de entrada de escritorio no coincide con el manifiesto.");
 
             var context = new PosDesktopModuleContext(apiClient, terminalId,
-                descriptor.GrantedPermissions.ToHashSet(StringComparer.Ordinal), manifest.Id, searchProductsAsync);
+                descriptor.GrantedPermissions.ToHashSet(StringComparer.Ordinal), manifest.Id, searchProductsAsync)
+            {
+                ReportApiClient = apiClient,
+                GetReportSources = getReportSources
+            };
             var registry = new PosDesktopModuleRegistry(manifest.Id, manifest.Permissions);
             module.Configure(registry);
             return new LoadedDesktopModule(manifest.Id, context, registry, loadContext);

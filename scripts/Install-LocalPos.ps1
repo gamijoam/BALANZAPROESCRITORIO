@@ -82,9 +82,10 @@ function Get-LocalPosServerHealth {
 }
 
 function Assert-LocalPosDesktopClosed {
-    $desktopProcesses = @(Get-Process -Name 'Pos.Desktop' -ErrorAction SilentlyContinue)
+    $desktopProcesses = @(Get-CimInstance Win32_Process -Filter "Name = 'Pos.Desktop.exe'" -ErrorAction SilentlyContinue)
     if ($desktopProcesses.Count -gt 0) {
-        throw 'Cierra todas las ventanas del Punto de venta antes de actualizar. Así se evita interrumpir una venta o una operación abierta.'
+        $details = ($desktopProcesses | ForEach-Object { "PID $($_.ProcessId): $($_.ExecutablePath)" }) -join '; '
+        throw "Sigue activo Pos.Desktop.exe aunque no haya una ventana visible: $details. En Detener proceso por puerto.cmd elige la opción 2 para cerrarlo. El servidor no se ha detenido ni se inició el respaldo."
     }
 }
 

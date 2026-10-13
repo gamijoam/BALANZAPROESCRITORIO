@@ -114,6 +114,16 @@ public sealed class PosInstallationProfileTests
     }
 
     [Fact]
+    public void Local_server_profile_is_repaired_when_its_saved_ip_is_no_longer_assigned()
+    {
+        var savedAddress = IPAddress.Parse("192.168.1.20");
+        var currentAddresses = new[] { IPAddress.Parse("192.168.1.35"), IPAddress.Loopback };
+
+        Assert.True(LocalLanServerConfiguration.RequiresAddressRepair(new[] { savedAddress }, currentAddresses));
+        Assert.False(LocalLanServerConfiguration.RequiresAddressRepair(new[] { currentAddresses[0] }, currentAddresses));
+    }
+
+    [Fact]
     public void Local_server_setup_does_not_require_an_administrator_pairing_step()
     {
         var root = FindRepositoryRoot();

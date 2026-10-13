@@ -70,6 +70,25 @@ public sealed class PosApiClientAuthenticationTests
     }
 
     [Fact]
+    public async Task Stock_movement_history_requests_a_page_and_reads_has_more_and_terminal()
+    {
+        using var handler = new StockMovementsHandler();
+        using var client = new PosApiClient(new Uri("http://localhost:5155"), new HttpClient(handler));
+        await client.LoginAsync("demo", "4826", handler.TerminalId);
+
+        var page = await client.GetStockMovementsAsync(handler.ProductId, offset: 100, limit: 100);
+
+        Assert.Equal("offset=100&limit=100", handler.Query);
+        Assert.Equal("Bearer movement-token", handler.Authorization);
+        Assert.True(page.HasMore);
+        var movement = Assert.Single(page.Items);
+        Assert.Equal(handler.ActorId, movement.ActorId);
+        Assert.Equal(handler.TerminalId, movement.TerminalId);
+        Assert.Equal("demo", movement.ActorUsername);
+        Assert.Equal("demo", movement.OperatorLabel);
+    }
+
+    [Fact]
     public async Task Admin_pin_is_requested_and_approval_is_bound_to_one_retried_operation()
     {
         using var handler = new AdminApprovalHandler();
@@ -182,6 +201,47 @@ public sealed class PosApiClientAuthenticationTests
             using var retryBody = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
             Assert.Equal(5m, retryBody.RootElement.GetProperty("amount").GetDecimal());
             return new HttpResponseMessage(HttpStatusCode.NoContent);
+        }
+    }
+
+    private sealed class StockMovementsHandler : HttpMessageHandler
+    {
+        public Guid TerminalId { get; } = Guid.NewGuid();
+        public Guid ProductId { get; } = Guid.NewGuid();
+        public Guid ActorId { get; } = Guid.NewGuid();
+        public string? Query { get; private set; }
+        public string? Authorization { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/v1/auth/login")
+            {
+                using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+                Assert.Equal(TerminalId, body.RootElement.GetProperty("terminalId").GetGuid());
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        operatorId = ActorId,
+                        terminalId = TerminalId,
+                        expiresAtUtc = DateTime.UtcNow.AddHours(1),
+                        accessToken = "movement-token"
+                    })
+                };
+            }
+
+            Assert.Equal($"/api/v1/inventory/{ProductId}/movements", request.RequestUri.AbsolutePath);
+            Query = request.RequestUri.Query.TrimStart('?');
+            Authorization = request.Headers.Authorization?.ToString();
+            var result = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new[]
+                {
+                    new { id = Guid.NewGuid(), quantityDelta = -2m, reason = "Venta", actorId = ActorId, actorUsername = "demo", terminalId = TerminalId, occurredAtUtc = DateTime.UtcNow }
+                })
+            };
+            result.Headers.Add("X-Has-More", "true");
+            return result;
         }
     }
 }

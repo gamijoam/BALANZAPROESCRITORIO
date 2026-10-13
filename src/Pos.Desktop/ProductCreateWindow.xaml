@@ -1,18 +1,25 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.ProductCreateWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Crear producto" Width="480" Height="620" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
-    <Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel><TextBlock Text="NUEVO PRODUCTO" Foreground="#173F78" FontSize="23" FontWeight="Bold"/><TextBlock Text="La existencia inicial se registra en el historial." Foreground="#63758B" Margin="0,5,0,0"/></StackPanel>
-        <StackPanel Grid.Row="1" VerticalAlignment="Center">
-            <TextBlock Text="SKU" FontWeight="SemiBold"/><TextBox x:Name="SkuBox" Height="36" Padding="7" Margin="0,4,0,10"/>
-            <TextBlock Text="Nombre" FontWeight="SemiBold"/><TextBox x:Name="NameBox" Height="36" Padding="7" Margin="0,4,0,10"/>
-            <TextBlock Text="Precio" FontWeight="SemiBold"/><TextBox x:Name="PriceBox" Height="36" Padding="7" Margin="0,4,0,10"/>
-            <TextBlock Text="Moneda" FontWeight="SemiBold"/><ComboBox x:Name="CurrencyBox" Height="34" SelectedIndex="0" Margin="0,4,0,10"><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox>
-            <TextBlock Text="Existencia inicial" FontWeight="SemiBold"/><TextBox x:Name="StockBox" Text="0" Height="36" Padding="7" Margin="0,4,0,0"/>
-            <DockPanel Margin="0,12,0,0"><Button Content="Seleccionar foto" Padding="12,7" Click="SelectImage_Click"/><TextBlock x:Name="ImageNameLabel" Text="Sin foto" Foreground="#63758B" VerticalAlignment="Center" Margin="10,0,0,0"/></DockPanel>
-            <Image x:Name="ProductImagePreview" Height="90" Margin="0,6,0,0" Stretch="Uniform" Visibility="Collapsed"/>
-            <TextBlock x:Name="ErrorLabel" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,8,0,0"/>
+        Title="Crear producto" Width="650" Height="500" MinWidth="610" MinHeight="460" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="NUEVO PRODUCTO" Foreground="#173F78" FontSize="22" FontWeight="Bold"/>
+            <TextBlock Text="Registra el código, precio y unidades con las que inicia el producto." Foreground="#63758B" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Cancelar" Width="95" Height="40" Margin="0,0,10,0" Click="Cancel_Click"/><Button Content="Crear producto" Width="135" Height="40" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Create_Click"/></StackPanel>
+        <Grid Grid.Row="1" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel Margin="0,0,10,10"><TextBlock Text="SKU / código" FontWeight="SemiBold"/><TextBox x:Name="SkuBox" Height="36" Padding="7" Margin="0,4,0,0" AutomationProperties.Name="Código SKU del producto"/></StackPanel>
+            <StackPanel Grid.Column="1" Margin="10,0,0,10"><TextBlock Text="Nombre del producto" FontWeight="SemiBold"/><TextBox x:Name="NameBox" Height="36" Padding="7" Margin="0,4,0,0" AutomationProperties.Name="Nombre del producto"/></StackPanel>
+            <StackPanel Grid.Row="1" Margin="0,0,10,10"><TextBlock Text="Precio unitario" FontWeight="SemiBold"/><TextBox x:Name="PriceBox" Height="36" Padding="7" Margin="0,4,0,0" AutomationProperties.Name="Precio unitario"/></StackPanel>
+            <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,10"><TextBlock Text="Moneda del precio" FontWeight="SemiBold"/><ComboBox x:Name="CurrencyBox" Height="36" SelectedIndex="0" Margin="0,4,0,0" AutomationProperties.Name="Moneda del precio"><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox></StackPanel>
+            <StackPanel Grid.Row="2" Margin="0,0,10,0"><TextBlock Text="Existencia inicial (unidades)" FontWeight="SemiBold"/><TextBox x:Name="StockBox" Text="0" Height="36" Padding="7" Margin="0,4,0,0" AutomationProperties.Name="Unidades iniciales de existencia"/><TextBlock Text="Ingresa 0 si todavía no tienes unidades." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
+            <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Bottom">
+                <DockPanel><Button Content="Seleccionar foto" Padding="10,6" Click="SelectImage_Click"/><TextBlock x:Name="ImageNameLabel" Text="Sin foto" Foreground="#63758B" VerticalAlignment="Center" Margin="9,0,0,0" TextTrimming="CharacterEllipsis"/></DockPanel>
+                <Image x:Name="ProductImagePreview" Height="76" Margin="0,6,0,0" Stretch="Uniform" Visibility="Collapsed"/>
+            </StackPanel>
+        </Grid>
+        <TextBlock x:Name="ErrorLabel" Grid.Row="3" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,10,0,0"/>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Content="Cancelar" Width="95" Height="38" Margin="0,0,10,0" Click="Cancel_Click"/><Button Content="Crear producto" Width="135" Height="38" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Create_Click"/></StackPanel>
     </Grid>
 </Window>
-
