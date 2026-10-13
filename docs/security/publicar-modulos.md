@@ -2,6 +2,14 @@
 
 `Pos.Modules.Publisher` crea ZIP firmados y exporta claves públicas. Está pensado para ejecutarse en la computadora de publicación. La instalación se hace desde **Administración → Módulos** en el POS, no desde esta CLI. La clave privada se conserva en el almacén de certificados de Windows; la herramienta solo la abre para firmar y nunca la exporta.
 
+## Firma rápida desde una carpeta preparada
+
+Desde la raíz del repositorio, ejecuta `scripts\Sign-PosModule.cmd`. El script permite elegir la carpeta de staging del módulo, selecciona un certificado vigente con clave privada de `Cert:\CurrentUser\My`, crea el ZIP, exporta únicamente la clave pública PEM y verifica la firma y los hashes. La carpeta debe contener `module.manifest.json` y `package-files.json`; la lista de archivos debe estar revisada antes de firmar.
+
+Por defecto usa el ID `pos-warehouses-dev-2026`, que debe estar registrado como confiable en cada servidor POS que vaya a instalar el paquete. El ZIP y el PEM público se crean junto a la carpeta seleccionada. También se puede usar `scripts\Sign-PosModule.ps1` directamente con `-StageDirectory`, `-OutputZip`, `-KeyId`, `-CertificateThumbprint` y `-PublisherPath`.
+
+La firma solo se puede producir en una cuenta que tenga acceso a la clave privada. La clave del publicador actual es no exportable y permanece en la PC firmante; copiar el PEM público a otra PC no le da capacidad para firmar. Para cambiar de computadora publicadora, crea un par nuevo con un `keyId` único, distribuye primero su clave pública a los servidores POS y luego firma con ese nuevo ID.
+
 ## Preparar un certificado de publicación en Windows
 
 Para desarrollo o publicación interna, PowerShell puede crear una clave RSA no exportable en el almacén del usuario actual:

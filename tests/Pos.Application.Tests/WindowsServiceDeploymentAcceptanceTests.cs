@@ -166,6 +166,26 @@ public sealed class WindowsServiceDeploymentAcceptanceTests
         Assert.Contains("catch (OperationCanceledException)", desktopHost, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Generic_module_signing_script_uses_local_private_key_and_verifies_the_package()
+    {
+        var root = FindRepositoryRoot();
+        var signingTool = File.ReadAllText(Path.Combine(root, "scripts", "Sign-PosModule.ps1"));
+        var launcher = File.ReadAllText(Path.Combine(root, "scripts", "Sign-PosModule.cmd"));
+        var guide = File.ReadAllText(Path.Combine(root, "docs", "security", "publicar-modulos.md"));
+
+        Assert.Contains("Cert:\\CurrentUser\\My", signingTool, StringComparison.Ordinal);
+        Assert.Contains("HasPrivateKey", signingTool, StringComparison.Ordinal);
+        Assert.Contains("package-files.json", signingTool, StringComparison.Ordinal);
+        Assert.Contains("--key-id", signingTool, StringComparison.Ordinal);
+        Assert.Contains("export-public-key", signingTool, StringComparison.Ordinal);
+        Assert.Contains("Test-SignedModulePackage.ps1", signingTool, StringComparison.Ordinal);
+        Assert.DoesNotContain("Export-PfxCertificate", signingTool, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportRSAPrivateKey", signingTool, StringComparison.Ordinal);
+        Assert.Contains("Sign-PosModule.ps1", launcher, StringComparison.Ordinal);
+        Assert.Contains("Sign-PosModule.cmd", guide, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
