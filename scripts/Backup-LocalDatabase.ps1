@@ -30,7 +30,7 @@ try {
 
     $null = & $pgRestore --list $partialPath 2>$null
     if ($LASTEXITCODE -ne 0) { throw 'El respaldo no pasó la comprobación de integridad de PostgreSQL.' }
-    $hash = (Get-FileHash -LiteralPath $partialPath -Algorithm SHA256).Hash
+    $hash = Get-PosFileSha256 -Path $partialPath
     [IO.File]::WriteAllText($partialHashPath, "$hash  $fileName`r`n", [Text.UTF8Encoding]::new($false))
     Move-Item -LiteralPath $partialPath -Destination $finalPath
     Move-Item -LiteralPath $partialHashPath -Destination "$finalPath.sha256"

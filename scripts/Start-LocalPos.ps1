@@ -7,8 +7,13 @@ if (Test-Path -LiteralPath $support -PathType Leaf) {
 }
 $installRoot = Split-Path -Parent $PSScriptRoot
 $desktop = Join-Path $installRoot 'desktop\Pos.Desktop.exe'
+$serviceManager = Join-Path $PSScriptRoot 'Manage-PosWindowsService.ps1'
 if (-not (Test-Path -LiteralPath $desktop -PathType Leaf)) {
     throw 'No se encontró Pos.Desktop.exe. Abre el paquete POS completo y vuelve a intentarlo.'
+}
+
+if (Test-Path -LiteralPath $serviceManager -PathType Leaf) {
+    & $serviceManager -Action EnsureRunning
 }
 
 # El escritorio comprueba o inicia el servidor local antes de mostrar el login.

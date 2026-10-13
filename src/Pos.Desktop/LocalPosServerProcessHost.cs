@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using Microsoft.Win32;
 using System.Net.Http;
 using System.Net;
 using System.Text.Json;
@@ -9,6 +10,7 @@ namespace Pos.Desktop;
 
 internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
 {
+    private const string WindowsServiceName = "BalanzaProPosServer";
     private readonly Uri _baseAddress;
     private readonly string? _connectionString;
     private readonly string? _listenUrls;
@@ -72,6 +74,12 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         if (_process is { HasExited: false }) return;
+        if (IsInstalledServiceForThisServer())
+        {
+            await ControlInstalledServiceAsync("start", cancellationToken);
+            await WaitForReadyAsync(cancellationToken);
+            return;
+        }
         if (!File.Exists(_serverPath))
             throw new PosServerStartupException($"No se encontró el servidor local del POS: {_serverPath}");
         if (string.IsNullOrWhiteSpace(_connectionString))
@@ -103,6 +111,14 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
         {
             if (await IsLiveAsync(cancellationToken))
                 throw new PosServerStartupException($"El servicio POS responde, pero no se encontró el servidor actualizado esperado: {_serverPath}");
+            return;
+        }
+
+        // Windows may run this executable as LocalSystem. The registered service path is
+        // the authority here; querying Process.MainModule would fail with Access Denied.
+        if (IsInstalledServiceForThisServer())
+        {
+            WriteLog($"El servicio Windows BalanzaPro ya administra el servidor '{_serverPath}'.");
             return;
         }
 
@@ -147,6 +163,16 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
     {
         if (!File.Exists(_serverPath))
             throw new PosServerStartupException($"No se encontró el servidor local que debe reiniciarse: {_serverPath}");
+
+        if (IsInstalledServiceForThisServer())
+        {
+            await ControlInstalledServiceAsync("stop", cancellationToken);
+            await WaitForNotLiveAsync(cancellationToken);
+            await ControlInstalledServiceAsync("start", cancellationToken);
+            await WaitForReadyAsync(cancellationToken);
+            await new PosLocalStartupCoordinator(this).EnsureReadyAsync(cancellationToken);
+            return;
+        }
 
         var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(_serverPath));
         try
@@ -201,6 +227,11 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        if (IsInstalledServiceForThisServer())
+        {
+            await ControlInstalledServiceAsync("stop", cancellationToken);
+            return;
+        }
         if (_process is null) return;
         try
         {
@@ -220,6 +251,75 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
         }
         catch (HttpRequestException) { return false; }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
+    }
+
+    private bool IsInstalledServiceForThisServer() => IsInstalledWindowsServiceForPath(_serverPath);
+
+    internal static bool IsInstalledWindowsServiceForPath(string serverPath)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            using var service = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{WindowsServiceName}");
+            var imagePath = service?.GetValue("ImagePath") as string;
+            if (string.IsNullOrWhiteSpace(imagePath)) return false;
+            var expanded = Environment.ExpandEnvironmentVariables(imagePath.Trim());
+            var executable = expanded.StartsWith('"')
+                ? expanded.Split('"', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+                : expanded.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            return executable is not null && Path.GetFullPath(executable).Equals(Path.GetFullPath(serverPath), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private async Task ControlInstalledServiceAsync(string command, CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "sc.exe",
+            Arguments = $"{command} {WindowsServiceName}",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        using var commandProcess = Process.Start(startInfo)
+            ?? throw new PosServerStartupException("Windows no pudo controlar el servicio BalanzaPro.");
+        var stdout = commandProcess.StandardOutput.ReadToEndAsync(cancellationToken);
+        var stderr = commandProcess.StandardError.ReadToEndAsync(cancellationToken);
+        await commandProcess.WaitForExitAsync(cancellationToken);
+        var output = (await stdout) + " " + (await stderr);
+        if (commandProcess.ExitCode != 0 && !output.Contains("1062", StringComparison.Ordinal) && !output.Contains("1056", StringComparison.Ordinal))
+            throw new PosServerStartupException($"No se pudo {command switch { "start" => "iniciar", "stop" => "detener", _ => command }} el servicio BalanzaPro. {output.Trim()}");
+    }
+
+    private async Task WaitForReadyAsync(CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        try
+        {
+            while (true)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                if (await ProbeAsync(timeout.Token) == PosServerHealth.Ready) return;
+                await Task.Delay(250, timeout.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new PosServerStartupException("El servicio Windows no respondió en 45 segundos. Comprueba que su dirección HTTPS coincida con la del perfil del POS y revisa el registro del servidor.");
+        }
+    }
+
+    private async Task WaitForNotLiveAsync(CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        while (await IsLiveAsync(timeout.Token)) await Task.Delay(200, timeout.Token);
     }
 
     private Process StartProcess(string arguments)
@@ -306,6 +406,16 @@ internal sealed class LocalPosServerProcessHost : IPosServerHost, IDisposable
     public void Dispose()
     {
         _httpClient.Dispose();
-        _process?.Dispose();
+        var process = _process;
+        _process = null;
+        if (process is null) return;
+        try
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (!process.HasExited) process.WaitForExit(15000);
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception exception) { WriteLog($"No se pudo detener el proceso local al cerrar el POS: {exception.Message}"); }
+        finally { process.Dispose(); }
     }
 }

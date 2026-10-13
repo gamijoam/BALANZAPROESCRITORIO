@@ -71,11 +71,15 @@ public sealed class MainWindowNavigationLayoutTests
             element => (string?)element.Attribute("Grid.Row") == "0" &&
                        element.Descendants(Presentation + "TextBlock").Any(text => (string?)text.Attribute("Text") == "PUNTO DE VENTA"));
         var columns = header.Descendants(Presentation + "Grid.ColumnDefinitions").First().Elements(Presentation + "ColumnDefinition").ToArray();
-        Assert.Equal(4, columns.Length);
+        Assert.Equal(5, columns.Length);
         Assert.Equal("1.7*", (string?)columns[0].Attribute("Width"));
+        Assert.Equal("Auto", (string?)columns[4].Attribute("Width"));
         Assert.Contains(header.Descendants(Presentation + "Border"), element => (string?)element.Attribute("Grid.Column") == "1" && (string?)element.Attribute("Background") == "#54B85D");
         Assert.Contains(header.Descendants(Presentation + "Border"), element => (string?)element.Attribute("Grid.Column") == "2" && (string?)element.Attribute("Background") == "#E9AD27");
         Assert.Contains(header.Descendants(Presentation + "Border"), element => (string?)element.Attribute("Grid.Column") == "3" && (string?)element.Attribute("Background") == "#E74D54");
+        Assert.Contains(header.Descendants(Presentation + "Button"), button =>
+            (string?)button.Attribute(Xaml + "Name") == "ExitButton" &&
+            (string?)button.Attribute("Grid.Column") == "4");
     }
 
     private static XDocument LoadView() => XDocument.Load(PathFor("src", "Pos.Desktop", "MainWindow.xaml"));

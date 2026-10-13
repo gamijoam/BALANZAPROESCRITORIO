@@ -14,19 +14,34 @@ if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
         $PackageDirectory = Join-Path $scriptParent 'artifacts\local-pos'
     }
 }
-$dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
-if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw 'Instala .NET 10 antes de instalar el POS.' }
-$installedRuntimes = & $dotnet --list-runtimes
-foreach ($runtimeName in @('Microsoft.NETCore.App', 'Microsoft.AspNetCore.App', 'Microsoft.WindowsDesktop.App')) {
-    if (-not ($installedRuntimes | Where-Object { $_ -match "^$([regex]::Escape($runtimeName)) 10\." })) {
-        throw "Falta el runtime .NET 10 '$runtimeName'. Instala el runtime correspondiente y vuelve a ejecutar." 
-    }
-}
-
 $package = (Resolve-Path -LiteralPath $PackageDirectory -ErrorAction Stop).Path
 $installCandidate = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Punto de Venta'
 if ([IO.Path]::GetFullPath($package).TrimEnd('\') -ieq [IO.Path]::GetFullPath($installCandidate).TrimEnd('\')) {
-    throw 'Ejecuta el instalador desde el paquete extraído, no desde la carpeta ya instalada.'
+    Add-Type -AssemblyName System.Windows.Forms
+    $folderPicker = New-Object System.Windows.Forms.FolderBrowserDialog
+    $folderPicker.Description = 'Selecciona la carpeta donde extrajiste el ZIP nuevo.'
+    $folderPicker.ShowNewFolderButton = $false
+    $folderPicker.SelectedPath = [Environment]::GetFolderPath('MyDocuments')
+    try {
+        if ($folderPicker.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+            Write-Output 'Actualización cancelada; no se modificaron los archivos instalados.'
+            return
+        }
+        $selectedPackage = (Resolve-Path -LiteralPath $folderPicker.SelectedPath -ErrorAction Stop).Path
+    } finally {
+        $folderPicker.Dispose()
+    }
+
+    $selectedInstaller = Join-Path $selectedPackage 'scripts\Install-LocalPos.ps1'
+    if (-not (Test-Path -LiteralPath $selectedInstaller -PathType Leaf)) {
+        throw 'La carpeta seleccionada no contiene un paquete POS extraído. Extrae el ZIP completo y selecciona esa carpeta.'
+    }
+    if ([IO.Path]::GetFullPath($selectedPackage).TrimEnd('\') -ieq [IO.Path]::GetFullPath($installCandidate).TrimEnd('\')) {
+        throw 'Selecciona la carpeta del paquete nuevo extraído, no la instalación permanente.'
+    }
+
+    & $selectedInstaller -PackageDirectory $selectedPackage -ScheduleDailyBackup:$ScheduleDailyBackup -BackupTime $BackupTime
+    return
 }
 $packageScripts = Join-Path $package 'scripts'
 $packageServer = Join-Path $package 'server\Pos.Server.exe'
@@ -89,6 +104,46 @@ function Assert-LocalPosDesktopClosed {
     }
 }
 
+function Invoke-PosDirectorySync {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination,
+        [switch]$Mirror
+    )
+
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    $copyArguments = @($Source, $Destination, '/COPY:DAT', '/DCOPY:DAT', '/R:2', '/W:1', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+    if ($Mirror) { $copyArguments += '/MIR' } else { $copyArguments += '/E' }
+    & robocopy.exe @copyArguments | Out-Null
+    $result = $LASTEXITCODE
+    if ($result -ge 8) { throw "No se pudieron sincronizar archivos del POS (robocopy: $result): '$Source' -> '$Destination'." }
+}
+
+function Sync-PosInstallationFiles {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Destination,
+        [Parameter(Mandatory)][string]$BackupDirectory
+    )
+
+    $hasPreviousInstallation = Test-Path -LiteralPath $Destination -PathType Container
+    if ($hasPreviousInstallation) {
+        Invoke-PosDirectorySync -Source $Destination -Destination $BackupDirectory -Mirror
+    }
+
+    try {
+        Invoke-PosDirectorySync -Source $Source -Destination $Destination -Mirror
+    } catch {
+        if ($hasPreviousInstallation -and (Test-Path -LiteralPath $BackupDirectory -PathType Container)) {
+            try { Invoke-PosDirectorySync -Source $BackupDirectory -Destination $Destination -Mirror }
+            catch { throw "Falló la actualización y tampoco se pudo restaurar la copia anterior. Conservé el respaldo en '$BackupDirectory'. Detalle de restauración: $($_.Exception.Message)" }
+        } elseif (-not $hasPreviousInstallation -and (Test-Path -LiteralPath $Destination)) {
+            Remove-Item -LiteralPath $Destination -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        throw
+    }
+}
+
 function Stop-LocalPosServer {
     param([int]$Port = 5155, [string]$HealthUrl = 'http://127.0.0.1:5155/health/live', [string]$CertificateSha256)
     $serverProcessId = Get-LocalPosServerProcessId -Port $Port -HealthUrl $HealthUrl -CertificateSha256 $CertificateSha256
@@ -129,12 +184,14 @@ if ($installationMode -eq 'Server') {
 }
 Assert-LocalPosDesktopClosed
 
-if ($installationMode -ne 'ClientTerminal') {
-    # Check PostgreSQL authentication and create the backup while the local service remains available.
-    # If pg_dump cannot connect, the POS is left running and the native PostgreSQL reason is reported.
-    $backupScript = Join-Path $packageScripts 'Backup-LocalDatabase.ps1'
-    & $backupScript -KeepLast 10
-    Stop-LocalPosServer -Port $apiPort -HealthUrl $healthUrl -CertificateSha256 $certificateSha256
+$installedServiceInfo = Get-CimInstance Win32_Service -Filter "Name='BalanzaProPosServer'" -ErrorAction SilentlyContinue
+if ($null -ne $installedServiceInfo) {
+    $registeredServerPath = [Environment]::ExpandEnvironmentVariables([string]$installedServiceInfo.PathName).Trim()
+    $registeredServerPath = if ($registeredServerPath.StartsWith('"')) { $registeredServerPath.Split('"', [StringSplitOptions]::RemoveEmptyEntries)[0] } else { $registeredServerPath.Split(' ', 2, [StringSplitOptions]::RemoveEmptyEntries)[0] }
+    $expectedServerPath = Join-Path $installCandidate 'server\Pos.Server.exe'
+    if (-not [string]::Equals([IO.Path]::GetFullPath($registeredServerPath), [IO.Path]::GetFullPath($expectedServerPath), [StringComparison]::OrdinalIgnoreCase)) {
+        throw "El servicio POS está registrado desde '$registeredServerPath', pero la instalación permanente es '$expectedServerPath'. No se tocó el servicio ni la base. Instala/actualiza primero desde la carpeta permanente y vuelve a intentarlo."
+    }
 }
 
 $target = $installCandidate
@@ -152,6 +209,36 @@ foreach ($temporaryPath in @($stage, $previous)) {
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 Copy-Item -Path (Join-Path $package '*') -Destination $stage -Recurse -Force
 $stageScripts = Join-Path $stage 'scripts'
+
+if ($installationMode -ne 'ClientTerminal') {
+    # Check PostgreSQL authentication and create the backup while the local service remains available.
+    # If pg_dump cannot connect, the POS is left running and the native PostgreSQL reason is reported.
+    $backupScript = Join-Path $packageScripts 'Backup-LocalDatabase.ps1'
+    & $backupScript -KeepLast 10
+    $managedService = Get-Service -Name 'BalanzaProPosServer' -ErrorAction SilentlyContinue
+    $serviceWasRunning = $null -ne $managedService -and $managedService.Status -eq 'Running'
+    if ($serviceWasRunning) {
+        try {
+            Stop-Service -Name 'BalanzaProPosServer' -Force
+            (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+            Write-Output 'Servicio BalanzaPro detenido después del respaldo; se actualizarán los archivos con la versión nueva.'
+        } catch {
+            try { Start-Service -Name 'BalanzaProPosServer'; (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) }
+            catch { Write-Warning "No se pudo reactivar el servicio tras fallar su detención. Inícialo desde Administrar servicio POS.cmd. Detalle: $($_.Exception.Message)" }
+            throw
+        }
+    }
+    try {
+        Stop-LocalPosServer -Port $apiPort -HealthUrl $healthUrl -CertificateSha256 $certificateSha256
+    }
+    catch {
+        if ($serviceWasRunning) {
+            try { Start-Service -Name 'BalanzaProPosServer'; (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) }
+            catch { Write-Warning "No se pudo reactivar el servidor tras fallar la validación del puerto. Inícialo desde Administrar servicio POS.cmd. Detalle: $($_.Exception.Message)" }
+        }
+        throw
+    }
+}
 
 if ($installationMode -ne 'ClientTerminal') {
     $oldConnection = $env:ConnectionStrings__Pos
@@ -174,6 +261,12 @@ if ($installationMode -ne 'ClientTerminal') {
         }
         & (Join-Path $stage 'server\Pos.Server.exe') --migrate
         if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar el esquema de PostgreSQL. Los archivos instalados no se cambiaron y el respaldo preventivo quedó guardado; revisa la base antes de volver a abrir el POS.' }
+    } catch {
+        if ($serviceWasRunning) {
+            try { Start-Service -Name 'BalanzaProPosServer'; (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) }
+            catch { Write-Warning "No se pudo reactivar el servidor anterior tras fallar la migración. Inicia 'BalanzaProPosServer' desde Administrar servicio POS.cmd. Detalle: $($_.Exception.Message)" }
+        }
+        throw
     } finally {
         if ($null -eq $oldConnection) { Remove-Item Env:ConnectionStrings__Pos -ErrorAction SilentlyContinue } else { $env:ConnectionStrings__Pos = $oldConnection }
         if ($null -eq $oldEnvironment) { Remove-Item Env:ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:ASPNETCORE_ENVIRONMENT = $oldEnvironment }
@@ -185,19 +278,28 @@ if ($installationMode -ne 'ClientTerminal') {
     }
 }
 
-if (Test-Path -LiteralPath $target) { Move-Item -LiteralPath $target -Destination $previous }
 try {
-    Move-Item -LiteralPath $stage -Destination $target
+    Sync-PosInstallationFiles -Source $stage -Destination $target -BackupDirectory $previous
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 } catch {
-    if (-not (Test-Path -LiteralPath $target) -and (Test-Path -LiteralPath $previous)) {
-        Move-Item -LiteralPath $previous -Destination $target
+    if ($serviceWasRunning) {
+        try { Start-Service -Name 'BalanzaProPosServer'; (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(30)) }
+        catch { Write-Warning "No se pudo reactivar el servidor anterior después de fallar el reemplazo. Inícialo desde Administrar servicio POS.cmd. Detalle: $($_.Exception.Message)" }
     }
     throw
 }
 $targetScripts = Join-Path $target 'scripts'
 
+$installedService = Get-Service -Name 'BalanzaProPosServer' -ErrorAction SilentlyContinue
+if ($installationMode -ne 'ClientTerminal' -and $null -ne $installedService) {
+    Start-Service -Name 'BalanzaProPosServer'
+    (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(45))
+    Write-Output 'El servicio POS está ejecutándose con los archivos actualizados.'
+}
+
 $shell = New-Object -ComObject WScript.Shell
 $desktopExecutable = Join-Path $target 'desktop\Pos.Desktop.exe'
+$desktopLauncher = Join-Path $target 'Iniciar POS.cmd'
 $shortcutPaths = @(
     (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Punto de venta.lnk'),
     (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Punto de venta.lnk')
@@ -206,8 +308,8 @@ foreach ($shortcutPath in $shortcutPaths) {
     $directory = Split-Path -Parent $shortcutPath
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = $desktopExecutable
-    $shortcut.WorkingDirectory = Split-Path -Parent $desktopExecutable
+    $shortcut.TargetPath = $desktopLauncher
+    $shortcut.WorkingDirectory = $target
     $shortcut.IconLocation = $desktopExecutable
     $shortcut.Description = 'Iniciar el punto de venta local'
     $shortcut.Save()
@@ -215,7 +317,7 @@ foreach ($shortcutPath in $shortcutPaths) {
 
 Write-Output "Punto de venta instalado para el usuario actual en '$target'. Usa el acceso directo 'Punto de venta' para abrirlo."
 Write-Output 'Para crear el primer usuario, ejecuta Initialize-LocalPosOperator.ps1 desde la carpeta scripts de la instalación.'
-Start-Process -FilePath $desktopExecutable -WorkingDirectory (Split-Path -Parent $desktopExecutable)
+Start-Process -FilePath $desktopLauncher -WorkingDirectory $target
 Write-Output 'Actualización terminada. Se abrió la versión nueva; el servidor aplicará y verificará el esquema antes de mostrar el inicio de sesión.'
 if ($ScheduleDailyBackup) {
     & (Join-Path $targetScripts 'Register-LocalBackupTask.ps1') -Time $BackupTime -KeepLast 14

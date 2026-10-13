@@ -14,7 +14,7 @@ $checksumFile = "$backup.sha256"
 if (-not (Test-Path -LiteralPath $checksumFile -PathType Leaf)) { throw 'El respaldo no tiene su archivo de verificación SHA-256.' }
 $expectedHash = [regex]::Match((Get-Content -LiteralPath $checksumFile -Raw), '^[A-Fa-f0-9]{64}').Value.ToUpperInvariant()
 if ([string]::IsNullOrWhiteSpace($expectedHash)) { throw 'El archivo de verificación SHA-256 no es válido.' }
-$actualHash = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash.ToUpperInvariant()
+$actualHash = (Get-PosFileSha256 -Path $backup).ToUpperInvariant()
 if ($actualHash -ne $expectedHash) { throw 'El respaldo está dañado o no coincide con su verificación SHA-256.' }
 
 $database = Get-PosDatabaseSettings

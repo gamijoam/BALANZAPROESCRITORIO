@@ -8,11 +8,15 @@ public static class PosLocalDpapi
 {
     [StructLayout(LayoutKind.Sequential)] private struct DataBlob { public int Length; public IntPtr Data; }
     private const int UiForbidden = 0x1;
+    private const int LocalMachine = 0x4;
 
     public static byte[] Protect(byte[] input) { return Transform(input, true); }
     public static byte[] Unprotect(byte[] input) { return Transform(input, false); }
+    public static byte[] ProtectMachine(byte[] input) { return Transform(input, true, LocalMachine); }
 
-    private static byte[] Transform(byte[] input, bool protect)
+    private static byte[] Transform(byte[] input, bool protect) { return Transform(input, protect, 0); }
+
+    private static byte[] Transform(byte[] input, bool protect, int scope)
     {
         if (input == null) throw new ArgumentNullException("input");
         var pointer = Marshal.AllocHGlobal(input.Length);
@@ -22,7 +26,7 @@ public static class PosLocalDpapi
             Marshal.Copy(input, 0, pointer, input.Length);
             var source = new DataBlob { Length = input.Length, Data = pointer };
             var ok = protect
-                ? CryptProtectData(ref source, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output)
+                ? CryptProtectData(ref source, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden | scope, out output)
                 : CryptUnprotectData(ref source, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, UiForbidden, out output);
             if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error());
             var result = new byte[output.Length];
@@ -179,6 +183,22 @@ function Invoke-PostgreSqlTool {
         $detail = ($output | ForEach-Object { $_.ToString().Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ' '
         if ([string]::IsNullOrWhiteSpace($detail)) { throw "$FailureMessage Código de salida: $exitCode." }
         throw "$FailureMessage Detalle de PostgreSQL: $detail"
+    }
+}
+
+function Get-PosFileSha256 {
+    param([Parameter(Mandatory)][string]$Path)
+    $resolvedPath = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $stream = [IO.File]::OpenRead($resolvedPath)
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    $hashBytes = $null
+    try {
+        $hashBytes = $sha256.ComputeHash($stream)
+        return [BitConverter]::ToString($hashBytes).Replace('-', '')
+    } finally {
+        $stream.Dispose()
+        $sha256.Dispose()
+        if ($null -ne $hashBytes) { [Array]::Clear($hashBytes, 0, $hashBytes.Length) }
     }
 }
 

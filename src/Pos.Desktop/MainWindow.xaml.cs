@@ -1,5 +1,6 @@
 using System.IO;
 using System.Globalization;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,23 +17,59 @@ public partial class MainWindow : Window
     private readonly PosViewModel _viewModel;
     private readonly IPosApiClient _apiClient;
     private readonly Func<CancellationToken, Task>? _restartLocalServiceAsync;
+    private readonly bool _stopsLocalServerOnExit;
+    private bool _exitConfirmed;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow(PosViewModel viewModel, IPosApiClient apiClient,
-        Func<CancellationToken, Task>? restartLocalServiceAsync = null)
+        Func<CancellationToken, Task>? restartLocalServiceAsync = null,
+        bool stopsLocalServerOnExit = false)
     {
         InitializeComponent();
         _viewModel = viewModel;
         _apiClient = apiClient;
         _restartLocalServiceAsync = restartLocalServiceAsync;
+        _stopsLocalServerOnExit = stopsLocalServerOnExit;
         DataContext = viewModel;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.ChargeRequested += ChargeRequested;
         _clock.Tick += (_, _) => ClockLabel.Text = DateTime.Now.ToString("dd/MM/yyyy  HH:mm:ss");
         _clock.Start();
         Closed += (_, _) => _clock.Stop();
+    }
+
+    private void ExitButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_exitConfirmed || !_viewModel.IsAuthenticated) return;
+        if (_viewModel.HasPendingCheckout)
+        {
+            MessageBox.Show(this,
+                "Hay una venta cuyo resultado todavía no se ha resuelto. Resuelve esa operación antes de salir.",
+                "Venta pendiente", MessageBoxButton.OK, MessageBoxImage.Information);
+            e.Cancel = true;
+            return;
+        }
+
+        var message = _viewModel.CartLines.Count > 0
+            ? "El carrito actual se perderá al cerrar el POS. ¿Deseas salir?"
+            : "¿Deseas cerrar BalanzaPro?";
+        if (_viewModel.CashSession is not null)
+            message += Environment.NewLine + Environment.NewLine + "El turno de caja quedará abierto.";
+        if (_stopsLocalServerOnExit)
+            message += Environment.NewLine + Environment.NewLine + "El servicio local se detendrá y las demás terminales perderán la conexión.";
+
+        var answer = MessageBox.Show(this, message, "Salir de BalanzaPro",
+            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+        {
+            e.Cancel = true;
+            return;
+        }
+        _exitConfirmed = true;
     }
 
     private async void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

@@ -1,30 +1,78 @@
-<Window Language="es-VE" x:Class="Pos.Desktop.LoginWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Iniciar sesión" Width="430" Height="470" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
-    <Grid Margin="26">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel>
-            <TextBlock Text="PUNTO DE VENTA" Foreground="#173F78" FontSize="25" FontWeight="Bold"/>
-            <TextBlock Text="Ingresa tu usuario y PIN para continuar." Foreground="#63758B" Margin="0,5,0,0"/>
-        </StackPanel>
-        <StackPanel Grid.Row="1" VerticalAlignment="Center">
-            <TextBlock Text="Usuario" FontWeight="SemiBold" Margin="0,0,0,5"/>
-            <TextBox x:Name="UsernameBox" Height="38" Padding="8" FontSize="15" TabIndex="0"
-                     AutomationProperties.Name="Usuario" AutomationProperties.AutomationId="LoginUsername"/>
-            <TextBlock Text="PIN" FontWeight="SemiBold" Margin="0,14,0,5"/>
-            <PasswordBox x:Name="PinBox" Height="38" Padding="8" FontSize="15" TabIndex="1"
-                         AutomationProperties.Name="PIN" AutomationProperties.AutomationId="LoginPin"/>
-            <TextBlock x:Name="ErrorLabel" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,8,0,0" MinHeight="48" FontSize="13" VerticalAlignment="Center"
-                       AutomationProperties.LiveSetting="Assertive" AutomationProperties.AutomationId="LoginError"/>
-            <Expander x:Name="ConnectionExpander" Header="Conexión al servicio" IsExpanded="False" Margin="0,4,0,0"
-                      AutomationProperties.AutomationId="LoginConnectionSettings">
-                <StackPanel Margin="0,6,0,0">
-                    <TextBlock Text="Dirección del servicio" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                    <TextBox x:Name="BaseAddressBox" Height="38" Padding="8" FontSize="15" TabIndex="2"
-                             AutomationProperties.Name="Dirección del servicio" AutomationProperties.AutomationId="LoginServiceAddress"/>
+<Window Language="es-VE" x:Class="Pos.Desktop.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="BalanzaPro · Iniciar sesión"
+        Icon="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro.ico"
+        WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" Background="#102B4D">
+    <Grid>
+        <Image Source="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro-login-bg.png" Stretch="UniformToFill" IsHitTestVisible="False"/>
+        <Border Background="#5A0A1B35" IsHitTestVisible="False"/>
+
+        <Button Content="Salir" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="20"
+                Padding="16,9" Background="#B31E2F" Foreground="White" BorderThickness="0"
+                FontSize="14" FontWeight="SemiBold" Click="Exit_Click" TabIndex="3"
+                Panel.ZIndex="2"
+                AutomationProperties.Name="Salir del inicio de sesión"
+                AutomationProperties.AutomationId="LoginExit"/>
+
+        <ScrollViewer Margin="20" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Border Width="480" MaxHeight="700" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="#FAFCFF" CornerRadius="18" Padding="28"
+                    BorderBrush="#D6E2F2" BorderThickness="1">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="32" ShadowDepth="8" Opacity="0.32" Color="#07172C"/>
+                </Border.Effect>
+                <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel HorizontalAlignment="Center" Margin="0,0,0,14">
+                    <Image Source="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro-logo.png" Width="64" Height="64" Stretch="Uniform"
+                           HorizontalAlignment="Center" AutomationProperties.Name="Símbolo de BalanzaPro"/>
+                    <TextBlock Text="BalanzaPro" Foreground="#173F78" FontSize="30" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,7,0,0"/>
+                    <TextBlock Text="PUNTO DE VENTA" Foreground="#63758B" FontSize="12" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
                 </StackPanel>
-            </Expander>
-        </StackPanel>
-        <Button x:Name="LoginButton" Grid.Row="2" Content="Iniciar sesión" IsDefault="True" Height="46" Background="#2858A2" Foreground="White" FontSize="16" FontWeight="Bold" BorderThickness="0" Click="Login_Click"
-                AutomationProperties.Name="Iniciar sesión" AutomationProperties.AutomationId="LoginSubmit"/>
+
+                <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                    <TextBlock Text="Inicia sesión para continuar" Foreground="#172B45" FontSize="18"
+                               FontWeight="SemiBold" Margin="0,0,0,16"/>
+                    <TextBlock Text="Usuario" Foreground="#344B67" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                    <TextBox x:Name="UsernameBox" Height="42" Padding="10" FontSize="16" TabIndex="0"
+                             AutomationProperties.Name="Usuario" AutomationProperties.AutomationId="LoginUsername"/>
+                    <TextBlock Text="PIN" Foreground="#344B67" FontWeight="SemiBold" Margin="0,11,0,5"/>
+                    <PasswordBox x:Name="PinBox" Height="42" Padding="10" FontSize="16" TabIndex="1"
+                                 AutomationProperties.Name="PIN" AutomationProperties.AutomationId="LoginPin"/>
+                    <TextBlock x:Name="ErrorLabel" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,8,0,0"
+                               MinHeight="30" FontSize="13" VerticalAlignment="Center"
+                               AutomationProperties.LiveSetting="Assertive" AutomationProperties.AutomationId="LoginError"/>
+                    <Expander x:Name="ConnectionExpander" Header="Conexión al servicio" IsExpanded="False"
+                              Margin="0,4,0,0" TabIndex="2"
+                              AutomationProperties.AutomationId="LoginConnectionSettings">
+                        <StackPanel Margin="0,8,0,0">
+                            <TextBlock Text="Dirección del servicio" Foreground="#344B67" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBox x:Name="BaseAddressBox" Height="40" Padding="9" FontSize="15" TabIndex="3"
+                                     AutomationProperties.Name="Dirección del servicio"
+                                     AutomationProperties.AutomationId="LoginServiceAddress"/>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+
+                <Button x:Name="LoginButton" Grid.Row="2" Content="Iniciar sesión" IsDefault="True" Height="48"
+                        Margin="0,12,0,0" Background="#2858A2" Foreground="White" FontSize="16"
+                        FontWeight="Bold" BorderThickness="0" Click="Login_Click"
+                        AutomationProperties.Name="Iniciar sesión" AutomationProperties.AutomationId="LoginSubmit"/>
+                <TextBlock Grid.Row="3" Text="Acceso protegido a tu negocio" Foreground="#71839A" FontSize="12"
+                           HorizontalAlignment="Center" Margin="0,9,0,0"/>
+                </Grid>
+            </Border>
+        </ScrollViewer>
     </Grid>
 </Window>

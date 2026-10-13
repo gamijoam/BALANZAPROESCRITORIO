@@ -45,9 +45,9 @@ foreach ($packagePart in @($serverOutput, $desktopOutput, (Join-Path $packageDir
         Remove-Item -LiteralPath $resolvedPart -Recurse -Force
     }
 }
-& $dotnet publish (Join-Path $repoRoot 'src\Pos.Server\Pos.Server.csproj') --configuration Release --output $serverOutput "-p:BaseOutputPath=$serverBuildRoot\"
+& $dotnet publish (Join-Path $repoRoot 'src\Pos.Server\Pos.Server.csproj') --configuration Release --runtime win-x64 --self-contained true --output $serverOutput "-p:BaseOutputPath=$serverBuildRoot\"
 if ($LASTEXITCODE -ne 0) { throw 'Falló la publicación del servidor POS.' }
-& $dotnet publish (Join-Path $repoRoot 'src\Pos.Desktop\Pos.Desktop.csproj') --configuration Release --output $desktopOutput "-p:BaseOutputPath=$desktopBuildRoot\"
+& $dotnet publish (Join-Path $repoRoot 'src\Pos.Desktop\Pos.Desktop.csproj') --configuration Release --runtime win-x64 --self-contained true --output $desktopOutput "-p:BaseOutputPath=$desktopBuildRoot\"
 if ($LASTEXITCODE -ne 0) { throw 'Falló la publicación del punto de venta.' }
 
 function Remove-PublishedBuildArtifacts {
@@ -74,8 +74,13 @@ Remove-PublishedBuildArtifacts -PublishRoot $desktopOutput
 
 $scriptsOutput = Join-Path $packageDirectory 'scripts'
 New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
-foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1')) {
+foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Manage-PosWindowsService.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
+}
+function Write-WindowsCommandFile {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Content)
+    $windowsContent = $Content -replace "`r?`n", "`r`n"
+    [IO.File]::WriteAllText($Path, $windowsContent, [Text.Encoding]::ASCII)
 }
 $launcherPath = Join-Path $packageDirectory 'Iniciar POS.cmd'
 $launcherContent = @'
@@ -94,7 +99,7 @@ if errorlevel 1 (
   exit /b 1
 )
 '@
-[IO.File]::WriteAllText($launcherPath, $launcherContent, [Text.Encoding]::ASCII)
+Write-WindowsCommandFile -Path $launcherPath -Content $launcherContent
 $stopperPath = Join-Path $packageDirectory 'Detener proceso por puerto.cmd'
 $stopperContent = @'
 @echo off
@@ -117,7 +122,7 @@ echo.
 pause
 exit /b %RESULT%
 '@
-[IO.File]::WriteAllText($stopperPath, $stopperContent, [Text.Encoding]::ASCII)
+Write-WindowsCommandFile -Path $stopperPath -Content $stopperContent
 $updateLauncherPath = Join-Path $packageDirectory 'Actualizar POS.cmd'
 $updateLauncherContent = @'
 @echo off
@@ -135,7 +140,25 @@ if errorlevel 1 (
   exit /b 1
 )
 '@
-[IO.File]::WriteAllText($updateLauncherPath, $updateLauncherContent, [Text.Encoding]::ASCII)
+Write-WindowsCommandFile -Path $updateLauncherPath -Content $updateLauncherContent
+$serviceLauncherPath = Join-Path $packageDirectory 'Administrar servicio POS.cmd'
+$serviceLauncherContent = @'
+@echo off
+setlocal
+set "MANAGER=%~dp0scripts\Manage-PosWindowsService.ps1"
+if not exist "%MANAGER%" (
+  echo No se encontro la herramienta de administracion del servicio POS.
+  pause
+  exit /b 1
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%MANAGER%"
+if errorlevel 1 (
+  echo No se pudo completar la operacion del servicio. Lee el mensaje anterior.
+  pause
+  exit /b 1
+)
+'@
+Write-WindowsCommandFile -Path $serviceLauncherPath -Content $serviceLauncherContent
 Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\manuales\INSTRUCCIONES-INSTALACION-POS.md') -Destination (Join-Path $packageDirectory 'INSTRUCCIONES.md') -Force
 $legacyModesGuide = Join-Path $packageDirectory 'MODOS DE INSTALACION.md'
 if (Test-Path -LiteralPath $legacyModesGuide) { Remove-Item -LiteralPath $legacyModesGuide -Force }

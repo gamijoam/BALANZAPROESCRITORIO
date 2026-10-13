@@ -33,6 +33,8 @@ public partial class LoginWindow : Window
 
     private async void Login_Click(object sender, RoutedEventArgs e) => await SubmitLoginAsync();
 
+    private void Exit_Click(object sender, RoutedEventArgs e) => Close();
+
     private async Task SubmitLoginAsync()
     {
         if (_isSubmitting) return;

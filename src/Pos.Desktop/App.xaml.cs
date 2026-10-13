@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Data.Common;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -83,6 +84,9 @@ public partial class App : Application
                         profileStore.Save(profile);
                         apiBaseUrl = profile.ApiBaseUrl;
                         listenAddress = new Uri(profile.ApiBaseUrl);
+                        var installedServerPath = ResolveServerPath();
+                        if (LocalPosServerProcessHost.IsInstalledWindowsServiceForPath(installedServerPath))
+                            await ReconfigureInstalledServiceForNetworkAsync();
                         MessageBox.Show(
                             $"La dirección guardada ({previousAddress}) ya no está asignada a esta computadora. El POS se reconfiguró para usar {currentAddress}:{LocalLanServerConfiguration.Port} y renovó el certificado HTTPS.\n\nActualiza la dirección y confirma el nuevo certificado en cada terminal cliente.",
                             "Se actualizó la dirección del servidor", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -185,7 +189,8 @@ public partial class App : Application
         };
         var viewModel = new PosViewModel(_apiClient);
         var window = new MainWindow(viewModel, _apiClient,
-            startLocalServer && _canRestartLocalService ? RestartLocalServiceAndReloadModulesAsync : null);
+            startLocalServer && _canRestartLocalService ? RestartLocalServiceAndReloadModulesAsync : null,
+            stopsLocalServerOnExit: startLocalServer && !LocalPosServerProcessHost.IsInstalledWindowsServiceForPath(ResolveServerPath()));
         MainWindow = window;
         window.Show();
     }
@@ -285,6 +290,45 @@ public partial class App : Application
             _localServer.Dispose();
             _localServer = CreateLocalServerHost(apiBaseAddress, serverPath, logs, settings, profile);
             await new PosLocalStartupCoordinator(_localServer).EnsureReadyAsync();
+        }
+    }
+
+    private static async Task ReconfigureInstalledServiceForNetworkAsync()
+    {
+        var scriptPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "scripts", "Manage-PosWindowsService.ps1"));
+        if (!File.Exists(scriptPath))
+            throw new PosServerStartupException($"La IP de esta computadora cambió y el servicio Windows debe actualizarse, pero no se encontró el administrador del servicio: {scriptPath}");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = true,
+            Verb = "runas",
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add("-Action");
+        startInfo.ArgumentList.Add("Reconfigure");
+
+        try
+        {
+            using var process = Process.Start(startInfo)
+                ?? throw new PosServerStartupException("Windows no pudo abrir el administrador para actualizar el servicio POS.");
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0)
+                throw new PosServerStartupException("No se pudo actualizar la dirección y el certificado del servicio Windows. Ejecuta 'Administrar servicio POS.cmd' como administrador y elige Instalar / actualizar configuración.");
+        }
+        catch (System.ComponentModel.Win32Exception exception) when (exception.NativeErrorCode == 1223)
+        {
+            throw new PosServerStartupException("Windows canceló el permiso de administrador. El servicio conserva la dirección anterior; acepta el aviso de Windows para actualizarlo y volver a iniciar el POS.");
+        }
+        catch (System.ComponentModel.Win32Exception exception)
+        {
+            throw new PosServerStartupException($"Windows no pudo reconfigurar el servicio POS. Detalle: {exception.Message}");
         }
     }
 

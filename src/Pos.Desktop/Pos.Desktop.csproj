@@ -6,7 +6,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\balanzapro.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\balanzapro-login-bg.png" />
+    <Resource Include="Assets\balanzapro-logo.png" />
+    <Resource Include="Assets\balanzapro.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Domain\Pos.Domain.csproj" />

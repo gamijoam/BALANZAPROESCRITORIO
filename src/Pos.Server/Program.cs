@@ -15,7 +15,12 @@ using Pos.Modules.Packaging;
 using Pos.Infrastructure.Modules;
 using Pos.Modules.Abstractions;
 
-var builder = WebApplication.CreateBuilder(args);
+var windowsServiceMode = args.Contains("--windows-service", StringComparer.Ordinal);
+PosWindowsServiceConfiguration.ApplyFromEnvironment();
+var hostArguments = args.Where(argument => !string.Equals(argument, "--windows-service", StringComparison.Ordinal)).ToArray();
+var builder = WebApplication.CreateBuilder(hostArguments);
+if (windowsServiceMode)
+    builder.Host.UseWindowsService(options => options.ServiceName = PosWindowsServiceConfiguration.ServiceName);
 var moduleMaintenanceGate = new ModuleMaintenanceGate();
 var activeModuleRuntimes = new List<LoadedPosModule>();
 var activeModuleIds = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);

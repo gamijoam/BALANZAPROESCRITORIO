@@ -12,6 +12,7 @@ public static class ModulePlanFailureLog
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleId);
         ArgumentNullException.ThrowIfNull(exception);
 
+        logDirectory ??= Environment.GetEnvironmentVariable("POS_MODULE_LOG_DIRECTORY");
         logDirectory ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "PuntoDeVenta", "Logs");
         Directory.CreateDirectory(logDirectory);

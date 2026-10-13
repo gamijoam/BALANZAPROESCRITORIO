@@ -4,8 +4,8 @@ Esta guía cubre instalación, conexión por red local, actualización y respald
 
 ## Requisitos
 
-- Windows 10/11 y runtimes .NET 10: `Microsoft.NETCore.App`, `Microsoft.AspNetCore.App` y `Microsoft.WindowsDesktop.App`.
-- PostgreSQL instalado y activo únicamente en la computadora que será servidor.
+- Windows 10/11 de 64 bits. El paquete oficial es autocontenido e incluye el runtime .NET; no hay que descargar ni instalar .NET por separado.
+- PostgreSQL instalado y activo únicamente en la computadora que será servidor. PostgreSQL no viene dentro del ZIP.
 - Las PCs que compartirán ventas deben estar conectadas a la misma red local.
 - Usa la misma cuenta de Windows con la que configuraste el POS: Windows protege la configuración y el certificado para ese usuario.
 
@@ -17,15 +17,18 @@ PostgreSQL no viene dentro del paquete. Una PC configurada como **independiente*
 2. Selecciona **Servidor POS + caja local**. El POS detecta la IP local, genera su certificado HTTPS y prepara el puerto 5155 para redes privadas.
 3. Acepta el permiso de Windows para habilitar el POS en la red privada. No lo habilites para redes públicas.
 4. Completa los datos de PostgreSQL si los solicita y configura el primer operador.
-5. Anota la IP que muestra el asistente; la usarás en las otras cajas. Reserva esa IP en el router para que no cambie.
+5. Cierra el POS y ejecuta `Actualizar POS.cmd` una vez para instalarlo en su carpeta permanente y crear el acceso directo. La primera instalación crea un respaldo preventivo.
+6. Desde el acceso directo, abre el POS para comprobar que la base y la caja funcionan; luego ciérralo.
+7. Abre `Administrar servicio POS.cmd` desde la carpeta permanente que instaló el actualizador. Elige **Instalar / actualizar configuración y arrancar** y acepta la solicitud de administrador. Esto registra el servidor con inicio automático y protección contra fallos.
+8. Abre el POS desde su acceso directo. Anota la IP que muestra el asistente; la usarás en las otras cajas. Reserva esa IP en el router para que no cambie.
 
-Si no aparece una IP, conecta primero la computadora a la red y abre nuevamente el POS. La caja servidor debe permanecer encendida, con PostgreSQL activo, para que las demás puedan facturar.
+Si no aparece una IP, conecta primero la computadora a la red y abre nuevamente el POS. La caja servidor debe permanecer encendida, conectada a la red y con PostgreSQL activo para que las demás puedan facturar. El servicio puede seguir atendiendo cajas aunque cierres la ventana del POS.
 
 Si el servidor detecta que la IP guardada ya no pertenece a esta computadora, actualizará automáticamente su dirección y el certificado HTTPS. Anota la dirección nueva y vuelve a configurar la confianza del servidor en cada terminal cliente.
 
 ## Conectar otra computadora
 
-1. Extrae el mismo ZIP en la computadora cliente y abre `Iniciar POS.cmd`.
+1. Extrae el mismo ZIP en la computadora cliente y abre `Iniciar POS.cmd`. No instales el servicio ni PostgreSQL en una terminal cliente.
 2. Selecciona **Terminal cliente**.
 3. Escribe la IP del servidor, por ejemplo `192.168.1.20`, y pulsa **Continuar**. El puerto 5155 se agrega automáticamente. También puedes escribir `192.168.1.20:5155`.
 4. La primera vez, revisa la IP en el aviso de confianza y confirma si corresponde a tu caja principal. La aplicación guarda la identidad de ese servidor y la comprueba automáticamente en adelante.
@@ -51,11 +54,15 @@ No hace falta instalar PostgreSQL, escribir la contraseña de `postgres`, copiar
 1. Extrae el ZIP nuevo en una carpeta distinta de la instalación actual.
 2. Cierra todas las ventanas del POS en la PC que vas a actualizar.
 3. Ejecuta `Actualizar POS.cmd` con la misma cuenta de Windows que usa esa instalación.
-4. En el servidor, el actualizador verifica PostgreSQL, crea y comprueba un respaldo, detiene el servicio, aplica las migraciones y abre la versión nueva. En una terminal cliente solo actualiza los archivos locales.
+4. En el servidor, el actualizador verifica PostgreSQL, crea y comprueba un respaldo, detiene el servicio POS antes de reemplazar archivos, aplica las migraciones de la versión nueva, actualiza la configuración protegida y vuelve a arrancar el servicio. Comprueba la ruta y el estado del ejecutable activo para no dejar la versión vieja escuchando en el puerto. En una terminal cliente solo actualiza los archivos locales.
 
 Si falla el respaldo o la autenticación, corrige el problema antes de continuar: el actualizador no debe detener el servidor cuando el respaldo no pudo completarse. La actualización conserva el perfil cifrado y no cambia contraseñas PostgreSQL.
 
-Al abrir `Iniciar POS.cmd`, el POS comprueba que el servicio local que responde en el puerto configurado corresponda al servidor incluido junto a esa aplicación. Si detecta una instancia POS de una carpeta anterior o un ejecutable reemplazado mientras seguía abierto, detiene únicamente el `Pos.Server.exe` verificado y arranca el actual. Si no puede identificarlo con seguridad, conserva el proceso y muestra el motivo.
+El servicio de Windows `BalanzaProPosServer` inicia automáticamente al arrancar Windows. Su configuración de PostgreSQL y certificado se protege con DPAPI de máquina dentro de `ProgramData`; el archivo permite lectura solo a SYSTEM y Administradores. Los módulos siguen usando las carpetas del usuario que configuró el POS y se concede acceso a SYSTEM para que el servicio pueda cargarlos. Si cambiaste la contraseña PostgreSQL, la IP o el certificado después de instalar el servicio, usa la opción **Instalar / actualizar configuración y arrancar** para volver a guardar la configuración protegida.
+
+Abre `Administrar servicio POS.cmd` para ver el estado, PID y ruta activa, instalar o actualizar la configuración, detener, reiniciar o quitar el servicio. Quitar el servicio no borra la base ni los datos de módulos. El acceso directo de POS comprueba e inicia el servicio instalado antes de abrir la caja.
+
+Si aún no instalaste el servicio, al abrir `Iniciar POS.cmd` el escritorio puede iniciar un servidor local temporal. Ese servidor no arranca con Windows y se cierra al salir del POS. Instala el servicio después de configurar la base para operación automática.
 
 Ejecuta `Detener proceso por puerto.cmd` y elige **1** para liberar un puerto TCP o **2** para cerrar `Pos.Desktop.exe`, incluso si quedó ejecutándose sin ventana visible. La herramienta muestra los PID y las rutas, solicita confirmación y comprueba que la acción se completó. Si necesita permisos elevados, Windows los solicitará. Consulta `DETENER-PROCESOS-POS.md` para más detalles.
 

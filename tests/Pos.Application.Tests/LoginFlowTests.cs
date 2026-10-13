@@ -13,7 +13,10 @@ public sealed class LoginFlowTests
 
         Assert.DoesNotContain("x:Name=\"UsernameBox\" Text=\"demo\"", xaml);
         Assert.Contains("x:Name=\"ErrorLabel\"", xaml);
-        Assert.Contains("MinHeight=\"48\"", xaml);
+        Assert.Contains("x:Name=\"ErrorLabel\" Foreground=\"#B43B42\"", xaml);
+        Assert.Contains("MinHeight=\"30\"", xaml);
+        Assert.True(xaml.IndexOf("x:Name=\"UsernameBox\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"PinBox\"", StringComparison.Ordinal));
+        Assert.True(xaml.IndexOf("x:Name=\"PinBox\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"ConnectionExpander\"", StringComparison.Ordinal));
         Assert.Contains("x:Name=\"ConnectionExpander\"", xaml);
         Assert.Contains("Header=\"Conexión al servicio\"", xaml);
         Assert.Contains("IsExpanded=\"False\"", xaml);
