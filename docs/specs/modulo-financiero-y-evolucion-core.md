@@ -129,6 +129,17 @@ Las siguientes pruebas se escribirán primero y deberán fallar por el comportam
 | AC-11 | Dada una venta antigua sin costo, cuando se consulta utilidad, entonces se muestra sin costo histórico disponible y no como margen calculado con costo cero. | ProfitReportMarksLegacySaleCostAsUnavailable |
 | AC-12 | Dada una actualización con datos existentes, cuando se aplica la migración, entonces los movimientos previos permanecen intactos y existe respaldo y camino de recuperación. | FinanceMigrationPreservesExistingSalesAndInventory |
 
+### Criterios de aceptación para correcciones de la interfaz y recepción
+
+| ID | Criterio de aceptación | Prueba candidata |
+|---|---|---|
+| AC-13 | Los campos de proveedor y factura muestran etiquetas permanentes; el formulario de proveedor envía también la dirección opcional. | Supplier_and_purchase_forms_have_visible_field_labels_and_a_supplier_level_debt_summary |
+| AC-14 | La ventana financiera se abre maximizada, se puede restaurar/redimensionar y conserva los formularios accesibles mediante desplazamiento en pantallas pequeñas. | Supplier_and_purchase_forms_have_visible_field_labels_and_a_supplier_level_debt_summary |
+| AC-15 | Las cantidades enteras se ven sin decimales ficticios y las fraccionarias conservan hasta tres decimales; los cálculos siguen usando `decimal`. | Quantity_display_uses_only_significant_decimals |
+| AC-16 | La interfaz traduce estados y tipos de documento para mostrarlos, pero conserva los códigos originales para las reglas de negocio. | Purchase_status_is_localized_only_for_display |
+| AC-17 | La búsqueda de una recepción previa cierra el lector antes de consultar factura o inventario; un reintento usa la misma clave idempotente y las mismas cantidades para no duplicar existencias. | Receipt_replay_lookup_closes_its_reader_before_the_next_database_command; Retrying_a_pending_receipt_reuses_the_original_idempotency_key_and_quantities |
+| AC-18 | El resumen identifica proveedor, documento, fechas, importe, pagos, saldo y estado; los totales por moneda coinciden con la suma de sus facturas abiertas. | Finance_summary_includes_invoice_obligations_as_well_as_currency_totals |
+
 ## 6. Fuera de alcance inicial
 
 - Nómina, contabilidad general de doble partida y presentación tributaria.

@@ -17,6 +17,7 @@ public partial class FinanceWindow : Window
     private PurchaseDetailClientInfo? _purchaseDetail;
     private Guid? _editingDraftId;
     private bool _loadingSelection;
+    private bool _isInitializing = true;
 
     public FinanceWindow(PosDesktopModuleContext context, bool openSummary = false)
     {
@@ -51,6 +52,8 @@ public partial class FinanceWindow : Window
         if (openSummary && canViewFinance) FinanceTabs.SelectedItem = SummaryTab;
         else if (!canViewSuppliers && canViewPurchases) FinanceTabs.SelectedItem = PurchasesTab;
         else if (!canViewSuppliers && !canViewPurchases && canViewFinance) FinanceTabs.SelectedItem = SummaryTab;
+        _isInitializing = false;
+        UpdateDraftTotal();
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -69,8 +72,8 @@ public partial class FinanceWindow : Window
             CreateSupplierButton.IsEnabled = false;
             await _context.ApiClient.PostModuleAsync<SupplierRequest, SupplierClientInfo>(ModuleId, "suppliers",
                 new(SupplierCodeBox.Text.Trim(), SupplierNameBox.Text.Trim(), NullIfEmpty(SupplierTaxIdBox.Text),
-                    NullIfEmpty(SupplierPhoneBox.Text), NullIfEmpty(SupplierEmailBox.Text), null));
-            SupplierCodeBox.Clear(); SupplierNameBox.Clear(); SupplierTaxIdBox.Clear(); SupplierPhoneBox.Clear(); SupplierEmailBox.Clear();
+                    NullIfEmpty(SupplierPhoneBox.Text), NullIfEmpty(SupplierEmailBox.Text), NullIfEmpty(SupplierAddressBox.Text)));
+            SupplierCodeBox.Clear(); SupplierNameBox.Clear(); SupplierTaxIdBox.Clear(); SupplierPhoneBox.Clear(); SupplierEmailBox.Clear(); SupplierAddressBox.Clear();
             await LoadSuppliersAsync();
             SetStatus("Proveedor agregado.");
         }
@@ -82,8 +85,15 @@ public partial class FinanceWindow : Window
 
     private void SupplierGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateActionButtons();
     private void RelatedSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateActionButtons();
-    private void DraftCurrencyPicker_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateDraftTotal();
-    private void DraftFreightBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateDraftTotal();
+    private void DraftCurrencyPicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitializing) UpdateDraftTotal();
+    }
+
+    private void DraftFreightBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_isInitializing) UpdateDraftTotal();
+    }
 
     private async void ToggleSupplier_Click(object sender, RoutedEventArgs e)
     {
@@ -216,24 +226,39 @@ public partial class FinanceWindow : Window
     private async void ReceivePurchase_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedPurchase is not { Status: "Posted" or "Partial" or "Paid" } purchase || _purchaseDetail is null) return;
-        var remainingLines = _purchaseDetail.Lines
-            .Select(line => new ReceiptLineDraft(line.Id, line.Sku, line.Name, line.Quantity,
-                Math.Max(0m, line.Quantity - line.ReceivedQuantity)))
-            .Where(line => line.Remaining > 0m).ToList();
-        if (remainingLines.Count == 0) { SetStatus("Esta factura ya está recibida por completo."); return; }
-        var receiveWindow = new ReceiptQuantityWindow(remainingLines) { Owner = this };
-        if (receiveWindow.ShowDialog() != true) return;
-        var receiptLines = receiveWindow.Lines.Where(line => line.QuantityToReceive > 0m)
-            .Select(line => new PurchaseReceiptLineRequest(line.InvoiceLineId, line.QuantityToReceive)).ToArray();
-        if (receiptLines.Length == 0) { SetStatus("Indica al menos una cantidad para recibir.", true); return; }
         try
         {
-            var request = new PurchaseReceiptRequest(Guid.NewGuid().ToString("N"), null, receiptLines);
+            var existingReceipts = await _context.ApiClient.GetModuleAsync<List<PurchaseReceiptClientInfo>>(
+                ModuleId, $"purchases/{purchase.Id:D}/receipts") ?? [];
+            var pendingReceipt = existingReceipts.FirstOrDefault(receipt =>
+                !receipt.Header.CompletedAtUtc.HasValue && !receipt.Header.ReversedAtUtc.HasValue);
+            PurchaseReceiptRequest request;
+            if (pendingReceipt is not null)
+            {
+                if (MessageBox.Show(this,
+                    "Hay una recepción que empezó pero no se confirmó. ¿Quieres reintentar esa misma operación? Se usará la misma clave para evitar duplicar existencias.",
+                    "Reintentar recepción pendiente", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+                request = FinanceReceiptRetryPolicy.CreateRetryRequest(pendingReceipt);
+            }
+            else
+            {
+                var remainingLines = _purchaseDetail.Lines
+                    .Select(line => new ReceiptLineDraft(line.Id, line.Sku, line.Name, line.Quantity,
+                        Math.Max(0m, line.Quantity - line.ReceivedQuantity)))
+                    .Where(line => line.Remaining > 0m).ToList();
+                if (remainingLines.Count == 0) { SetStatus("Esta factura ya está recibida por completo."); return; }
+                var receiveWindow = new ReceiptQuantityWindow(remainingLines) { Owner = this };
+                if (receiveWindow.ShowDialog() != true) return;
+                var receiptLines = receiveWindow.Lines.Where(line => line.QuantityToReceive > 0m)
+                    .Select(line => new PurchaseReceiptLineRequest(line.InvoiceLineId, line.QuantityToReceive)).ToArray();
+                if (receiptLines.Length == 0) { SetStatus("Indica al menos una cantidad para recibir.", true); return; }
+                request = new(Guid.NewGuid().ToString("N"), null, receiptLines);
+            }
             await _context.ApiClient.PostModuleAsync<PurchaseReceiptRequest, PurchaseOperationResult>(ModuleId,
                 $"purchases/{purchase.Id:D}/receipts", request);
             await LoadPurchasesAsync(); SetStatus("Recepción registrada. Se actualizaron existencias y costo promedio una sola vez.");
         }
-        catch (Exception exception) { SetStatus(UserMessage(exception), true); }
+        catch (Exception exception) { SetStatus($"{UserMessage(exception)} Si el servidor alcanzó a iniciar la recepción, vuelve a usar «Registrar recepción» para reintentarla sin duplicar existencias.", true); }
     }
 
     private async void PayPurchase_Click(object sender, RoutedEventArgs e)
@@ -353,7 +378,8 @@ public partial class FinanceWindow : Window
         {
             _purchaseDetail = await _context.ApiClient.GetModuleAsync<PurchaseDetailClientInfo>(ModuleId, $"purchases/{purchase.Id:D}");
             PurchaseDetailsGrid.ItemsSource = _purchaseDetail?.Lines ?? [];
-            PurchaseSummaryLabel.Text = $"{purchase.SupplierName} · {purchase.DocumentType} {purchase.DocumentNumber} · {purchase.Currency} {purchase.Total:N2} · saldo {purchase.Currency} {purchase.Balance:N2} · {purchase.Status}";
+            var due = purchase.DueDate?.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture) ?? "sin fecha de vencimiento";
+            PurchaseSummaryLabel.Text = $"Proveedor: {purchase.SupplierName} · {FinanceDisplayText.DocumentType(purchase.DocumentType)} {purchase.DocumentNumber} · Emitida {purchase.IssueDate:dd/MM/yyyy} · vence {due} · Total {purchase.Currency} {purchase.Total:N2} · Pagado {purchase.Currency} {purchase.PaidAmount:N2} · Saldo {purchase.Currency} {purchase.Balance:N2} · Estado: {purchase.StatusLabel}";
             var payments = await _context.ApiClient.GetModuleAsync<List<SupplierPaymentClientInfo>>(ModuleId, $"purchases/{purchase.Id:D}/payments") ?? [];
             PaymentsGrid.ItemsSource = payments;
             var receipts = await _context.ApiClient.GetModuleAsync<List<PurchaseReceiptClientInfo>>(ModuleId, $"purchases/{purchase.Id:D}/receipts") ?? [];
@@ -370,6 +396,9 @@ public partial class FinanceWindow : Window
         {
             var summary = await _context.ApiClient.GetModuleAsync<FinanceSummaryClientInfo>(ModuleId, "summary");
             SummaryGrid.ItemsSource = summary?.Balances ?? [];
+            var obligations = summary?.Obligations ?? [];
+            OpenPayablesGrid.ItemsSource = obligations;
+            OpenPayablesEmptyLabel.Visibility = obligations.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             SetStatus("Resumen preliminar de cuentas por pagar actualizado.");
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
@@ -440,7 +469,7 @@ public partial class FinanceWindow : Window
     private string DraftCurrency() => (DraftCurrencyPicker.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "USD";
     private static string? SelectedTag(ComboBox combo) => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static string UserMessage(Exception exception) => exception.InnerException?.Message ?? exception.Message;
+    private static string UserMessage(Exception exception) => PosUserMessage.ForException(exception);
 
     public sealed record SupplierRequest(string Code, string LegalName, string? TaxId, string? Phone, string? Email, string? Address);
     public sealed record SetSupplierActiveRequest(bool Active);
@@ -457,7 +486,14 @@ public partial class FinanceWindow : Window
     public sealed record SupplierClientInfo(Guid Id, string Code, string LegalName, string? TaxId, string? Phone, string? Email,
         string? Address, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
     public sealed record PurchaseSummaryClientInfo(Guid Id, Guid SupplierId, string SupplierName, string DocumentType, string DocumentNumber,
-        string? ControlNumber, string Currency, DateOnly IssueDate, DateOnly? DueDate, decimal Total, string Status, string PaymentTerm, decimal Balance);
+        string? ControlNumber, string Currency, DateOnly IssueDate, DateOnly? DueDate, decimal Total, string Status, string PaymentTerm, decimal Balance)
+    {
+        public string StatusLabel => FinanceDisplayText.PurchaseStatus(Status);
+        public string DocumentLabel => FinanceDisplayText.DocumentType(DocumentType) + " " + DocumentNumber +
+            (string.IsNullOrWhiteSpace(ControlNumber) ? string.Empty : $" · Control {ControlNumber}");
+        public string DueDateLabel => DueDate?.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture) ?? "Sin fecha";
+        public decimal PaidAmount => Math.Max(0m, Total - Balance);
+    }
     public sealed record PurchaseHeaderClientInfo(Guid Id, Guid SupplierId, string DocumentType, string DocumentNumber, string? ControlNumber,
         string Currency, decimal ExchangeRate, DateOnly IssueDate, DateOnly? DueDate, decimal Total, decimal Freight, string Status, string PaymentTerm);
     public sealed record PurchaseLineClientInfo(Guid Id, Guid ProductId, string Sku, string Name, decimal Quantity, decimal ReceivedQuantity,
@@ -472,8 +508,18 @@ public partial class FinanceWindow : Window
     public sealed record PurchaseReceiptLineClientInfo(Guid InvoiceLineId, Guid ProductId, decimal Quantity, decimal UnitCost, string CostCurrency, decimal CostExchangeRate);
     public sealed record SupplierPaymentClientInfo(Guid Id, Guid InvoiceId, string Currency, decimal Amount, decimal InvoiceCurrencyAmount,
         decimal AppliedExchangeRate, decimal? FxDifference, string Method, string ReceivingAccount, string? Reference, DateTime PaidAtUtc, DateTime? ReversedAtUtc);
-    public sealed record FinanceSummaryClientInfo(string Label, IReadOnlyList<FinanceSummaryBalanceClientInfo> Balances);
+    public sealed record FinanceSummaryClientInfo(string Label, IReadOnlyList<FinanceSummaryBalanceClientInfo> Balances,
+        IReadOnlyList<FinanceOpenPayableClientInfo> Obligations);
     public sealed record FinanceSummaryBalanceClientInfo(string Currency, decimal Amount, long Invoices);
+    public sealed record FinanceOpenPayableClientInfo(Guid InvoiceId, string SupplierName, string DocumentType,
+        string DocumentNumber, string? ControlNumber, string Currency, DateOnly IssueDate, DateOnly? DueDate,
+        decimal InvoiceAmount, decimal PaidAmount, decimal Balance, string Status, string PaymentTerm)
+    {
+        public string StatusLabel => FinanceDisplayText.PurchaseStatus(Status);
+        public string DocumentLabel => FinanceDisplayText.DocumentType(DocumentType) + " " + DocumentNumber +
+            (string.IsNullOrWhiteSpace(ControlNumber) ? string.Empty : $" · Control {ControlNumber}");
+        public string DueDateLabel => DueDate?.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture) ?? "Sin fecha";
+    }
 
     public sealed class PurchaseDraftLine(Guid productId, string sku, string name, decimal quantity, decimal unitPrice,
         decimal discount, decimal tax, bool taxRecoverable)
@@ -507,8 +553,9 @@ internal sealed class ReceiptQuantityWindow : Window
     public ReceiptQuantityWindow(IReadOnlyList<ReceiptLineDraft> lines)
     {
         _lines = lines;
-        Title = "Registrar recepción parcial"; Width = 850; Height = 520; MinWidth = 680; MinHeight = 400;
+        Title = "Registrar recepción parcial"; Width = 940; Height = 600; MinWidth = 720; MinHeight = 440;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = System.Windows.Media.Brushes.White;
+        Language = System.Windows.Markup.XmlLanguage.GetLanguage("es-VE");
         var layout = new Grid { Margin = new Thickness(16) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -520,8 +567,8 @@ internal sealed class ReceiptQuantityWindow : Window
             IsReadOnly = false, HeadersVisibility = DataGridHeadersVisibility.Column, RowHeight = 34, Margin = new Thickness(0, 0, 0, 10) };
         grid.Columns.Add(new DataGridTextColumn { Header = "Código", Binding = new Binding(nameof(ReceiptLineDraft.Sku)), IsReadOnly = true, Width = 110 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Artículo", Binding = new Binding(nameof(ReceiptLineDraft.Name)), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Pendiente", Binding = new Binding(nameof(ReceiptLineDraft.Remaining)) { StringFormat = "N3" }, IsReadOnly = true, Width = 120 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Recibir ahora", Binding = new Binding(nameof(ReceiptLineDraft.QuantityToReceive)) { UpdateSourceTrigger = UpdateSourceTrigger.LostFocus }, Width = 130 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Pendiente", Binding = new Binding(nameof(ReceiptLineDraft.Remaining)) { StringFormat = "0.###" }, IsReadOnly = true, Width = 120 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Recibir ahora", Binding = new Binding(nameof(ReceiptLineDraft.QuantityToReceive)) { StringFormat = "0.###", UpdateSourceTrigger = UpdateSourceTrigger.LostFocus }, Width = 130 });
         Grid.SetRow(grid, 1); layout.Children.Add(grid);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = new Button { Content = "Cancelar", Padding = new Thickness(16, 7, 16, 7), Margin = new Thickness(4) };

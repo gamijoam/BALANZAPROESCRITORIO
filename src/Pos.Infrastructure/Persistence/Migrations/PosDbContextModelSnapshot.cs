@@ -1373,7 +1373,11 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
                     b.HasKey("ReceiptId", "ProductId");
 
-                    b.HasIndex("ReceiptId");
+                    b.HasOne("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.ToTable("purchase_receipt_effect_lines", (string)null);
                 });

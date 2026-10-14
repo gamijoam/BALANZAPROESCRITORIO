@@ -44,13 +44,43 @@ try {
             throw 'No se agregó la clave pública esperada.'
         }
 
+        $newKeyEntry = $ring.keys | Where-Object keyId -eq 'pos-publisher-vps-2026'
+        $encodedNewKey = ($newPem -replace '-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s', '')
+        $wrappedLines = for ($offset = 0; $offset -lt $encodedNewKey.Length; $offset += 40) {
+            $length = [Math]::Min(40, $encodedNewKey.Length - $offset)
+            $encodedNewKey.Substring($offset, $length)
+        }
+        $reformattedPem = "-----BEGIN PUBLIC KEY-----`r`n$($wrappedLines -join "`r`n")`r`n-----END PUBLIC KEY-----`r`n"
+        $newKeyEntry.publicKeyPem = $reformattedPem
+        $reformattedRing = [pscustomobject]@{ schemaVersion = 1; keys = @($ring.keys) } | ConvertTo-Json -Depth 8
+        [IO.File]::WriteAllText($ringPath, $reformattedRing, [Text.UTF8Encoding]::new($false))
+
+        $equivalentKeyAccepted = $false
+        try {
+            & $installer -PublicKeyPath (Join-Path $root 'new.pem') -KeyId 'pos-publisher-vps-2026'
+            $equivalentKeyAccepted = $true
+        } catch {
+            throw "El instalador debe aceptar la misma clave SPKI con otros saltos de línea: $($_.Exception.Message)"
+        }
+        if (-not $equivalentKeyAccepted) { throw 'La misma clave SPKI con otro formato PEM debe aceptarse.' }
+        $ring = Get-Content -LiteralPath $ringPath -Raw | ConvertFrom-Json
+        if (@($ring.keys).Count -ne 2) { throw 'El formato alternativo no debe duplicar la clave de confianza.' }
+
+        $windowsPowerShell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf) {
+            & $windowsPowerShell -NoProfile -ExecutionPolicy Bypass -File $installer -PublicKeyPath (Join-Path $root 'new.pem') -KeyId 'pos-publisher-vps-2026'
+            if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 debe aceptar la misma clave con otro formato PEM.' }
+            $ring = Get-Content -LiteralPath $ringPath -Raw | ConvertFrom-Json
+            if (@($ring.keys).Count -ne 2) { throw 'Windows PowerShell 5.1 duplicó la clave equivalente.' }
+        }
+
         $collisionRejected = $false
         try { & $installer -PublicKeyPath (Join-Path $root 'other.pem') -KeyId 'pos-publisher-vps-2026' }
         catch { $collisionRejected = $_.Exception.Message.Contains('ya existe', [StringComparison]::OrdinalIgnoreCase) }
         if (-not $collisionRejected) { throw 'Un ID existente asociado a otra clave debe rechazarse.' }
         $afterCollision = Get-Content -LiteralPath $ringPath -Raw | ConvertFrom-Json
         if (@($afterCollision.keys).Count -ne 2 -or
-            ($afterCollision.keys | Where-Object keyId -eq 'pos-publisher-vps-2026').publicKeyPem -cne $newPem) {
+            ($afterCollision.keys | Where-Object keyId -eq 'pos-publisher-vps-2026').publicKeyPem -cne $reformattedPem) {
             throw 'El anillo cambió después de rechazar una colisión.'
         }
     } finally {

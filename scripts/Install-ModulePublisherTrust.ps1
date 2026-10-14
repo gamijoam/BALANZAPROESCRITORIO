@@ -127,6 +127,21 @@ function ConvertFrom-RsaPublicKeyPem {
     return $parameters
 }
 
+function Get-RsaPublicKeyIdentity {
+    param([Parameter(Mandatory = $true)][string]$Pem)
+
+    $trimmedPem = $Pem.Trim()
+    $header = '-----BEGIN PUBLIC KEY-----'
+    $footer = '-----END PUBLIC KEY-----'
+    if (-not $trimmedPem.StartsWith($header, [StringComparison]::Ordinal) -or
+        -not $trimmedPem.EndsWith($footer, [StringComparison]::Ordinal)) {
+        throw 'La clave pública guardada no tiene formato PEM SPKI.'
+    }
+
+    $parameters = ConvertFrom-RsaPublicKeyPem -Pem $trimmedPem
+    return [Convert]::ToBase64String($parameters.Modulus) + '.' + [Convert]::ToBase64String($parameters.Exponent)
+}
+
 if ($KeyId -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$') {
     throw 'El identificador de publicador no tiene un formato permitido.'
 }
@@ -138,11 +153,13 @@ if (-not $publicPem.StartsWith('-----BEGIN PUBLIC KEY-----', [StringComparison]:
     throw 'El archivo debe contener únicamente una clave pública PEM SPKI.'
 }
 $rsa = $null
+$incomingPublicKeyIdentity = $null
 try {
     $rsa = [Security.Cryptography.RSACryptoServiceProvider]::new()
     $rsaParameters = ConvertFrom-RsaPublicKeyPem -Pem $publicPem
     $rsa.ImportParameters($rsaParameters) | Out-Null
     if ($rsa.KeySize -lt 2048) { throw 'La clave RSA pública debe tener al menos 2048 bits.' }
+    $incomingPublicKeyIdentity = [Convert]::ToBase64String($rsaParameters.Modulus) + '.' + [Convert]::ToBase64String($rsaParameters.Exponent)
 } catch {
     throw "La clave pública PEM no es una clave RSA SPKI válida: $($_.Exception.Message)"
 } finally {
@@ -161,7 +178,8 @@ if (Test-Path -LiteralPath $keyRingPath -PathType Leaf) {
     }
     $matches = @($keyRing.keys | Where-Object { $_.keyId -ceq $KeyId })
     if ($matches.Count -gt 0) {
-        if ($matches[0].publicKeyPem.Trim() -cne $publicPem) {
+        $existingPublicKeyIdentity = Get-RsaPublicKeyIdentity -Pem ([string]$matches[0].publicKeyPem)
+        if ($existingPublicKeyIdentity -cne $incomingPublicKeyIdentity) {
             throw "Ya existe '$KeyId' con otra clave. No se sobrescribió el anillo de confianza."
         }
     } else {

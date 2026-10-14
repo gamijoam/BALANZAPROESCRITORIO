@@ -291,13 +291,14 @@ public sealed class FinanceModule : IPosServerModule
             await using (var replay = new NpgsqlCommand($"SELECT id,idempotency_hash,completed_at_utc,reversed_at_utc FROM {Table("purchase_receipts")} WHERE idempotency_key=@key", connection, transaction))
             {
                 replay.Parameters.AddWithValue("key", request.IdempotencyKey.Trim());
-                await using var reader = await replay.ExecuteReaderAsync(context.RequestAborted);
-                if (await reader.ReadAsync(context.RequestAborted))
+                var previous = await FinanceReceiptReplayReader.ReadAndDisposeAsync(
+                    await replay.ExecuteReaderAsync(context.RequestAborted), context.RequestAborted);
+                if (previous is not null)
                 {
-                    receiptId = reader.GetGuid(0); var hash = reader.GetString(1); var isCompleted = !reader.IsDBNull(2); var isReversed = !reader.IsDBNull(3); await reader.CloseAsync();
-                    if (!string.Equals(hash, requestHash, StringComparison.Ordinal)) return Results.Conflict(new { error = "purchase_receipt_idempotency_conflict" });
-                    if (isReversed) return Results.Conflict(new { error = "purchase_receipt_already_reversed" });
-                    if (isCompleted) { await transaction.CommitAsync(context.RequestAborted); return Results.Ok(new { id = receiptId, status = "Received", replayed = true }); }
+                    receiptId = previous.Id;
+                    if (!string.Equals(previous.IdempotencyHash, requestHash, StringComparison.Ordinal)) return Results.Conflict(new { error = "purchase_receipt_idempotency_conflict" });
+                    if (previous.ReversedAtUtc.HasValue) return Results.Conflict(new { error = "purchase_receipt_already_reversed" });
+                    if (previous.CompletedAtUtc.HasValue) { await transaction.CommitAsync(context.RequestAborted); return Results.Ok(new { id = receiptId, status = "Received", replayed = true }); }
                     receiptLines = await LoadReceiptEffectLinesAsync(connection, transaction, receiptId, context.RequestAborted);
                     if (receiptLines.Count == 0) return Results.Conflict(new { error = "purchase_receipt_pending_without_lines" });
                     await transaction.CommitAsync(context.RequestAborted);
@@ -627,15 +628,28 @@ public sealed class FinanceModule : IPosServerModule
     {
         await using var connection = await OpenAsync(context, context.RequestAborted);
         await using var command = new NpgsqlCommand($"""
-            SELECT currency,COALESCE(sum(balance),0)::numeric(18,4),COUNT(*)
-            FROM (SELECT i.currency,sum(p.amount) AS balance FROM {Table("purchase_invoices")} i
-                  JOIN {Table("supplier_payables")} p ON p.invoice_id=i.id WHERE i.status IN ('Posted','Partial','Paid')
-                  GROUP BY i.id,i.currency HAVING sum(p.amount)>0) x GROUP BY currency ORDER BY currency
+            SELECT i.id,s.legal_name,i.document_type,i.document_number,i.control_number,i.currency,i.issue_date,i.due_date,
+                   i.total,COALESCE(sum(p.amount),0)::numeric(18,4),i.status,i.payment_term
+            FROM {Table("purchase_invoices")} i
+            JOIN {Table("suppliers")} s ON s.id=i.supplier_id
+            JOIN {Table("supplier_payables")} p ON p.invoice_id=i.id
+            WHERE i.status IN ('Posted','Partial','Paid')
+            GROUP BY i.id,s.legal_name
+            HAVING sum(p.amount)>0
+            ORDER BY i.due_date NULLS LAST,i.issue_date,s.legal_name,i.document_number
             """, connection);
         await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
-        var balances = new List<object>();
-        while (await reader.ReadAsync(context.RequestAborted)) balances.Add(new { currency = reader.GetString(0), amount = reader.GetDecimal(1), invoices = reader.GetInt64(2) });
-        return Results.Ok(new { label = "Preliminar · cuentas por pagar", balances });
+        var obligations = new List<FinanceOpenPayableInfo>();
+        while (await reader.ReadAsync(context.RequestAborted))
+        {
+            var invoiceAmount = reader.GetDecimal(8);
+            var balance = reader.GetDecimal(9);
+            obligations.Add(new(reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5),
+                DateOnly.FromDateTime(reader.GetDateTime(6)), reader.IsDBNull(7) ? null : DateOnly.FromDateTime(reader.GetDateTime(7)),
+                invoiceAmount, invoiceAmount - balance, balance, reader.GetString(10), reader.GetString(11)));
+        }
+        return Results.Ok(FinanceSummaryPolicy.Build(obligations));
     }
 
     private static bool ValidatePurchaseDraft(PurchaseDraftRequest request, out string? message)
