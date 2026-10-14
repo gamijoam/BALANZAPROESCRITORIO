@@ -6,6 +6,7 @@ Este módulo agrega un visor de reportes WPF al POS anfitrión. Usa los endpoint
 
 - **1.0.1:** evita que la selección inicial de moneda filtre la tabla antes de que WPF termine de construir la pantalla. No requiere migraciones ni una actualización del POS anfitrión.
 - **1.0.2:** elimina el panel lateral, da el ancho completo a la tabla y traslada las columnas visibles a un botón emergente junto a las vistas personales. Abre el visor maximizado. No requiere migraciones ni actualización del POS anfitrión.
+- **1.1.0:** agrega saldos y movimientos paginados de cuentas por cobrar, y cobros/reintegros agrupados por caja, método y moneda. Usa `ViewReports`, requiere Desktop API 1.4 y no agrega migraciones.
 
 ## Construir el paquete firmado
 
@@ -13,9 +14,11 @@ Desde PowerShell en la raíz del repositorio:
 
     .\scripts\Build-ReportModulePackage.ps1 -CertificateThumbprint "<huella-certificado>"
 
-El certificado debe estar instalado en Cert:\CurrentUser\My y contar con su clave privada. El ZIP firmado y su clave pública salen en artifacts\modules\advanced-reports\ (el ZIP contiene la versión configurada; la versión actual del módulo es 1.0.2).
+El certificado debe estar instalado en Cert:\CurrentUser\My y contar con su clave privada. El ZIP firmado y su clave pública salen en artifacts\modules\advanced-reports\ (el ZIP contiene la versión configurada; la versión actual del módulo es 1.1.0).
 
-Antes de instalar, aplica la migración del anfitrión OperatorReportViews y actualiza el POS a Desktop API 1.2. El visor requiere el permiso `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
+Antes de instalar, actualiza el POS anfitrión a Desktop API 1.4. No hay migración nueva; las vistas personales siguen necesitando que esté aplicada `OperatorReportViews`. El visor y las tres nuevas fuentes requieren `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
+
+Los cambios visibles al operador y los pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.1.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.1.0.md).
 
 ## Cómo agregar una fuente de reporte
 

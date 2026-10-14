@@ -106,6 +106,9 @@ public partial class InventoryWindow : Window
         ToggleProductActiveButton.IsEnabled = item is not null;
         ToggleProductActiveButton.Content = item?.Active == true ? "Desactivar producto" : "Reactivar producto";
         ChangePriceButton.IsEnabled = item?.Active == true;
+        ChangeTaxTreatmentButton.IsEnabled = item is not null;
+        TaxTreatmentStatusLabel.Text = item is null ? string.Empty : $"Impuesto: {item.TaxTreatmentLabel}";
+        ChangeTaxTreatmentButton.Content = item?.TaxTreatment == "Unclassified" ? "Asignar impuesto" : "Cambiar impuesto";
         AdjustButton.IsEnabled = item?.Active == true;
         if (item is null)
         {
@@ -213,6 +216,8 @@ public partial class InventoryWindow : Window
         EditProductButton.IsEnabled = false;
         ToggleProductActiveButton.IsEnabled = false;
         ChangePriceButton.IsEnabled = false;
+        ChangeTaxTreatmentButton.IsEnabled = false;
+        TaxTreatmentStatusLabel.Text = string.Empty;
         AdjustButton.IsEnabled = false;
     }
 
@@ -222,6 +227,16 @@ public partial class InventoryWindow : Window
         if (!item.Active) { StatusLabel.Text = "Reactiva el producto antes de cambiar su precio."; return; }
         if (new ProductPriceWindow(_viewModel, item) { Owner = this }.ShowDialog() == true)
         { StatusLabel.Text = "Precio actualizado."; await LoadAsync(); }
+    }
+
+    private async void ChangeTaxTreatment_Click(object sender, RoutedEventArgs e)
+    {
+        if (InventoryGrid.SelectedItem is not InventoryItemInfo item) { StatusLabel.Text = "Selecciona un producto."; return; }
+        if (new ProductTaxTreatmentWindow(_viewModel, item) { Owner = this }.ShowDialog() == true)
+        {
+            await LoadAsync(item.Id);
+            StatusLabel.Text = "Regla de impuesto guardada en el producto.";
+        }
     }
 
     private async void EditProduct_Click(object sender, RoutedEventArgs e)

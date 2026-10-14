@@ -1,28 +1,32 @@
 <Window x:Class="Pos.Desktop.CartLineEditWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Modificar artículo" Width="520" Height="560" MinWidth="480" MinHeight="500"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#EEF2F7">
+        Title="Modificar artículo" Width="540" Height="610" MinWidth="500" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize" Background="#EEF2F7">
     <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        <TextBlock Text="MODIFICAR ARTÍCULO" FontSize="23" FontWeight="Bold" Foreground="#173F78"/>
-        <TextBlock x:Name="ProductLabel" Grid.Row="1" Margin="0,8,0,18" FontSize="15" Foreground="#52677F" TextWrapping="Wrap"/>
-        <TextBlock Grid.Row="2" Text="Cantidad" FontWeight="SemiBold" Margin="0,0,0,5"/>
-        <TextBox x:Name="QuantityBox" Grid.Row="3" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Cantidad del artículo"/>
-        <TextBlock Grid.Row="4" Text="Precio por unidad (moneda de la venta)" FontWeight="SemiBold" Margin="0,16,0,5"/>
-        <TextBox x:Name="PriceOverrideBox" Grid.Row="5" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Precio por unidad para esta venta"/>
-        <StackPanel Grid.Row="6" Margin="0,12,0,0">
-            <TextBlock x:Name="CatalogPriceLabel" Foreground="#52677F" TextWrapping="Wrap"/>
-            <TextBlock Text="Si cambias el precio, escribe el motivo. Un administrador deberá autorizarlo con su PIN al confirmar la venta." Foreground="#52677F" TextWrapping="Wrap" Margin="0,8,0,0"/>
-            <TextBlock Text="Motivo del precio especial" FontWeight="SemiBold" Margin="0,14,0,5"/>
-            <TextBox x:Name="PriceOverrideReasonBox" Height="72" Padding="9" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Motivo del precio especial"/>
-            <TextBlock x:Name="ErrorLabel" Foreground="#B32D3A" TextWrapping="Wrap" Margin="0,8,0,0"/>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="MODIFICAR ARTÍCULO" FontSize="23" FontWeight="Bold" Foreground="#173F78"/>
+            <TextBlock x:Name="ProductLabel" Margin="0,7,0,0" FontSize="15" Foreground="#52677F" TextWrapping="Wrap"/>
         </StackPanel>
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+        <ScrollViewer Grid.Row="1" Margin="0,18,0,8" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="Cantidad" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                <TextBox x:Name="QuantityBox" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Cantidad del artículo"/>
+                <TextBlock Text="Nivel de precio del catálogo" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                <ComboBox x:Name="PriceTierBox" Height="40" SelectionChanged="PriceTier_SelectionChanged" AutomationProperties.Name="Nivel de precio del artículo"/>
+                <TextBlock Text="Precio por unidad (moneda de la venta)" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                <TextBox x:Name="PriceOverrideBox" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Precio por unidad para esta venta"/>
+                <TextBlock x:Name="CatalogPriceLabel" Foreground="#52677F" TextWrapping="Wrap" Margin="0,7,0,0"/>
+                <TextBlock x:Name="TaxPreviewLabel" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                <TextBlock Text="Si escribes un precio distinto del nivel elegido, indica el motivo. Un administrador deberá autorizarlo con su PIN." Foreground="#52677F" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                <TextBlock Text="Motivo del precio especial" FontWeight="SemiBold" Margin="0,14,0,5"/>
+                <TextBox x:Name="PriceOverrideReasonBox" Height="68" Padding="9" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Motivo del precio especial"/>
+                <TextBlock x:Name="ErrorLabel" Foreground="#B32D3A" TextWrapping="Wrap" Margin="0,8,0,0"/>
+            </StackPanel>
+        </ScrollViewer>
+        <TextBlock Grid.Row="2" Text="Precio 2 y Precio 3 solo aparecen si están configurados para este producto." Foreground="#52677F" FontSize="11" TextWrapping="Wrap"/>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancelar" Width="110" Height="40" Margin="0,0,8,0" IsCancel="True" Click="Cancel_Click"/>
             <Button Content="Guardar" Width="120" Height="40" Background="#2858A2" Foreground="White" FontWeight="Bold" IsDefault="True" Click="Save_Click" AutomationProperties.Name="Guardar cambios del artículo"/>
         </StackPanel>

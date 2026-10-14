@@ -49,6 +49,7 @@
         </Border>
         <DockPanel Grid.Row="4" Margin="0,10,0,0">
             <TextBlock x:Name="StatusLabel" Foreground="#52677F" FontSize="14" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <Button x:Name="OpeningBalanceButton" DockPanel.Dock="Right" Content="Registrar saldo inicial" Width="210" Height="42" Margin="0,0,8,0" FontSize="14" Click="OpeningBalance_Click" ToolTip="Solo disponible si la cuenta no tiene movimientos"/>
             <Button DockPanel.Dock="Right" Content="Cerrar" Width="100" Height="42" FontSize="14" Click="Close_Click"/>
         </DockPanel>
     </Grid>

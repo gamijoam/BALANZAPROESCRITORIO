@@ -32,6 +32,7 @@ public partial class ReceivablesWindow : Window
             AvailableCreditLabel.Text = FormatMoney("USD", Math.Max(0m, _account.CreditLimit - _account.Balance));
             EntriesGrid.ItemsSource = CreateRows(_account);
             RecordPaymentButton.IsEnabled = _account.Balance > 0m;
+            OpeningBalanceButton.IsEnabled = _account.Entries.Count == 0;
             RefreshPaymentPreview();
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
@@ -45,12 +46,12 @@ public partial class ReceivablesWindow : Window
         {
             var isCharge = string.Equals(entry.EntryType, "Charge", StringComparison.OrdinalIgnoreCase);
             balance += isCharge ? entry.Amount : -entry.Amount;
-            var reference = entry.SaleId is Guid saleId
+            var reference = entry.IsOpeningBalance ? entry.Reason : entry.SaleId is Guid saleId
                 ? $"Venta {saleId.ToString("N")[..8].ToUpperInvariant()}"
                 : isCharge ? "Cargo de crédito" : string.IsNullOrWhiteSpace(entry.Reason) ? "—" : entry.Reason;
             rows.Add(new ReceivableMovementRow(
                 entry.OccurredAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
-                isCharge ? "Venta a crédito" : "Abono",
+                entry.IsOpeningBalance ? "Saldo inicial" : isCharge ? "Venta a crédito" : "Abono",
                 reference,
                 isCharge ? ReceivableSaleItemPresentation.Format(entry.SaleItems) : "—",
                 FormatMovementAmount(entry),
@@ -109,6 +110,28 @@ public partial class ReceivablesWindow : Window
             await LoadAsync();
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); RecordPaymentButton.IsEnabled = _account.Balance > 0m; }
+    }
+
+    private async void OpeningBalance_Click(object sender, RoutedEventArgs e)
+    {
+        if (_account is null || _account.Entries.Count != 0)
+        { StatusLabel.Text = "El saldo inicial solo se registra en una cuenta sin movimientos."; return; }
+        var dialog = new OpeningBalanceWindow { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        OpeningBalanceButton.IsEnabled = false;
+        try
+        {
+            var idempotencyKey = $"opening-balance:{_customer.Id:N}:{Guid.NewGuid():N}";
+            await _viewModel.RecordReceivableOpeningBalanceAsync(_customer.Id, dialog.AmountUsd, dialog.Reason, idempotencyKey);
+            StatusLabel.Text = "Saldo inicial registrado en la cuenta del cliente.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = PosUserMessage.ForException(ex);
+            OpeningBalanceButton.IsEnabled = _account?.Entries.Count == 0;
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();

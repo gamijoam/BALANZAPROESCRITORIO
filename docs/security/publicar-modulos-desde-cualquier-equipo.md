@@ -12,9 +12,9 @@ La firma sigue siendo RSA-PSS con SHA-256, igual que el verificador actual. Los 
 
 1. Integra en `main` el código del módulo que quieres publicar.
 2. En GitHub abre **Actions → Publicar módulo firmado → Run workflow**.
-3. Deja seleccionada la rama `main`. Elige un módulo individual o **all** para publicar juntos los tres módulos distribuibles vigentes: `warehouses`, `thermal-receipts` y `advanced-reports`.
+3. Deja seleccionada la rama `main`. Elige un módulo individual o **all** para publicar juntos los cuatro módulos distribuibles vigentes: `warehouses`, `thermal-receipts`, `advanced-reports` y `finance`.
 4. Si GitHub muestra una aprobación para `module-signing`, revisa el módulo y aprueba el trabajo de firma.
-5. Descarga el artefacto `signed-module-output`. Incluye un ZIP firmado y su SHA-256 por cada módulo elegido, además de `publisher-public.pem`. La opción **all** valida que estén los tres antes de firmar.
+5. Descarga el artefacto `signed-module-output`. Incluye un ZIP firmado y su SHA-256 por cada módulo elegido, además de `publisher-public.pem`. La opción **all** valida que estén los cuatro antes de firmar.
 6. En el POS, instala el paquete desde **Administración → Módulos**. El publicador nuevo se incluye automáticamente en el paquete Windows x64 y se agrega al anillo sin borrar las claves existentes. El servidor debe reiniciarse para volver a cargar los módulos.
 
 El flujo manual rechaza ejecuciones desde ramas que no sean `main`. El runner de firma no descarga ni compila el repositorio: solo recibe el artefacto temporal y ejecuta el publicador Linux autónomo que compiló Windows.

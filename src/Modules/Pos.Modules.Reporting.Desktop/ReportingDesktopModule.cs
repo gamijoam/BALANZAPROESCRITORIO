@@ -29,6 +29,19 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
              Decimal("usd_esperado", "USD esperado"), Decimal("usd_contado", "USD contado"), Decimal("usd_diferencia", "Diferencia USD"),
              Decimal("ves_esperado", "VES esperado"), Decimal("ves_contado", "VES contado"), Decimal("ves_diferencia", "Diferencia VES")], LoadCashSessions,
             supportsDateRange: true));
+        registry.RegisterReportSource(Source("reports.cash.methods", "Cobros y reintegros por caja", "Reports.View",
+            [Text("caja", "Turno / caja"), Date("apertura", "Apertura"), Text("operador", "Responsable"), Text("estado", "Estado"),
+             Text("operacion", "Operación"), Text("metodo", "Método"), Text("moneda", "Moneda"), Decimal("importe", "Importe")], LoadCashMethods,
+            supportsDateRange: true));
+        registry.RegisterReportSource(Source("reports.receivables.balances", "Saldos por cobrar", "Reports.View",
+            [Text("cliente", "Cliente"), Decimal("saldo_usd", "Saldo USD"), Decimal("equivalente_ves", "Equivalente VES"),
+             Decimal("tasa_actual", "Tasa actual USD/VES"), Decimal("limite_usd", "Límite USD"),
+             Decimal("disponible_usd", "Crédito disponible USD"), Date("ultimo_movimiento", "Último movimiento")], LoadReceivableBalances));
+        registry.RegisterReportSource(Source("reports.receivables.movements", "Movimientos de cuentas por cobrar", "Reports.View",
+            [Date("fecha", "Fecha"), Text("cliente", "Cliente"), Text("tipo", "Tipo"), Decimal("importe_usd", "Importe USD"),
+             Decimal("importe_original", "Importe original"), Text("moneda", "Moneda original"), Decimal("tasa", "Tasa aplicada"),
+             Text("referencia", "Referencia"), Text("venta", "Venta"), Text("operador", "Operador"), Text("terminal", "Terminal")],
+            LoadReceivableMovements, supportsDateRange: true));
         registry.RegisterReportSource(Source("reports.inventory.products", "Existencias por producto", "Reports.Inventory",
             [Text("sku", "Código"), Text("producto", "Producto"), Decimal("existencia", "Existencia"), Decimal("precio", "Precio"), Text("moneda", "Moneda")], LoadInventory));
         registry.RegisterReportSource(Source("reports.inventory.movements", "Movimientos de inventario", "Reports.View",
@@ -93,6 +106,58 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
                 ("usd_contado", row.CountedUsd), ("usd_diferencia", row.VarianceUsd), ("ves_esperado", row.ExpectedVes),
                 ("ves_contado", row.CountedVes), ("ves_diferencia", row.VarianceVes))));
             if (report.Sessions.Count == 0 || page * report.PageSize >= report.TotalCount) break;
+        }
+        return new(rows);
+    }
+
+    private static async Task<PosDesktopReportResult> LoadCashMethods(PosDesktopModuleContext context, PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var api = RequireReports(context); var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var status = Filter(query, "status");
+        for (var page = 1; ; page++)
+        {
+            var report = await api.GetCashSessionReportPageAsync(From(query), To(query), status, page, 250, ct);
+            foreach (var session in report.Sessions)
+            foreach (var payment in session.Payments)
+                rows.Add(Row(("caja", session.Id.ToString("N")), ("apertura", session.OpenedAtUtc),
+                    ("operador", session.OperatorName), ("estado", session.StatusLabel), ("operacion", payment.Operation),
+                    ("metodo", payment.Method), ("moneda", payment.Currency), ("importe", payment.Amount)));
+            if (report.Sessions.Count == 0 || page * report.PageSize >= report.TotalCount) break;
+        }
+        return new(rows);
+    }
+
+    private static async Task<PosDesktopReportResult> LoadReceivableBalances(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var api = RequireReports(context); var rows = new List<IReadOnlyDictionary<string, object?>>();
+        for (var page = 1; ; page++)
+        {
+            var report = await api.GetReceivableBalanceReportPageAsync(page, 250, ct);
+            rows.AddRange(report.Customers.Select(customer => Row(("cliente", customer.CustomerName),
+                ("saldo_usd", customer.BalanceUsd), ("equivalente_ves", customer.BalanceVesEquivalent),
+                ("tasa_actual", report.CurrentUsdToVesRate), ("limite_usd", customer.CreditLimitUsd),
+                ("disponible_usd", customer.AvailableCreditUsd), ("ultimo_movimiento", customer.LastMovementAtUtc))));
+            if (report.Customers.Count == 0 || page * report.PageSize >= report.TotalCount) break;
+        }
+        return new(rows);
+    }
+
+    private static async Task<PosDesktopReportResult> LoadReceivableMovements(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var api = RequireReports(context); var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var currency = Filter(query, "currency");
+        for (var page = 1; ; page++)
+        {
+            var report = await api.GetReceivableMovementReportPageAsync(From(query), To(query), currency, page, 250, ct);
+            rows.AddRange(report.Movements.Select(movement => Row(("fecha", movement.OccurredAtUtc),
+                ("cliente", movement.CustomerName), ("tipo", movement.EntryType == "Charge" ? "Cargo" : "Abono"),
+                ("importe_usd", movement.AmountUsd), ("importe_original", movement.OriginalAmount),
+                ("moneda", movement.OriginalCurrency ?? "USD"), ("tasa", movement.AppliedExchangeRate),
+                ("referencia", movement.Reference), ("venta", movement.SaleId?.ToString("N")),
+                ("operador", movement.OperatorName), ("terminal", movement.TerminalId.ToString("N")[..8]))));
+            if (report.Movements.Count == 0 || page * report.PageSize >= report.TotalCount) break;
         }
         return new(rows);
     }

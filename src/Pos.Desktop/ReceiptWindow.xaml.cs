@@ -42,7 +42,11 @@ public partial class ReceiptWindow : Window
             var sourcePrice = line.OriginalCurrency == receipt.Currency
                 ? string.Empty
                 : $"\n{line.OriginalCurrency} {line.OriginalUnitPrice:N2} → {receipt.Currency} {line.UnitPrice:N2}";
-            row.Cells.Add(new TableCell(new Paragraph(new Run($"{line.Description}\n{line.Sku}{sourcePrice}"))));
+            var tierLabel = line.PriceTier.Replace("Price", "Precio ");
+            var taxDetail = line.TaxTreatment == "NotCaptured"
+                ? "\nImpuesto: no registrado en esta venta antigua"
+                : $"\n{line.TaxTreatmentLabel}: {receipt.Currency} {line.TaxAmount:N2}";
+            row.Cells.Add(new TableCell(new Paragraph(new Run($"{line.Description}\n{line.Sku} · {tierLabel}{sourcePrice}{taxDetail}"))));
             row.Cells.Add(new TableCell(new Paragraph(new Run(PosNumberFormat.FormatQuantity(line.Quantity)))));
             row.Cells.Add(new TableCell(new Paragraph(new Run(PosNumberFormat.FormatAmount(line.Total))))); group.Rows.Add(row);
         }

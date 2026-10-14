@@ -51,28 +51,28 @@ public sealed class PosViewModelTests
     public void Adding_same_product_twice_increments_one_cart_line_and_decimal_total()
     {
         var viewModel = new PosViewModel(new FakePosApiClient());
-        var product = new ProductInfo(Guid.NewGuid(), "SKU-1", "Arroz", 12.35m, "VES");
+        var product = ClassifiedProduct(Guid.NewGuid(), "SKU-1", "Arroz", 12.35m, "VES");
 
         viewModel.AddProduct(product);
         viewModel.AddProduct(product);
 
         var line = Assert.Single(viewModel.CartLines);
         Assert.Equal(2m, line.Quantity);
-        Assert.Equal(24.70m, line.LineTotal);
+        Assert.Equal(28.65m, line.LineTotal);
         Assert.Equal(2m, viewModel.ItemCount);
-        Assert.Equal(24.70m, viewModel.Total);
+        Assert.Equal(28.65m, viewModel.Total);
     }
 
     [Fact]
     public void Editing_cart_quantity_directly_refreshes_sale_total_and_item_count()
     {
         var viewModel = new PosViewModel(new FakePosApiClient());
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "INLINE-QTY", "Producto", 10m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "INLINE-QTY", "Producto", 10m, "VES"));
         var line = Assert.Single(viewModel.CartLines);
 
         line.Quantity = 3m;
 
-        Assert.Equal(30m, viewModel.Total);
+        Assert.Equal(34.80m, viewModel.Total);
         Assert.Equal(3m, viewModel.ItemCount);
     }
 
@@ -82,12 +82,12 @@ public sealed class PosViewModelTests
         var api = new FakePosApiClient { FailFirstCheckout = false };
         var viewModel = new PosViewModel(api);
         await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-EDIT", "Artículo", 10m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-EDIT", "Artículo", 10m, "VES"));
         var line = Assert.Single(viewModel.CartLines);
 
         Assert.True(viewModel.EditCartLine(line, 2m, 8m, "Precio acordado"));
-        Assert.Equal(16m, viewModel.Total);
-        await viewModel.CompleteSaleAsync([new SalePaymentInput("cash", 16m, "VES")]);
+        Assert.Equal(18.56m, viewModel.Total);
+        await viewModel.CompleteSaleAsync([new SalePaymentInput("cash", 18.56m, "VES")]);
 
         var submittedLine = Assert.Single(api.LastLines!);
         Assert.Equal(2m, submittedLine.Quantity);
@@ -99,7 +99,7 @@ public sealed class PosViewModelTests
     public void Adding_a_product_reported_with_zero_stock_is_rejected()
     {
         var viewModel = new PosViewModel(new FakePosApiClient());
-        var product = new ProductInfo(Guid.NewGuid(), "SKU-EMPTY", "Agotado", 12m, "VES", StockQuantity: 0m);
+        var product = ClassifiedProduct(Guid.NewGuid(), "SKU-EMPTY", "Agotado", 12m, "VES", stockQuantity: 0m);
 
         var added = viewModel.AddProduct(product);
 
@@ -109,10 +109,45 @@ public sealed class PosViewModelTests
     }
 
     [Fact]
+    public void Product_without_tax_classification_is_blocked_before_it_enters_the_cart()
+    {
+        var viewModel = new PosViewModel(new FakePosApiClient());
+        var product = new ProductInfo(Guid.NewGuid(), "PENDING-TAX", "Artículo pendiente", 12m, "VES");
+
+        var added = viewModel.AddProduct(product);
+
+        Assert.False(added);
+        Assert.Empty(viewModel.CartLines);
+        Assert.Contains("pendiente", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Selected_catalog_tier_and_tax_are_reflected_in_total_and_sale_payload()
+    {
+        var api = new FakePosApiClient { FailFirstCheckout = false };
+        var viewModel = new PosViewModel(api);
+        await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
+        var product = ClassifiedProduct(Guid.NewGuid(), "MULTI-PRICE", "Producto con niveles", 10m, "VES",
+            price2: 8m, price3: 5m, taxTreatment: "Taxable8");
+
+        Assert.True(viewModel.AddProduct(product));
+        var line = Assert.Single(viewModel.CartLines);
+        Assert.True(viewModel.EditCartLine(line, 2m, "Price2", null, null));
+
+        Assert.Equal(8m, line.CatalogUnitPrice);
+        Assert.Equal(1.28m, line.TaxAmount);
+        Assert.Equal(17.28m, viewModel.Total);
+        await viewModel.CompleteSaleAsync([new SalePaymentInput("cash", 17.28m, "VES")]);
+
+        var submitted = Assert.Single(api.LastLines!);
+        Assert.Equal("Price2", submitted.PriceTier);
+    }
+
+    [Fact]
     public void Removing_last_unit_removes_line_and_resets_total()
     {
         var viewModel = new PosViewModel(new FakePosApiClient());
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-2", "Leche", 4.50m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-2", "Leche", 4.50m, "VES"));
         var line = Assert.Single(viewModel.CartLines);
 
         viewModel.RemoveProduct(line);
@@ -126,8 +161,8 @@ public sealed class PosViewModelTests
     public void Removing_the_previewed_product_switches_preview_to_last_remaining_cart_product()
     {
         var viewModel = new PosViewModel(new FakePosApiClient());
-        var first = new ProductInfo(Guid.NewGuid(), "SKU-1", "Arroz", 12.35m, "VES");
-        var second = new ProductInfo(Guid.NewGuid(), "SKU-2", "Leche", 4.50m, "VES");
+        var first = ClassifiedProduct(Guid.NewGuid(), "SKU-1", "Arroz", 12.35m, "VES");
+        var second = ClassifiedProduct(Guid.NewGuid(), "SKU-2", "Leche", 4.50m, "VES");
         viewModel.AddProduct(first);
         viewModel.AddProduct(second);
 
@@ -147,15 +182,15 @@ public sealed class PosViewModelTests
         var viewModel = new PosViewModel(api);
         await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
 
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "USD-1", "Cable USD", 2m, "USD"));
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "VES-1", "Cable VES", 80m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "USD-1", "Cable USD", 2m, "USD"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "VES-1", "Cable VES", 80m, "VES"));
 
         Assert.Equal(2, viewModel.CartLines.Count);
         Assert.Equal("USD", viewModel.Currency);
-        Assert.Equal(4m, viewModel.Total);
+        Assert.Equal(4.64m, viewModel.Total);
         Assert.Equal(2m, viewModel.CartLines[1].UnitPrice);
         Assert.Equal("USD 2,00", viewModel.ReferenceCurrentPriceLabel);
-        Assert.Equal("REF USD 4,00", viewModel.ReferenceTotalLabel);
+        Assert.Equal("REF USD 4,64", viewModel.ReferenceTotalLabel);
     }
 
     [Fact]
@@ -164,19 +199,19 @@ public sealed class PosViewModelTests
         var api = new FakePosApiClient();
         var viewModel = new PosViewModel(api);
         await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-3", "Café", 10m, "VES"));
-        var originalPayments = new[] { new SalePaymentInput("cash", 10m, "VES") };
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-3", "Café", 10m, "VES"));
+        var originalPayments = new[] { new SalePaymentInput("cash", 11.60m, "VES") };
 
         await Assert.ThrowsAsync<HttpRequestException>(() => viewModel.CompleteSaleAsync(originalPayments));
         var lockedPayments = Assert.Single(viewModel.PendingPayments!);
         Assert.False(viewModel.CanEditCart);
-        Assert.Equal(10m, lockedPayments.Amount);
+        Assert.Equal(11.60m, lockedPayments.Amount);
 
         var receipt = await viewModel.CompleteSaleAsync([new SalePaymentInput("transfer", 10m, "VES")]);
 
         Assert.Equal(api.FirstIdempotencyKey, api.LastIdempotencyKey);
         Assert.Equal("cash", Assert.Single(api.LastPayments!).Method);
-        Assert.Equal(10m, receipt.Total);
+        Assert.Equal(11.60m, receipt.Total);
         Assert.Empty(viewModel.CartLines);
         Assert.False(viewModel.HasPendingCheckout);
     }
@@ -187,7 +222,7 @@ public sealed class PosViewModelTests
         var api = new FakePosApiClient { CashCurrency = "VES", CurrentUsdToVesRate = 875.65m, FailFirstCheckout = false };
         var viewModel = new PosViewModel(api);
         await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "VES-1", "Artículo VES", 875.65m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "VES-1", "Artículo VES", 875.65m, "VES", taxTreatment: "Taxable0"));
         var customer = new CustomerInfo(Guid.NewGuid(), "Gabriel", null, null, "USD", 100m);
         viewModel.SelectCustomer(customer);
 
@@ -195,6 +230,26 @@ public sealed class PosViewModelTests
 
         Assert.Equal(customer.Id, api.LastCustomerId);
         Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), api.LastExchangeRateId);
+    }
+
+    [Fact]
+    public async Task Ves_sale_accepts_usd_credit_tender_and_keeps_customer_and_rate_snapshot()
+    {
+        var api = new FakePosApiClient { CashCurrency = "VES", CurrentUsdToVesRate = 875.65m, FailFirstCheckout = false };
+        var viewModel = new PosViewModel(api);
+        await viewModel.LoginAsync("cashier", "1234", Guid.NewGuid());
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "VES-USD-CREDIT", "Artículo VES", 875.65m, "VES", taxTreatment: "Taxable0"));
+        var customer = new CustomerInfo(Guid.NewGuid(), "Gabriel", null, null, "USD", 100m);
+        viewModel.SelectCustomer(customer);
+
+        await viewModel.CompleteSaleAsync([new SalePaymentInput("Crédito", 1m, "USD")]);
+
+        Assert.Equal(customer.Id, api.LastCustomerId);
+        Assert.Equal(Guid.Parse("22222222-2222-2222-2222-222222222222"), api.LastExchangeRateId);
+        var payment = Assert.Single(api.LastPayments!);
+        Assert.Equal("Crédito", payment.Method);
+        Assert.Equal(1m, payment.Amount);
+        Assert.Equal("USD", payment.Currency);
     }
 
     [Fact]
@@ -208,7 +263,7 @@ public sealed class PosViewModelTests
         Assert.Equal(0, api.LogoutCount);
 
         await viewModel.CloseCashSessionAsync(0m, 0m);
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => viewModel.LogoutAsync());
         Assert.Equal(0, api.LogoutCount);
 
@@ -243,7 +298,7 @@ public sealed class PosViewModelTests
         Assert.Equal(1, api.CashSessionReleaseCount);
         Assert.Equal(1, api.CashSessionClaimCount);
 
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
         await Assert.ThrowsAsync<InvalidOperationException>(() => viewModel.SwitchOperatorAsync());
         Assert.Equal(1, api.LogoutCount);
         Assert.True(viewModel.IsAuthenticated);
@@ -259,7 +314,7 @@ public sealed class PosViewModelTests
         Assert.Equal("Cambiar operador", viewModel.OperatorSessionActionLabel);
         Assert.Contains("manteniendo abierto el turno", viewModel.OperatorSessionActionToolTip);
 
-        viewModel.AddProduct(new ProductInfo(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
+        viewModel.AddProduct(ClassifiedProduct(Guid.NewGuid(), "SKU-1", "Arroz", 12m, "VES"));
         Assert.False(viewModel.CanUseSessionAction);
         Assert.Contains("retira los artículos", viewModel.OperatorSessionActionToolTip);
         viewModel.RemoveProduct(viewModel.CartLines.Single());
@@ -305,6 +360,10 @@ public sealed class PosViewModelTests
         Assert.Equal(0, api.CashSessionReleaseCount);
         Assert.Equal("cashier", api.CurrentCashSessionInfo?.ActiveOperatorName);
     }
+
+    private static ProductInfo ClassifiedProduct(Guid id, string sku, string name, decimal unitPrice, string currency,
+        bool hasImage = false, decimal? stockQuantity = null, decimal? price2 = null, decimal? price3 = null, string taxTreatment = "Taxable16")
+        => new(id, sku, name, unitPrice, currency, hasImage, stockQuantity, price2, price3, taxTreatment);
 
     private sealed class FakePosApiClient : IPosApiClient
     {

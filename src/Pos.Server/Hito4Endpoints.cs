@@ -9,6 +9,8 @@ using Pos.Infrastructure.Identity;
 using Pos.Infrastructure.Modules;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.ProductImages;
+using Pos.Infrastructure.Receivables;
+using Pos.Infrastructure.Reporting;
 using Pos.Shared.Contracts;
 
 internal static class Hito4Endpoints
@@ -21,21 +23,50 @@ internal static class Hito4Endpoints
             if (access is null) return PermissionFailure(context);
             var sku = (request.Sku ?? string.Empty).Trim(); var name = (request.Name ?? string.Empty).Trim();
             var currency = ParseCurrency(request.Currency);
+            Pos.Domain.Catalog.TaxTreatment taxTreatment;
+            try { taxTreatment = request.TaxTreatment is null ? Pos.Domain.Catalog.TaxTreatment.Unclassified : Pos.Domain.Catalog.TaxTreatment.FromCode(request.TaxTreatment); }
+            catch (ArgumentException) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["taxTreatment"] = ["Selecciona un tratamiento fiscal válido."] }); }
             if (sku.Length is < 1 or > 64 || name.Length is < 2 or > 200 || currency is null || request.UnitPrice < 0m ||
+                decimal.Round(request.UnitPrice, 4) != request.UnitPrice || request.Price2 is < 0m || request.Price3 is < 0m ||
+                request.Price2 is decimal price2 && decimal.Round(price2, 4) != price2 ||
+                request.Price3 is decimal price3 && decimal.Round(price3, 4) != price3 ||
                 request.InitialStock < 0m || decimal.Round(request.InitialStock, 3) != request.InitialStock)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["SKU, name, currency, price or opening stock is invalid."] });
             var id = Guid.NewGuid(); var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
-            db.Products.Add(new ProductRecord { Id = id, Sku = sku, Name = name, UnitPrice = request.UnitPrice, Currency = currency, CreatedAtUtc = now });
+            db.Products.Add(new ProductRecord { Id = id, Sku = sku, Name = name, UnitPrice = request.UnitPrice,
+                Price2 = request.Price2, Price3 = request.Price3, TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
             db.Stocks.Add(new StockRecord { ProductId = id, Quantity = request.InitialStock });
             if (request.InitialStock > 0m)
                 db.StockMovements.Add(new StockMovementRecord { Id = Guid.NewGuid(), ProductId = id, QuantityDelta = request.InitialStock, Reason = "Existencia inicial", ActorId = access.OperatorId, TerminalId = access.TerminalId, OccurredAtUtc = now });
-            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.created", new { id, sku, name, request.UnitPrice, currency, request.InitialStock }, now));
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.created", new { id, sku, name, request.UnitPrice,
+                request.Price2, request.Price3, taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
             try { await db.SaveChangesAsync(ct); await WarehouseStockBridge.AddProductToWarehousesAsync(db, id, ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
             await tx.CommitAsync(ct);
-            return Results.Created($"/api/v1/products/{id}", new { id, sku, name, request.UnitPrice, currency, request.InitialStock, hasImage = false });
+            return Results.Created($"/api/v1/products/{id}", new { id, sku, name, request.UnitPrice, request.Price2, request.Price3,
+                taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
+        });
+
+        app.MapPatch("/api/v1/products/{productId:guid}/tax-treatment", async (Guid productId, HttpContext context, PosDbContext db,
+            AuthenticationService auth, ChangeProductTaxTreatmentRequest request, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
+            if (access is null) return PermissionFailure(context);
+            var product = await db.Products.SingleOrDefaultAsync(x => x.Id == productId, ct);
+            if (product is null) return Results.NotFound();
+            Pos.Domain.Catalog.TaxTreatment treatment;
+            try { treatment = Pos.Domain.Catalog.TaxTreatment.FromCode(request.TaxTreatment); }
+            catch (ArgumentException) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["taxTreatment"] = ["Selecciona un tratamiento fiscal válido."] }); }
+            var previous = product.TaxTreatment;
+            if (previous == treatment.Code) return Results.Ok(new { productId, taxTreatment = previous, changed = false });
+            product.TaxTreatment = treatment.Code;
+            var now = DateTime.UtcNow;
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.tax_treatment_changed",
+                new { productId, previous, current = treatment.Code }, now));
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { productId, taxTreatment = treatment.Code, changed = true });
         });
 
         app.MapPatch("/api/v1/products/{productId:guid}", async (Guid productId, HttpContext context, PosDbContext db, AuthenticationService auth, UpdateProductRequest request, CancellationToken ct) =>
@@ -119,14 +150,20 @@ internal static class Hito4Endpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["price"] = ["A nonnegative price (up to four decimals) and reason are required."] });
             var product = await db.Products.SingleOrDefaultAsync(x => x.Id == productId && x.Active, ct);
             if (product is null) return Results.NotFound();
-            var oldPrice = product.UnitPrice; var now = DateTime.UtcNow;
+            var priceTier = ParsePriceTier(request.PriceTier);
+            if (priceTier is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["priceTier"] = ["Selecciona un nivel de precio válido."] });
+            var oldPrice = priceTier switch { "Price1" => product.UnitPrice, "Price2" => product.Price2, _ => product.Price3 };
+            var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
-            product.UnitPrice = request.NewPrice;
-            var history = new PriceHistoryRecord { Id = Guid.NewGuid(), ProductId = productId, OldPrice = oldPrice, NewPrice = request.NewPrice, Currency = product.Currency, Reason = reason, ActorId = access.OperatorId, ChangedAtUtc = now };
+            if (priceTier == "Price1") product.UnitPrice = request.NewPrice;
+            else if (priceTier == "Price2") product.Price2 = request.NewPrice;
+            else product.Price3 = request.NewPrice;
+            var history = new PriceHistoryRecord { Id = Guid.NewGuid(), ProductId = productId, OldPrice = oldPrice,
+                NewPrice = request.NewPrice, Currency = product.Currency, PriceTier = priceTier, Reason = reason, ActorId = access.OperatorId, ChangedAtUtc = now };
             db.PriceHistory.Add(history);
-            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.price_changed", new { productId, oldPrice, newPrice = request.NewPrice, product.Currency, reason }, now));
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.price_changed", new { productId, priceTier, oldPrice, newPrice = request.NewPrice, product.Currency, reason }, now));
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
-            return Results.Ok(new { productId, oldPrice, newPrice = product.UnitPrice, product.Currency, reason, history.ChangedAtUtc });
+            return Results.Ok(new { productId, oldPrice, newPrice = request.NewPrice, priceTier, product.Currency, reason, history.ChangedAtUtc });
         });
         app.MapPatch("/api/v1/products/{productId:guid}/active", async (Guid productId, HttpContext context, PosDbContext db, AuthenticationService auth, SetActiveRequest request, CancellationToken ct) =>
         {
@@ -147,7 +184,7 @@ internal static class Hito4Endpoints
             var access = await AuthorizedAsync(context, auth, Permission.ChangePrice, ct);
             if (access is null) return PermissionFailure(context);
             return Results.Ok(await db.PriceHistory.AsNoTracking().Where(x => x.ProductId == productId).OrderByDescending(x => x.ChangedAtUtc).Take(100)
-                .Select(x => new { x.Id, x.OldPrice, x.NewPrice, x.Currency, x.Reason, x.ActorId, x.ChangedAtUtc }).ToListAsync(ct));
+                .Select(x => new { x.Id, x.OldPrice, x.NewPrice, x.Currency, x.PriceTier, x.Reason, x.ActorId, x.ChangedAtUtc }).ToListAsync(ct));
         });
 
         app.MapGet("/api/v1/exchange-rates", async (HttpContext context, PosDbContext db, AuthenticationService auth, string? from, string? to, CancellationToken ct) =>
@@ -297,7 +334,7 @@ internal static class Hito4Endpoints
             var entriesWithSaleDetails = entries.Select(entry => new
             {
                 entry.Id, entry.CustomerId, entry.SaleId, entry.EntryType, entry.Amount, entry.Currency,
-                entry.Reason, entry.ActorId, entry.TerminalId, entry.OccurredAtUtc, entry.OriginalAmount,
+                entry.Reason, entry.IsOpeningBalance, entry.ActorId, entry.TerminalId, entry.OccurredAtUtc, entry.OriginalAmount,
                 entry.OriginalCurrency, entry.AppliedExchangeRate,
                 saleItems = entry.SaleId is Guid saleId && saleItems.TryGetValue(saleId, out var items) ? items : []
             }).ToArray();
@@ -329,6 +366,34 @@ internal static class Hito4Endpoints
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "receivable.payment", new { customerId, originalAmount = request.Amount, originalCurrency = paymentCurrency, amountUsd = paymentUsd, appliedExchangeRate = entry.AppliedExchangeRate, reference }, DateTime.UtcNow));
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
             return Results.Created($"/api/v1/customers/{customerId}/receivables/{entry.Id}", new { entry.Id, entry.Amount, entry.Currency, entry.OriginalAmount, entry.OriginalCurrency, entry.AppliedExchangeRate, balance = balance - entry.Amount });
+        });
+
+        app.MapPost("/api/v1/customers/{customerId:guid}/receivables/opening-balance", async (Guid customerId, HttpContext context,
+            PosDbContext db, AuthenticationService auth, RecordReceivableOpeningBalanceRequest request, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ManageReceivables, ct);
+            if (access is null) return PermissionFailure(context);
+            var reason = (request.Reason ?? string.Empty).Trim();
+            var key = (request.IdempotencyKey ?? string.Empty).Trim();
+            if (request.AmountUsd <= 0m || decimal.Round(request.AmountUsd, 4, MidpointRounding.AwayFromZero) != request.AmountUsd ||
+                reason.Length is < 3 or > 250 || key.Length is < 1 or > 128)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["openingBalance"] = ["El saldo debe ser positivo, usar máximo cuatro decimales e incluir un motivo y una clave de carga."] });
+
+            try
+            {
+                var result = await new ReceivableOpeningBalanceService(db).RecordAsync(customerId, request.AmountUsd, reason,
+                    key, access.OperatorId, access.TerminalId, ct);
+                var response = new { id = result.EntryId, amount = result.Amount, currency = "USD", replayed = result.Replayed };
+                return result.Replayed
+                    ? Results.Ok(response)
+                    : Results.Created($"/api/v1/customers/{customerId}/receivables/{result.EntryId}", response);
+            }
+            catch (ReceivableOpeningBalanceException ex) when (ex.Code == "customer_not_found")
+            { return Results.NotFound(); }
+            catch (ReceivableOpeningBalanceException ex) when (ex.Code is "opening_balance_already_exists" or "opening_balance_requires_empty_account" or "idempotency_key_reused")
+            { return Results.Conflict(new { error = ex.Code }); }
+            catch (ReceivableOpeningBalanceException ex)
+            { return Results.UnprocessableEntity(new { error = ex.Code }); }
         });
 
         app.MapPatch("/api/v1/operators/{operatorId:guid}/role", async (Guid operatorId, HttpContext context, PosDbContext db, AuthenticationService auth, ChangeOperatorRoleRequest request, CancellationToken ct) =>
@@ -404,6 +469,30 @@ internal static class Hito4Endpoints
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "operator.permissions_changed", new { operatorId, permissions = request.Permissions }, DateTime.UtcNow));
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
             return Results.Ok(new { operatorId, updated = request.Permissions.Count });
+        });
+
+        app.MapGet("/api/v1/reports/receivables/balances", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, int? page, int? pageSize, CancellationToken ct) =>
+        {
+            if (await AuthorizedAsync(context, auth, Permission.ViewReports, ct) is null) return PermissionFailure(context);
+            var result = await new ReceivablesReportQueryService(db)
+                .GetBalancePageAsync(page ?? 1, pageSize ?? 100, ct);
+            return Results.Ok(result);
+        });
+        app.MapGet("/api/v1/reports/receivables/movements", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, DateTime fromUtc, DateTime toUtc, string? currency, int? page, int? pageSize, CancellationToken ct) =>
+        {
+            if (await AuthorizedAsync(context, auth, Permission.ViewReports, ct) is null) return PermissionFailure(context);
+            if (fromUtc.Kind != DateTimeKind.Utc || toUtc.Kind != DateTimeKind.Utc || toUtc <= fromUtc ||
+                toUtc - fromUtc > TimeSpan.FromDays(92))
+                return Results.BadRequest(new { error = "invalid_report_range" });
+            var selectedCurrency = string.IsNullOrWhiteSpace(currency) || currency.Equals("Todas", StringComparison.OrdinalIgnoreCase)
+                ? null : currency.Trim().ToUpperInvariant();
+            if (selectedCurrency is not (null or "USD" or "VES"))
+                return Results.BadRequest(new { error = "invalid_currency" });
+            var result = await new ReceivablesReportQueryService(db)
+                .GetMovementPageAsync(fromUtc, toUtc, selectedCurrency, page ?? 1, pageSize ?? 100, ct);
+            return Results.Ok(result);
         });
 
         app.MapGet("/api/v1/reports/sales", async (HttpContext context, PosDbContext db, AuthenticationService auth, DateTime fromUtc, DateTime toUtc, CancellationToken ct) =>
@@ -535,6 +624,7 @@ internal static class Hito4Endpoints
                 lines = lines.Where(x => x.SaleId == s.Id).Select(x => new
                 {
                     x.Id, x.Sku, x.Description, x.Quantity, x.UnitPrice, x.LineTotal, x.OriginalCurrency, x.OriginalUnitPrice,
+                    x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount,
                     returnedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity),
                     returnableQuantity = x.Quantity - returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity)
                 }),
@@ -725,6 +815,14 @@ internal static class Hito4Endpoints
         return Enum.TryParse<Currency>(text, out var currency) && Enum.IsDefined(currency) ? currency.ToString() : null;
     }
 
+    private static string? ParsePriceTier(string? raw) => raw switch
+    {
+        "Price1" => "Price1",
+        "Price2" => "Price2",
+        "Price3" => "Price3",
+        _ => null
+    };
+
     private static SavedReportViewInfo ToSavedReportView(OperatorReportViewRecord row)
         => new(row.Id, row.ReportId, row.Name,
             JsonSerializer.Deserialize<IReadOnlyList<ReportColumnLayout>>(row.ColumnsJson) ?? [],
@@ -741,13 +839,16 @@ internal static class Hito4Endpoints
         => new() { Id = Guid.NewGuid(), ActorId = actorId, TerminalId = terminalId, Action = action, Payload = JsonSerializer.Serialize(payload), OccurredAtUtc = occurredAtUtc };
 }
 
-public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock);
+public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock,
+    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null);
 public sealed record UpdateProductRequest(string? Sku, string? Name);
-public sealed record ChangePriceRequest(decimal NewPrice, string? Reason);
+public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1");
+public sealed record ChangeProductTaxTreatmentRequest(string? TaxTreatment);
 public sealed record SetExchangeRateRequest(string? FromCurrency, string? ToCurrency, decimal Rate, DateTimeOffset EffectiveAtUtc, string? Source);
 public sealed record CreateCustomerRequest(string? Name, string? DocumentNumber, string? Phone, string? Currency, decimal CreditLimit);
 public sealed record UpdateCustomerRequest(string? Name, string? DocumentNumber, string? Phone, decimal CreditLimit);
 public sealed record ReceivablePaymentRequest(decimal Amount, string? Currency, string? Reference, string? Reason = null);
+public sealed record RecordReceivableOpeningBalanceRequest(decimal AmountUsd, string? Reason, string? IdempotencyKey);
 public sealed record SetActiveRequest(bool Active);
 public sealed record ChangeOperatorRoleRequest(string? Role);
 public sealed record OperatorPermissionModeRequest(string Permission, string Mode);

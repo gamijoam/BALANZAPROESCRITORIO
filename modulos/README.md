@@ -8,7 +8,8 @@ Este directorio conserva los paquetes firmados que se entregan para instalar en 
 |---|---|---:|---|
 | thermal-receipts | Tickets térmicos | 1.0.0 | [Paquete, requisitos e instrucciones](thermal-receipts/1.0.0/README.md) |
 | `warehouses` | Almacenes y traslados | 1.3.3 | [Paquete e instrucciones](warehouses/1.3.3/README.md) |
-| `advanced-reports` | Reportes avanzados | 1.0.2 | [Paquete, requisitos e instrucciones](advanced-reports/1.0.2/README.md) |
+| `advanced-reports` | Reportes avanzados | 1.1.0 | [Requisitos e instrucciones; ZIP pendiente de firma](advanced-reports/1.1.0/README.md) |
+| `finance` | Compras, proveedores y cuentas por pagar | 1.0.0 | [Funciones, requisitos e instrucciones; publicación pendiente](finance/1.0.0/README.md) |
 
 ## Convenciones
 

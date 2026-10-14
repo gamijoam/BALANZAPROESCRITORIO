@@ -96,10 +96,12 @@ public partial class ProductSelectionWindow : Window
     private void ProductsList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         var entry = ProductsList.SelectedItem as ProductSelectionEntry;
-        AddProductButton.IsEnabled = entry?.Product.StockQuantity is null or > 0m;
+        AddProductButton.IsEnabled = entry?.Product.StockQuantity is null or > 0m && entry?.Product.IsTaxClassified == true;
         SelectionStatusText.Text = entry?.Product.StockQuantity is <= 0m
             ? "Producto agotado: no se puede agregar a la venta."
-            : string.Empty;
+            : entry is not null && !entry.Product.IsTaxClassified
+                ? "Impuesto pendiente: clasifícalo en Inventario antes de venderlo."
+                : string.Empty;
     }
 
     private void AcceptSelection()
@@ -108,6 +110,11 @@ public partial class ProductSelectionWindow : Window
         if (SelectedProduct.StockQuantity is <= 0m)
         {
             SelectionStatusText.Text = "Producto agotado: no se puede agregar a la venta.";
+            return;
+        }
+        if (!SelectedProduct.IsTaxClassified)
+        {
+            SelectionStatusText.Text = "Impuesto pendiente: clasifícalo en Inventario antes de venderlo.";
             return;
         }
         DialogResult = true;

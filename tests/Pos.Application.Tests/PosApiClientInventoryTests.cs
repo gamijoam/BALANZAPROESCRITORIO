@@ -8,6 +8,82 @@ namespace Pos.Application.Tests;
 public sealed class PosApiClientInventoryTests
 {
     [Fact]
+    public async Task Product_search_maps_price_tiers_and_pending_or_classified_tax_state()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler((request, _) =>
+        {
+            Assert.Equal("/api/v1/products", request.RequestUri!.AbsolutePath);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new[] { new { id, sku = "PAN-1", name = "Harina", unitPrice = 10m, price2 = 8m, price3 = 5m,
+                    taxTreatment = "Taxable8", currency = "VES", hasImage = false, quantity = 4m } })
+            });
+        });
+        using var client = await CreateClientAsync(handler);
+
+        var product = Assert.Single(await client.SearchProductsAsync("PAN"));
+
+        Assert.Equal(8m, product.Price2);
+        Assert.Equal(5m, product.Price3);
+        Assert.Equal("Taxable8", product.TaxTreatment);
+        Assert.True(product.IsTaxClassified);
+    }
+
+    [Fact]
+    public async Task Product_create_sends_all_tax_and_price_tier_values()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler(async (request, ct) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/api/v1/products", request.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.Equal(10m, body.RootElement.GetProperty("unitPrice").GetDecimal());
+            Assert.Equal(8m, body.RootElement.GetProperty("price2").GetDecimal());
+            Assert.Equal(5m, body.RootElement.GetProperty("price3").GetDecimal());
+            Assert.Equal("Exempt", body.RootElement.GetProperty("taxTreatment").GetString());
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = JsonContent.Create(new { id, sku = "PAN-1", name = "Harina", unitPrice = 10m, price2 = 8m, price3 = 5m,
+                    taxTreatment = "Exempt", currency = "VES", initialStock = 4m, hasImage = false })
+            };
+        });
+        using var client = await CreateClientAsync(handler);
+
+        var result = await client.CreateProductAsync("PAN-1", "Harina", 10m, 8m, 5m, "Exempt", "VES", 4m);
+
+        Assert.Equal(8m, result.Price2);
+        Assert.Equal("Exempt", result.TaxTreatment);
+    }
+
+    [Fact]
+    public async Task Product_tax_and_selected_price_tier_use_their_service_endpoints()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler(async (request, ct) =>
+        {
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            if (request.RequestUri!.AbsolutePath.EndsWith("/tax-treatment", StringComparison.Ordinal))
+            {
+                Assert.Equal(HttpMethod.Patch, request.Method);
+                Assert.Equal("Taxable0", body.RootElement.GetProperty("taxTreatment").GetString());
+            }
+            else
+            {
+                Assert.Equal(HttpMethod.Post, request.Method);
+                Assert.Equal("Price3", body.RootElement.GetProperty("priceTier").GetString());
+                Assert.Equal(5m, body.RootElement.GetProperty("newPrice").GetDecimal());
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        using var client = await CreateClientAsync(handler);
+
+        await client.SetProductTaxTreatmentAsync(id, "Taxable0");
+        await client.ChangePriceAsync(id, "Price3", 5m, "Precio mayorista");
+    }
+
+    [Fact]
     public async Task Inventory_query_sends_filters_and_maps_active_state()
     {
         var id = Guid.NewGuid();

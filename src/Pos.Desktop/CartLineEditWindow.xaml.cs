@@ -6,21 +6,44 @@ namespace Pos.Desktop;
 
 public partial class CartLineEditWindow : Window
 {
-    private readonly decimal _catalogPrice;
+    private readonly CartLineViewModel _line;
+    private bool _initializing = true;
     public decimal Quantity { get; private set; }
+    public string PriceTier { get; private set; } = "Price1";
     public decimal? UnitPriceOverride { get; private set; }
     public string? PriceOverrideReason { get; private set; }
 
     public CartLineEditWindow(CartLineViewModel line)
     {
+        _line = line;
         InitializeComponent();
-        _catalogPrice = line.CatalogUnitPrice;
         ProductLabel.Text = $"{line.Product.Name} · Código {line.Product.Sku}";
         QuantityBox.Text = line.Quantity.ToString("0.###", PosNumberFormat.Culture);
+        foreach (var tier in line.AvailablePriceTiers)
+            PriceTierBox.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = tier switch { "Price1" => "Precio 1 · Principal", "Price2" => "Precio 2", _ => "Precio 3" }, Tag = tier });
+        PriceTierBox.SelectedItem = PriceTierBox.Items.Cast<System.Windows.Controls.ComboBoxItem>().First(x => Equals(x.Tag, line.PriceTier));
+        PriceTier = line.PriceTier;
         PriceOverrideBox.Text = line.UnitPrice.ToString("N2", PosNumberFormat.Culture);
         PriceOverrideReasonBox.Text = line.PriceOverrideReason ?? string.Empty;
-        CatalogPriceLabel.Text = $"Precio de catálogo: {line.SettlementCurrency} {line.CatalogUnitPrice:N2}. El precio especial se aplica solo a esta venta.";
+        UpdateCatalogLabels();
+        _initializing = false;
         Loaded += (_, _) => QuantityBox.Focus();
+    }
+
+    private void PriceTier_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_initializing || PriceTierBox.SelectedItem is not System.Windows.Controls.ComboBoxItem item || item.Tag is not string tier) return;
+        PriceTier = tier;
+        PriceOverrideBox.Text = _line.CatalogUnitPriceFor(tier).ToString("N2", PosNumberFormat.Culture);
+        PriceOverrideReasonBox.Clear();
+        UpdateCatalogLabels();
+    }
+
+    private void UpdateCatalogLabels()
+    {
+        var catalogPrice = _line.CatalogUnitPriceFor(PriceTier);
+        CatalogPriceLabel.Text = $"Catálogo · {PriceTier.Replace("Price", "Precio ")}: {_line.SettlementCurrency} {catalogPrice:N2}. El nivel se guarda con la venta.";
+        TaxPreviewLabel.Text = $"Impuesto: {_line.Product.TaxTreatmentLabel} · {_line.TaxRate:P0}. El total de línea lo incluye.";
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -45,7 +68,7 @@ public partial class CartLineEditWindow : Window
 
         var reason = PriceOverrideReasonBox.Text.Trim();
         // Typing the catalog price means “use the catalog price”, so no special authorization is needed.
-        if (price == _catalogPrice)
+        if (price == _line.CatalogUnitPriceFor(PriceTier))
         {
             UnitPriceOverride = null;
             PriceOverrideReason = null;

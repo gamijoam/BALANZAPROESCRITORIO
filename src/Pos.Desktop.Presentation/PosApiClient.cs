@@ -176,14 +176,27 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     }
 
     public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default)
+        => await CreateProductAsync(sku, name, unitPrice, null, null, "Unclassified", currency, initialStock, cancellationToken);
+
+    public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/products");
-        request.Content = JsonContent.Create(new { sku, name, unitPrice, currency, initialStock }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<ProductCreateResponse>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("The service returned an empty product response.");
-        return new InventoryItemInfo(result.Id, result.Sku, result.Name, result.UnitPrice, result.Currency, result.InitialStock, result.HasImage);
+        return new InventoryItemInfo(result.Id, result.Sku, result.Name, result.UnitPrice, result.Currency, result.InitialStock, result.HasImage)
+        { Price2 = result.Price2, Price3 = result.Price3, TaxTreatment = result.TaxTreatment };
+    }
+
+    public async Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Patch, $"api/v1/products/{productId}/tax-treatment");
+        request.Content = JsonContent.Create(new { taxTreatment }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     public async Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
@@ -292,9 +305,12 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     }
 
     public async Task ChangePriceAsync(Guid productId, decimal newPrice, string reason, CancellationToken cancellationToken = default)
+        => await ChangePriceAsync(productId, "Price1", newPrice, reason, cancellationToken);
+
+    public async Task ChangePriceAsync(Guid productId, string priceTier, decimal newPrice, string reason, CancellationToken cancellationToken = default)
     {
         using var request = CreateRequest(HttpMethod.Post, $"api/v1/products/{productId}/price-changes");
-        request.Content = JsonContent.Create(new { newPrice, reason }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { priceTier, newPrice, reason }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
@@ -365,6 +381,32 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         var path = $"api/v1/reports/cash-sessions?fromUtc={Uri.EscapeDataString(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc).ToString("O"))}&toUtc={Uri.EscapeDataString(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc).ToString("O"))}&page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}&status={Uri.EscapeDataString(string.IsNullOrWhiteSpace(status) ? "Todas" : status)}";
         using var request = CreateRequest(HttpMethod.Get, path); using var response = await SendAuthorizedAsync(request, cancellationToken); await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<CashSessionReportInfo>(JsonOptions, cancellationToken) ?? throw new InvalidDataException("El servicio devolvió un reporte vacío.");
+    }
+
+    public async Task<ReceivableBalanceReportPage> GetReceivableBalanceReportPageAsync(int page = 1, int pageSize = 250,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"api/v1/reports/receivables/balances?page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}";
+        using var request = CreateRequest(HttpMethod.Get, path);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ReceivableBalanceReportPage>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió una cartera vacía.");
+    }
+
+    public async Task<ReceivableMovementReportPage> GetReceivableMovementReportPageAsync(DateTime fromUtc, DateTime toUtc,
+        string? currency, int page = 1, int pageSize = 250, CancellationToken cancellationToken = default)
+    {
+        var path = $"api/v1/reports/receivables/movements?fromUtc={Uri.EscapeDataString(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc).ToString("O"))}" +
+                   $"&toUtc={Uri.EscapeDataString(DateTime.SpecifyKind(toUtc, DateTimeKind.Utc).ToString("O"))}";
+        if (!string.IsNullOrWhiteSpace(currency) && !string.Equals(currency, "Todas", StringComparison.OrdinalIgnoreCase))
+            path += $"&currency={Uri.EscapeDataString(currency.Trim().ToUpperInvariant())}";
+        path += $"&page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}";
+        using var request = CreateRequest(HttpMethod.Get, path);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ReceivableMovementReportPage>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió movimientos de cartera vacíos.");
     }
 
     public async Task<IReadOnlyList<OperatorInfo>> GetOperatorsAsync(CancellationToken cancellationToken = default)
@@ -707,6 +749,14 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task RecordReceivableOpeningBalanceAsync(Guid customerId, decimal amountUsd, string reason, string idempotencyKey, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"api/v1/customers/{customerId}/receivables/opening-balance");
+        request.Content = JsonContent.Create(new { amountUsd, reason, idempotencyKey }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     private async Task SendPatchAsync<T>(string path, T payload, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Patch, path);
@@ -722,7 +772,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
         var results = await response.Content.ReadFromJsonAsync<List<ProductSearchResponse>>(JsonOptions, cancellationToken) ?? [];
         return results.Select(product => new ProductInfo(product.Id, product.Sku, product.Name, product.UnitPrice,
-            product.Currency, product.HasImage, product.Quantity)).ToArray();
+            product.Currency, product.HasImage, product.Quantity, product.Price2, product.Price3, product.TaxTreatment)).ToArray();
     }
 
     public async Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines,
@@ -867,8 +917,18 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     private sealed record CashCloseResponse(Guid CashSessionId, decimal ExpectedBalance, decimal CountedBalance, decimal Variance,
         decimal ExpectedUsd = 0m, decimal CountedUsd = 0m, decimal VarianceUsd = 0m, decimal ExpectedVes = 0m, decimal CountedVes = 0m, decimal VarianceVes = 0m);
     private sealed record StockAdjustmentResponse(Guid Id, Guid ProductId, decimal QuantityDelta, decimal Quantity, string? Reason, DateTime OccurredAtUtc);
-    private sealed record ProductCreateResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, decimal InitialStock, bool HasImage = false);
-    private sealed record ProductSearchResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage, decimal Quantity);
+    private sealed record ProductCreateResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, decimal InitialStock, bool HasImage = false)
+    {
+        public decimal? Price2 { get; init; }
+        public decimal? Price3 { get; init; }
+        public string TaxTreatment { get; init; } = "Unclassified";
+    }
+    private sealed record ProductSearchResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage, decimal Quantity)
+    {
+        public decimal? Price2 { get; init; }
+        public decimal? Price3 { get; init; }
+        public string TaxTreatment { get; init; } = "Unclassified";
+    }
     private sealed record SaleResponse(Guid SaleId, bool Replayed);
     private sealed record ApprovalResponse(string ApprovalToken);
     private sealed record OperatorPermissionResponse(string Role, List<OperatorPermissionSetting> Permissions);

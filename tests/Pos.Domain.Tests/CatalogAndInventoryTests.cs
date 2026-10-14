@@ -43,6 +43,20 @@ public class CatalogAndInventoryTests
     }
 
     [Fact]
+    public void Product_owns_three_price_tiers_and_price_one_remains_the_legacy_price()
+    {
+        var product = Product.Create("A-2", "Producto", ProductPriceList.Create(
+            new Money(12m, Currency.USD), new Money(10m, Currency.USD), new Money(9m, Currency.USD)),
+            TaxTreatment.Exempt);
+
+        Assert.Equal(new Money(12m, Currency.USD), product.Price);
+        Assert.Equal(new Money(10m, Currency.USD), product.Prices.GetPrice(PriceTier.Price2));
+        product.ChangePrice(PriceTier.Price2, new Money(11m, Currency.USD));
+        Assert.Equal(new Money(11m, Currency.USD), product.Prices.GetPrice(PriceTier.Price2));
+        Assert.Equal(new Money(12m, Currency.USD), product.Price);
+    }
+
+    [Fact]
     public void Product_barcode_collection_cannot_be_used_to_bypass_add_barcode_rules()
     {
         var product = Product.Create("A-1", "Arroz", new Money(2m, Currency.USD));

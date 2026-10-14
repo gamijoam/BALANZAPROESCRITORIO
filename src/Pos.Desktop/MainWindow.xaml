@@ -87,7 +87,7 @@
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions><RowDefinition Height="104"/><RowDefinition Height="*"/><RowDefinition Height="46"/></Grid.RowDefinitions>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="275"/><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="220"/></Grid.ColumnDefinitions>
 
         <Border Grid.Row="0" Grid.ColumnSpan="3" Background="#102B4D" Padding="16,12">
             <Grid>
@@ -135,63 +135,73 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Grid.Column="0" Background="#2858A2" Padding="15">
+        <Border x:Name="ProductPreviewPanel" Grid.Row="1" Grid.Column="0" Background="#2858A2" Padding="9">
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                <StackPanel Grid.Row="0">
-                    <TextBlock Text="VENTA ACTUAL" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" Margin="2,5,0,10"/>
-                    <Border Background="#3569B5" CornerRadius="8" Padding="13" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="F1  ·  CLIENTE" Foreground="#FFE279" FontSize="13" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding SelectedCustomer.Name, TargetNullValue=Venta general}" Foreground="White" FontSize="19" FontWeight="SemiBold" Margin="0,7,0,0"/>
-                            <TextBlock Text="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado}" Foreground="#D4E1F5" FontSize="13"/>
-                            <Button Content="Asignar cliente a la venta" Margin="0,12,0,0" Padding="8" Background="#214B8A" Foreground="White" BorderThickness="0" Click="Customer_Click"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="#3569B5" CornerRadius="8" Padding="13" Margin="0,0,0,12">
-                        <StackPanel>
-                            <TextBlock Text="OPERADOR" Foreground="#FFE279" FontSize="13" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding OperatorName}" Foreground="White" FontSize="18" FontWeight="SemiBold" Margin="0,7,0,0"/>
-                            <TextBlock Text="{Binding CashStatus}" Foreground="#D4E1F5" FontSize="13" Margin="0,2,0,0"/>
-                            <Button Content="{Binding OperatorSessionActionLabel}" IsEnabled="{Binding CanUseSessionAction}"
-                                    Margin="0,9,0,0" Padding="8,6" Background="#214B8A" Foreground="White" BorderThickness="0"
-                                    AutomationProperties.Name="Cambiar operador o cerrar sesión"
-                                    ToolTipService.ShowOnDisabled="True"
-                                    ToolTip="{Binding OperatorSessionActionToolTip}" Click="OperatorSessionAction_Click"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-                <Border Grid.Row="1" Background="#214B8A" CornerRadius="8" Margin="0,0,0,2" ClipToBounds="True">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="PRODUCTO" Foreground="#D4E1F5" FontSize="12" FontWeight="Bold" Margin="2,2,0,8"/>
+                <Border Grid.Row="1" Background="#214B8A" CornerRadius="8" ClipToBounds="True">
                     <Grid>
-                        <Image x:Name="ProductPreviewImage" Stretch="Uniform" Visibility="Collapsed"/>
-                        <StackPanel x:Name="ProductPreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="15">
-                            <TextBlock Text="FOTO DEL PRODUCTO" Foreground="#BFD2F0" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Al agregar un artículo\naparecerá aquí su imagen" Foreground="White" FontSize="15" TextAlignment="Center" Margin="0,8,0,0"/>
+                        <Image x:Name="ProductPreviewImage" Stretch="Uniform" Visibility="Collapsed" Margin="5"/>
+                        <StackPanel x:Name="ProductPreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="9">
+                            <TextBlock Text="FOTO DEL PRODUCTO" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center"/>
+                            <TextBlock Text="Al agregar un artículo aparecerá aquí su imagen" Foreground="White" FontSize="13" TextAlignment="Center" TextWrapping="Wrap" Margin="0,7,0,0"/>
                         </StackPanel>
-                        <Border VerticalAlignment="Bottom" Background="#D9172B4A" Padding="10,8">
-                            <StackPanel>
-                                <TextBlock x:Name="ProductPreviewName" Text="Sin producto seleccionado" Foreground="White" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-                                    <TextBlock x:Name="ProductPreviewSku" Foreground="#C6D7EF" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="  ·  " Foreground="#718EAF"/>
-                                    <TextBlock x:Name="ProductPreviewPrice" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
                     </Grid>
+                </Border>
+                <Border Grid.Row="2" Background="#173F78" CornerRadius="8" Padding="9,8" Margin="0,8,0,0">
+                    <StackPanel>
+                        <TextBlock x:Name="ProductPreviewName" Text="Sin producto seleccionado" Foreground="White" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, ElementName=ProductPreviewName}"/>
+                        <TextBlock x:Name="ProductPreviewSku" Foreground="#C6D7EF" FontSize="11" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, ElementName=ProductPreviewSku}" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="ProductPreviewPrice" Foreground="White" FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </Border>
             </Grid>
         </Border>
 
         <Grid Grid.Row="1" Grid.Column="1" Margin="12,10,10,10">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid x:Name="SaleContextBar" Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="9,6" Margin="0,0,4,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="F1 · CLIENTE" Foreground="#63758B" FontSize="11" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding SelectedCustomer.Name, TargetNullValue=Venta general, FallbackValue=Venta general}" Foreground="#173F78" FontSize="15" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedCustomer.Name, TargetNullValue=Venta general}"/>
+                            <TextBlock Text="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado, FallbackValue=Sin cliente asignado}" Foreground="#63758B" FontSize="11"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Asignar / cambiar" Padding="8,5" Background="#214B8A" Foreground="White" BorderThickness="0"
+                                FontSize="12" FontWeight="SemiBold" Click="Customer_Click" ToolTip="Asignar un cliente a la venta (F1)"/>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="9,6" Margin="4,0,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="CAJERO · TURNO" Foreground="#63758B" FontSize="11" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding OperatorName}" Foreground="#173F78" FontSize="15" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding OperatorName}"/>
+                            <TextBlock Text="{Binding CashStatus}" Foreground="#63758B" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding CashStatus}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource ToolButton}" Content="{Binding OperatorSessionActionLabel}" IsEnabled="{Binding CanUseSessionAction}"
+                                Padding="8,5" Background="#214B8A" Foreground="White" BorderThickness="0" FontSize="12" FontWeight="SemiBold"
+                                HorizontalContentAlignment="Center" Margin="0" MinHeight="0"
+                                AutomationProperties.Name="Cambiar operador o cerrar sesión" ToolTipService.ShowOnDisabled="True"
+                                ToolTip="{Binding OperatorSessionActionToolTip}" Click="OperatorSessionAction_Click"/>
+                    </Grid>
+                </Border>
+            </Grid>
+            <Grid Grid.Row="1" Margin="0,0,0,8">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
                 <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchBox_KeyDown" Height="54" FontSize="22" Padding="14,8" VerticalContentAlignment="Center"
                          BorderBrush="#8BA6C9" BorderThickness="2" ToolTip="Escanea un código o escribe el nombre y presiona Enter"/>
                 <Button Grid.Column="1" Content="Buscar" Margin="8,0,0,0" FontSize="17" FontWeight="Bold" Background="#2E64B7" Foreground="White" BorderThickness="0" Click="Search_Click"/>
             </Grid>
-            <Border x:Name="CurrentProductSummary" Grid.Row="1" Margin="0,0,0,8" Padding="12,7" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Visibility="Collapsed">
+            <Border x:Name="CurrentProductSummary" Grid.Row="2" Margin="0,0,0,8" Padding="12,7" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <TextBlock Text="PRODUCTO AGREGADO" Foreground="#63758B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,14,0"/>
@@ -200,14 +210,24 @@
                     <TextBlock x:Name="ProductSummaryPrice" Grid.Column="3" Foreground="#173F78" FontSize="17" FontWeight="Bold" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
-            <DataGrid x:Name="CartGrid" Grid.Row="2" Margin="0,0,0,0" ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
+            <DataGrid x:Name="CartGrid" Grid.Row="3" Margin="0,0,0,0" ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
                       HeadersVisibility="Column" GridLinesVisibility="None" AlternationCount="2" Background="White" BorderBrush="#D7DFEA"
                       SelectionMode="Single" SelectionUnit="FullRow" SelectedItem="{Binding SelectedCartLine, Mode=TwoWay}" RowHeaderWidth="0" FontSize="14"
-                      PreviewKeyDown="CartGrid_PreviewKeyDown" AutomationProperties.Name="Artículos de la venta"
+                      PreviewKeyDown="CartGrid_PreviewKeyDown" LoadingRow="CartGrid_LoadingRow" AutomationProperties.Name="Artículos de la venta"
                       ToolTip="F8 va a la cantidad; flechas arriba/abajo cambian de artículo; Supr elimina la fila.">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Código" Binding="{Binding Product.Sku}" Width="135" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Descripción" Binding="{Binding Product.Name}" Width="*" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Descripción" Binding="{Binding Product.Name}" Width="*" IsReadOnly="True">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                <Setter Property="MaxHeight" Value="36"/>
+                                <Setter Property="LineHeight" Value="18"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="6,2"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="155" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Cantidad" Width="95">
                         <DataGridTextColumn.Binding>
@@ -235,7 +255,7 @@
             </DataGrid>
         </Grid>
 
-        <Border Grid.Row="1" Grid.Column="2" Background="#173F78" Padding="13">
+        <Border x:Name="RightNavigationPanel" Grid.Row="1" Grid.Column="2" Background="#173F78" Padding="13">
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="SECCIONES" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" Margin="4,6,0,9"/>
@@ -271,7 +291,7 @@
                         </Button.ContextMenu>
                     </Button>
                 </StackPanel>
-                    <Button Grid.Row="2" Style="{StaticResource ChargeButton}" Command="{Binding ChargeCommand}" Height="72" MinWidth="218" HorizontalAlignment="Stretch" Margin="0,12,0,2" ToolTip="Abre los medios de pago para confirmar la venta" AutomationProperties.Name="Cobrar venta. Atajo F4" AutomationProperties.AutomationId="ChargeSale">
+                    <Button Grid.Row="2" Style="{StaticResource ChargeButton}" Command="{Binding ChargeCommand}" Height="72" MinWidth="0" HorizontalAlignment="Stretch" Margin="0,12,0,2" ToolTip="Abre los medios de pago para confirmar la venta" AutomationProperties.Name="Cobrar venta. Atajo F4" AutomationProperties.AutomationId="ChargeSale">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="Cobrar venta" FontSize="19" FontWeight="Bold" HorizontalAlignment="Center"/>
                             <TextBlock Text="F4 · elegir forma de pago" FontSize="12" HorizontalAlignment="Center" Margin="0,3,0,0"/>

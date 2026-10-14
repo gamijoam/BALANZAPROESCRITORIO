@@ -36,11 +36,22 @@ public sealed class SalesService(PosDbContext db)
         var products = await db.Products.Where(x => ids.Contains(x.Id) && x.Active).ToDictionaryAsync(x => x.Id, cancellationToken);
         if (products.Count != ids.Length) throw new CheckoutRejectedException("product_unavailable");
 
+        var taxTreatments = new Dictionary<Guid, Pos.Domain.Catalog.TaxTreatment>();
+        foreach (var product in products.Values)
+        {
+            Pos.Domain.Catalog.TaxTreatment treatment;
+            try { treatment = Pos.Domain.Catalog.TaxTreatment.FromCode(product.TaxTreatment); }
+            catch (ArgumentException) { throw new CheckoutRejectedException("product_tax_treatment_invalid"); }
+            if (!treatment.IsClassified) throw new CheckoutRejectedException("product_tax_treatment_unclassified");
+            taxTreatments.Add(product.Id, treatment);
+        }
+
         var currency = cashSession.Currency;
         if (currency is not ("USD" or "VES")) throw new CheckoutRejectedException("unsupported_cash_currency");
         if (products.Values.Any(x => x.Currency is not ("USD" or "VES"))) throw new CheckoutRejectedException("unsupported_product_currency");
-        var creditAmount = request.Payments.Where(x => IsCreditMethod(x.Method)).Sum(x => x.Amount);
-        var needsUsdReceivableRate = creditAmount > 0m && currency == "VES";
+        var creditPayments = request.Payments.Where(x => IsCreditMethod(x.Method)).ToArray();
+        var hasCredit = creditPayments.Length > 0;
+        var needsUsdReceivableRate = creditPayments.Any(x => x.Currency == "VES");
         var needsConversion = products.Values.Any(x => x.Currency != currency) || request.Payments.Any(x => x.Currency != currency) || needsUsdReceivableRate;
         var appliedRate = needsConversion
             ? await db.ExchangeRates.Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= DateTime.UtcNow)
@@ -56,25 +67,37 @@ public sealed class SalesService(PosDbContext db)
         {
             if (line.Quantity <= 0 || decimal.Round(line.Quantity, 3) != line.Quantity) throw new CheckoutRejectedException("invalid_quantity");
             var product = products[line.ProductId];
-            if (product.UnitPrice <= 0) throw new CheckoutRejectedException("invalid_product_price");
+            var priceTier = ParsePriceTier(line.PriceTier);
+            var originalUnitPrice = priceTier switch
+            {
+                Pos.Domain.Catalog.PriceTier.Price1 => product.UnitPrice,
+                Pos.Domain.Catalog.PriceTier.Price2 => product.Price2 ?? throw new CheckoutRejectedException("price_tier_unconfigured"),
+                Pos.Domain.Catalog.PriceTier.Price3 => product.Price3 ?? throw new CheckoutRejectedException("price_tier_unconfigured"),
+                _ => throw new CheckoutRejectedException("invalid_price_tier")
+            };
+            if (originalUnitPrice <= 0) throw new CheckoutRejectedException("invalid_product_price");
             var originalCurrency = product.Currency;
             var conversionRate = originalCurrency == currency ? 1m : originalCurrency == "USD" ? usdToVes : 1m / usdToVes;
             if (!SalePriceOverridePolicy.IsValid(line.UnitPriceOverride, line.PriceOverrideReason))
                 throw new CheckoutRejectedException("invalid_price_override");
-            var unitPrice = line.UnitPriceOverride ?? decimal.Round(product.UnitPrice * conversionRate, 2, MidpointRounding.AwayFromZero);
-            var amount = decimal.Round(unitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero);
+            var unitPrice = line.UnitPriceOverride ?? decimal.Round(originalUnitPrice * conversionRate, 2, MidpointRounding.AwayFromZero);
+            var subtotal = decimal.Round(unitPrice * line.Quantity, 2, MidpointRounding.AwayFromZero);
+            var taxTreatment = taxTreatments[product.Id];
+            var taxAmount = decimal.Round(subtotal * taxTreatment.Rate, 2, MidpointRounding.AwayFromZero);
+            var amount = subtotal + taxAmount;
             return new SaleLineRecord
             {
                 Id = Guid.NewGuid(), ProductId = product.Id, Sku = product.Sku, Description = product.Name,
                 Quantity = line.Quantity, UnitPrice = unitPrice, LineTotal = amount,
-                OriginalUnitPrice = product.UnitPrice, OriginalCurrency = originalCurrency,
+                OriginalUnitPrice = originalUnitPrice, OriginalCurrency = originalCurrency,
                 ExchangeRateId = originalCurrency == currency ? null : appliedRate!.Id,
-                AppliedExchangeRate = originalCurrency == currency ? null : conversionRate
+                AppliedExchangeRate = originalCurrency == currency ? null : conversionRate,
+                PriceTier = priceTier.ToString(), TaxTreatment = taxTreatment.Code, TaxRate = taxTreatment.Rate, TaxAmount = taxAmount,
+                UnitCost = product.UnitCost, CostCurrency = product.UnitCost.HasValue ? product.Currency : null
             };
         }).ToArray();
         var total = lineSnapshots.Sum(x => x.LineTotal);
-        if (request.Payments.Count == 0 || request.Payments.Any(x => x.Amount <= 0 || decimal.Round(x.Amount, 2) != x.Amount || x.Method is null || x.Method.Length is < 2 or > 32 || x.Currency is not ("USD" or "VES")) ||
-            request.Payments.Any(x => IsCreditMethod(x.Method) && x.Currency != currency))
+        if (request.Payments.Count == 0 || request.Payments.Any(x => x.Amount <= 0 || decimal.Round(x.Amount, 2) != x.Amount || x.Method is null || x.Method.Length is < 2 or > 32 || x.Currency is not ("USD" or "VES")))
             throw new CheckoutRejectedException("payment_total_mismatch");
         PaymentSettlementResult paymentSettlement;
         try
@@ -87,14 +110,20 @@ public sealed class SalesService(PosDbContext db)
             throw new CheckoutRejectedException("payment_total_mismatch");
         }
         if (!paymentSettlement.IsSettled) throw new CheckoutRejectedException("payment_total_mismatch");
+        var creditTenders = creditPayments.Select(x => new PaymentTender(x.Amount, x.Currency)).ToArray();
+        var creditAmountUsd = CreditAccountCurrency.SumToUsd(creditTenders, usdToVes);
+        var creditCurrencyGroups = creditPayments.GroupBy(x => x.Currency).ToArray();
+        var creditOriginalAmount = creditCurrencyGroups.Length == 1
+            ? creditCurrencyGroups[0].Sum(x => x.Amount)
+            : creditAmountUsd;
+        var creditOriginalCurrency = creditCurrencyGroups.Length == 1 ? creditCurrencyGroups[0].Key : "USD";
         CustomerRecord? customer = null;
-        if (creditAmount > 0m)
+        if (hasCredit)
         {
             if (request.CustomerId is null || request.CustomerId == Guid.Empty) throw new CheckoutRejectedException("credit_customer_required");
             customer = await db.Customers.FromSqlInterpolated($"SELECT * FROM customers WHERE \"Id\" = {request.CustomerId.Value} AND \"Active\" = TRUE FOR UPDATE").SingleOrDefaultAsync(cancellationToken)
                 ?? throw new CheckoutRejectedException("customer_unavailable");
             if (customer.Currency != "USD") throw new CheckoutRejectedException("customer_account_currency_invalid");
-            var creditAmountUsd = CreditAccountCurrency.ToUsd(creditAmount, currency, usdToVes);
             if (creditAmountUsd <= 0m) throw new CheckoutRejectedException("credit_amount_below_minimum");
             var balance = await db.ReceivableEntries.Where(x => x.CustomerId == customer.Id)
                 .SumAsync(x => x.EntryType == "Charge" ? x.Amount : -x.Amount, cancellationToken);
@@ -146,14 +175,13 @@ public sealed class SalesService(PosDbContext db)
             ExchangeRateId = x.Currency == currency ? null : appliedRate!.Id,
             AppliedExchangeRate = x.Currency == currency ? null : x.Currency == "USD" ? usdToVes : 1m / usdToVes
         }));
-        if (creditAmount > 0m)
+        if (hasCredit)
         {
-            var creditAmountUsd = CreditAccountCurrency.ToUsd(creditAmount, currency, usdToVes);
             db.ReceivableEntries.Add(new ReceivableEntryRecord
             {
                 Id = Guid.NewGuid(), CustomerId = customer!.Id, SaleId = saleId, EntryType = "Charge",
-                Amount = creditAmountUsd, Currency = "USD", OriginalAmount = creditAmount, OriginalCurrency = currency,
-                AppliedExchangeRate = currency == "USD" ? null : CreditAccountCurrency.UsdPerVes(usdToVes),
+                Amount = creditAmountUsd, Currency = "USD", OriginalAmount = creditOriginalAmount, OriginalCurrency = creditOriginalCurrency,
+                AppliedExchangeRate = creditOriginalCurrency == "VES" ? CreditAccountCurrency.UsdPerVes(usdToVes) : null,
                 Reason = $"Sale {saleId:N}", ActorId = operatorId, TerminalId = terminalId, OccurredAtUtc = DateTime.UtcNow
             });
         }
@@ -168,7 +196,7 @@ public sealed class SalesService(PosDbContext db)
                 lines = lineSnapshots.Select(x => new
                 {
                     x.ProductId, x.OriginalUnitPrice, x.OriginalCurrency, x.UnitPrice, x.LineTotal,
-                    x.AppliedExchangeRate, x.ExchangeRateId,
+                    x.AppliedExchangeRate, x.ExchangeRateId, x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount, x.UnitCost, x.CostCurrency,
                     priceOverride = request.Lines.Single(input => input.ProductId == x.ProductId).UnitPriceOverride,
                     priceOverrideReason = request.Lines.Single(input => input.ProductId == x.ProductId).PriceOverrideReason
                 })
@@ -193,7 +221,7 @@ public sealed class SalesService(PosDbContext db)
         {
             request.CustomerId,
             request.ExchangeRateId,
-            lines = request.Lines.OrderBy(x => x.ProductId).Select(x => new { x.ProductId, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason }),
+            lines = request.Lines.OrderBy(x => x.ProductId).Select(x => new { x.ProductId, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier }),
             payments = request.Payments.OrderBy(x => x.Currency, StringComparer.Ordinal).ThenBy(x => x.Method, StringComparer.Ordinal).ThenBy(x => x.Amount).Select(x => new { x.Method, x.Amount, x.Currency })
         };
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonical)))).ToLowerInvariant();
@@ -202,10 +230,18 @@ public sealed class SalesService(PosDbContext db)
     private static bool IsCreditMethod(string method) => string.Equals(method, "credit", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(method, "fiado", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "credito", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(method, "crédito", StringComparison.OrdinalIgnoreCase);
+
+    private static Pos.Domain.Catalog.PriceTier ParsePriceTier(string? value) => value switch
+    {
+        "Price1" => Pos.Domain.Catalog.PriceTier.Price1,
+        "Price2" => Pos.Domain.Catalog.PriceTier.Price2,
+        "Price3" => Pos.Domain.Catalog.PriceTier.Price3,
+        _ => throw new CheckoutRejectedException("invalid_price_tier")
+    };
 }
 
 public sealed record CheckoutRequest(IReadOnlyList<CheckoutLine> Lines, IReadOnlyList<CheckoutPayment> Payments, Guid? CustomerId = null, Guid? ExchangeRateId = null);
-public sealed record CheckoutLine(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null);
+public sealed record CheckoutLine(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1");
 public sealed record CheckoutPayment(string Method, decimal Amount, string Currency);
 public sealed record SaleResult(Guid SaleId, bool Replayed, string? Error);
 public sealed class CheckoutRejectedException(string code) : Exception(code) { public string Code { get; } = code; }

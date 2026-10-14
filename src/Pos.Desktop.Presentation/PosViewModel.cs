@@ -296,6 +296,11 @@ public sealed class PosViewModel : INotifyPropertyChanged
         => _api.GetInventoryAsync(query, status, currency, stock, hasImage, cancellationToken);
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => _api.CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
+    public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
+        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken);
+    public Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
+        => _api.SetProductTaxTreatmentAsync(productId, taxTreatment, cancellationToken);
     public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
         => _api.UpdateProductAsync(productId, sku, name, cancellationToken);
     public Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
@@ -318,6 +323,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task DeactivateCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
         => _api.DeactivateCustomerAsync(customerId, cancellationToken);
     public Task ChangePriceAsync(Guid productId, decimal price, string reason, CancellationToken cancellationToken = default) => _api.ChangePriceAsync(productId, price, reason, cancellationToken);
+    public Task ChangePriceAsync(Guid productId, string priceTier, decimal price, string reason, CancellationToken cancellationToken = default)
+        => _api.ChangePriceAsync(productId, priceTier, price, reason, cancellationToken);
     public Task<IReadOnlyList<ExchangeRateInfo>> GetExchangeRatesAsync(CancellationToken cancellationToken = default) => _api.GetExchangeRatesAsync(cancellationToken);
     public async Task SetExchangeRateAsync(string from, string to, decimal rate, DateTime effectiveAtUtc, string source, CancellationToken cancellationToken = default)
     {
@@ -373,6 +380,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task<ReceivableInfo> GetReceivablesAsync(Guid customerId, CancellationToken cancellationToken = default) => _api.GetReceivablesAsync(customerId, cancellationToken);
     public Task RecordReceivablePaymentAsync(Guid customerId, decimal amount, string currency, string? reference, CancellationToken cancellationToken = default)
         => _api.RecordReceivablePaymentAsync(customerId, amount, currency, reference, cancellationToken);
+    public Task RecordReceivableOpeningBalanceAsync(Guid customerId, decimal amountUsd, string reason, string idempotencyKey, CancellationToken cancellationToken = default)
+        => _api.RecordReceivableOpeningBalanceAsync(customerId, amountUsd, reason, idempotencyKey, cancellationToken);
     public void SelectCustomer(CustomerInfo? customer) { SelectedCustomer = customer; StatusMessage = customer is null ? "Venta general." : $"Cliente: {customer.Name}."; }
 
     public async Task SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -405,6 +414,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public bool AddProduct(ProductInfo product)
     {
         if (!CanEditCart) { StatusMessage = "Hay una venta pendiente de confirmar. Reintenta antes de cambiar el carrito."; return false; }
+        if (!product.IsTaxClassified) { StatusMessage = $"{product.Name} está pendiente de clasificar su impuesto. No se puede vender hasta asignarle una regla."; return false; }
         if (product.StockQuantity is <= 0m) { StatusMessage = $"{product.Name} está agotado y no se puede agregar."; return false; }
         if (product.Currency is not ("USD" or "VES"))
         {
@@ -442,9 +452,18 @@ public sealed class PosViewModel : INotifyPropertyChanged
     }
 
     public bool EditCartLine(CartLineViewModel? line, decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
+        => EditCartLine(line, quantity, line?.PriceTier ?? "Price1", unitPriceOverride, priceOverrideReason);
+
+    public bool EditCartLine(CartLineViewModel? line, decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
     {
         if (!CanEditCart) { StatusMessage = "Confirma el resultado de la venta pendiente antes de modificarla."; return false; }
         if (line is null || !CartLines.Contains(line)) return false;
+        if (priceTier is not ("Price1" or "Price2" or "Price3") ||
+            priceTier == "Price2" && line.Product.Price2 is null || priceTier == "Price3" && line.Product.Price3 is null)
+        {
+            StatusMessage = "Ese nivel de precio no está configurado para el producto.";
+            return false;
+        }
         if (quantity <= 0m || decimal.Round(quantity, 3) != quantity)
         {
             StatusMessage = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
@@ -457,7 +476,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
             return false;
         }
 
-        line.ApplyEdits(quantity, unitPriceOverride, reason);
+        line.ApplyEdits(quantity, priceTier, unitPriceOverride, reason);
         SelectedCartLine = line;
         RefreshTotals();
         StatusMessage = unitPriceOverride.HasValue
@@ -477,10 +496,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
             {
                 if (payment.Currency != Currency && _usdToVesRate is null)
                     throw new ArgumentException("Registra una tasa USD/VES vigente para aceptar pagos en ambas monedas.", nameof(payments));
-                if (IsCreditPayment(payment.Method) && payment.Currency != Currency)
-                    throw new ArgumentException("El pago a crédito debe expresarse en la moneda de la venta.", nameof(payments));
             }
-            if (Currency == "VES" && payments.Any(x => IsCreditPayment(x.Method)) && _usdToVesRate is null)
+            if (payments.Any(x => IsCreditPayment(x.Method) && x.Currency == "VES") && _usdToVesRate is null)
                 throw new ArgumentException("Registra una tasa USD/VES vigente para convertir el crédito a dólares.", nameof(payments));
             PaymentSettlementResult settlement;
             try
@@ -497,15 +514,16 @@ public sealed class PosViewModel : INotifyPropertyChanged
             if (payments.Any(x => IsCreditPayment(x.Method)) && SelectedCustomer is null)
                 throw new ArgumentException("Selecciona un cliente antes de cobrar una parte a crédito.", nameof(payments));
             _pendingIdempotencyKey = Guid.NewGuid().ToString("N");
-            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason)).ToArray();
+            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier)).ToArray();
             _pendingPayments = payments.ToArray();
             _pendingCustomerId = SelectedCustomer?.Id;
-            _pendingReceiptLines = CartLines.Select(x => new ReceiptLine(x.Product.Sku, x.Product.Name, x.Quantity, x.UnitPrice, x.LineTotal, x.Product.UnitPrice, x.Product.Currency, x.AppliedExchangeRate)).ToArray();
+            _pendingReceiptLines = CartLines.Select(x => new ReceiptLine(x.Product.Sku, x.Product.Name, x.Quantity, x.UnitPrice, x.LineTotal,
+                x.Product.UnitPrice, x.Product.Currency, x.AppliedExchangeRate, x.PriceTier, x.Product.TaxTreatment, x.TaxRate, x.TaxAmount)).ToArray();
             _pendingTotal = Total;
             _pendingRoundingAdjustment = settlement.RoundingAdjustment;
             _pendingCurrency = Currency;
             _pendingExchangeRateId = CartLines.Any(x => x.ExchangeRateId.HasValue) || payments.Any(x => x.Currency != Currency) ||
-                (Currency == "VES" && payments.Any(x => IsCreditPayment(x.Method))) ? _usdToVesRate?.Id : null;
+                payments.Any(x => IsCreditPayment(x.Method) && x.Currency == "VES") ? _usdToVesRate?.Id : null;
             OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyCartCommands();
         }
         var lines = _pendingLines!;
@@ -647,10 +665,28 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private ExchangeRateInfo? _usdToVesRate = usdToVesRate;
     private decimal? _unitPriceOverride;
     private string? _priceOverrideReason;
+    private string _priceTier = "Price1";
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProductInfo Product { get; } = product;
     public string SettlementCurrency => _settlementCurrency;
-    public decimal CatalogUnitPrice => PosViewModel.ConvertPrice(Product.UnitPrice, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
+    public string PriceTier => _priceTier;
+    public IReadOnlyList<string> AvailablePriceTiers
+    {
+        get
+        {
+            var tiers = new List<string> { "Price1" };
+            if (Product.Price2.HasValue) tiers.Add("Price2");
+            if (Product.Price3.HasValue) tiers.Add("Price3");
+            return tiers;
+        }
+    }
+    public decimal CatalogUnitPrice => CatalogUnitPriceFor(PriceTier);
+    public decimal CatalogUnitPriceFor(string priceTier)
+    {
+        var source = priceTier switch { "Price1" => Product.UnitPrice, "Price2" => Product.Price2, "Price3" => Product.Price3, _ => null };
+        if (source is null) throw new ArgumentException("El nivel de precio no está configurado.", nameof(priceTier));
+        return PosViewModel.ConvertPrice(source.Value, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
+    }
     public decimal UnitPrice => _unitPriceOverride ?? CatalogUnitPrice;
     public decimal? UnitPriceOverride => _unitPriceOverride;
     public string? PriceOverrideReason => _priceOverrideReason;
@@ -662,6 +698,7 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     {
         _settlementCurrency = currency; _usdToVesRate = rate;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SettlementCurrency)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CatalogUnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ExchangeRateId)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AppliedExchangeRate)));
@@ -679,7 +716,11 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         }
     }
     public void ApplyEdits(decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
+        => ApplyEdits(quantity, PriceTier, unitPriceOverride, priceOverrideReason);
+
+    public void ApplyEdits(decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
     {
+        _priceTier = priceTier;
         _unitPriceOverride = unitPriceOverride;
         _priceOverrideReason = priceOverrideReason;
         Quantity = quantity;
@@ -687,7 +728,10 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPriceOverride)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceOverrideReason)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceTier)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
     }
-    public decimal LineTotal => decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero);
+    public decimal TaxRate => Product.TaxTreatment switch { "Taxable16" => 0.16m, "Taxable8" => 0.08m, _ => 0m };
+    public decimal TaxAmount => decimal.Round(decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero) * TaxRate, 2, MidpointRounding.AwayFromZero);
+    public decimal LineTotal => decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero) + TaxAmount;
 }

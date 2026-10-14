@@ -22,7 +22,14 @@ public enum Permission
     ViewWarehouses,
     ManageWarehouses,
     TransferInventory,
-    ViewInventory
+    ViewInventory,
+    SelectPrice2,
+    ViewSuppliers,
+    ManageSuppliers,
+    ViewPurchases,
+    ManagePurchases,
+    ManageSupplierPayments,
+    ViewFinancialReports
 }
 
 public enum PermissionOverrideMode { Inherit, Allow, RequireAdminPin, Deny }
@@ -44,7 +51,9 @@ public static class OperatorPermissionPolicy
             PermissionOverrideMode.Deny => PermissionAccessMode.Deny,
             _ => RolePermissionPolicy.For(role).Can(permission)
                 ? PermissionAccessMode.Allow
-                : permission == Permission.OverrideSalePrice ? PermissionAccessMode.RequireAdminPin : PermissionAccessMode.Deny
+                : permission is Permission.OverrideSalePrice or Permission.ManageSupplierPayments
+                    ? PermissionAccessMode.RequireAdminPin
+                    : PermissionAccessMode.Deny
         };
     }
 }
@@ -61,7 +70,9 @@ public static class RolePermissionPolicy
             Permission.ReturnSale, Permission.ManageExchangeRate, Permission.CloseCashSession,
             Permission.ViewSensitiveReports, Permission.ManageCatalog, Permission.ManageCustomers,
             Permission.ManageReceivables, Permission.ViewReports, Permission.ViewExchangeRate, Permission.ViewInventory,
-            Permission.ViewWarehouses, Permission.ManageWarehouses, Permission.TransferInventory),
+            Permission.ViewWarehouses, Permission.ManageWarehouses, Permission.TransferInventory, Permission.SelectPrice2,
+            Permission.ViewSuppliers, Permission.ManageSuppliers, Permission.ViewPurchases, Permission.ManagePurchases,
+            Permission.ViewFinancialReports),
         OperatorRole.Administrator => new PermissionSet(Enum.GetValues<Permission>()),
         _ => throw new ArgumentOutOfRangeException(nameof(role))
     };

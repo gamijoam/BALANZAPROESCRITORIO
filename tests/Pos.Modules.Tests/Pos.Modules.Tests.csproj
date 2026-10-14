@@ -21,7 +21,13 @@
     <ProjectReference Include="../../src/Modules/Pos.Modules.Packaging/Pos.Modules.Packaging.csproj" />
     <ProjectReference Include="../../src/Modules/Pos.Modules.Publisher/Pos.Modules.Publisher.csproj" />
     <ProjectReference Include="../../src/Modules/Pos.Modules.Warehouses/Pos.Modules.Warehouses.csproj" />
+    <ProjectReference Include="../../src/Modules/Pos.Modules.Finance/Pos.Modules.Finance.csproj" />
     <ProjectReference Include="../../src/Modules/Pos.Modules.ThermalReceipts/Pos.Modules.ThermalReceipts.csproj" />
+    <None Include="../../src/Modules/Pos.Modules.Finance/module.manifest.json" Link="finance/module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Modules/Pos.Modules.Finance/migrations/finance-0001.json" Link="finance/finance-0001.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceWindow.xaml" Link="finance/FinanceWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceDesktopModule.cs" Link="finance/FinanceDesktopModule.cs" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceWindow.xaml.cs" Link="finance/FinanceWindow.xaml.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Warehouses/module.manifest.json" Link="warehouses/module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Warehouses/migrations/warehouses-0001.json" Link="warehouses/warehouses-0001.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

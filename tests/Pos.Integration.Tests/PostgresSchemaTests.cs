@@ -286,6 +286,63 @@ public sealed class PostgresSchemaTests
     }
 
     [Fact]
+    public async Task Ves_sale_paid_with_usd_credit_records_one_usd_in_the_customer_account()
+    {
+        var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;
+        var terminalId = Guid.NewGuid(); var username = $"credit-usd-{Guid.NewGuid():N}";
+        var productId = Guid.NewGuid(); var customerId = Guid.NewGuid(); var cashId = Guid.NewGuid(); var rateId = Guid.NewGuid();
+        var operatorId = Guid.Empty; var saleId = Guid.Empty;
+        try
+        {
+            await using (var db = new PosDbContext(options))
+            {
+                operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
+                var rate = new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 875.65m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow };
+                db.ExchangeRates.Add(rate);
+                db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-USD-{productId:N}", Name = "Credit item USD tender", UnitPrice = 875.65m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+                db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
+                db.Customers.Add(new CustomerRecord { Id = customerId, Name = "Credit customer USD tender", Currency = "USD", CreditLimit = 2m, CreatedAtUtc = DateTime.UtcNow });
+                db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
+                await db.SaveChangesAsync();
+
+                var checkout = new CheckoutRequest([new CheckoutLine(productId, 1m)], [new CheckoutPayment("credit", 1m, "USD")], customerId, rateId);
+                var result = await new SalesService(db).ConfirmAsync(operatorId, terminalId, cashId, "credit-usd-key-0001", checkout);
+                saleId = result.SaleId;
+
+                Assert.False(result.Replayed);
+                var charge = await db.ReceivableEntries.SingleAsync(x => x.CustomerId == customerId && x.SaleId == saleId && x.EntryType == "Charge");
+                Assert.Equal(1m, charge.Amount);
+                Assert.Equal("USD", charge.Currency);
+                Assert.Equal(1m, charge.OriginalAmount);
+                Assert.Equal("USD", charge.OriginalCurrency);
+                Assert.Null(charge.AppliedExchangeRate);
+                var tender = await db.Payments.SingleAsync(x => x.SaleId == saleId);
+                Assert.Equal(1m, tender.Amount);
+                Assert.Equal("USD", tender.Currency);
+                Assert.Equal(rate.Rate, tender.AppliedExchangeRate);
+                Assert.Equal(1m, await db.Stocks.Where(x => x.ProductId == productId).Select(x => x.Quantity).SingleAsync());
+            }
+        }
+        finally
+        {
+            await using var cleanup = new PosDbContext(options);
+            await cleanup.ReceivableEntries.Where(x => x.CustomerId == customerId).ExecuteDeleteAsync();
+            await cleanup.SaleLines.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await cleanup.Payments.Where(x => x.SaleId == saleId).ExecuteDeleteAsync();
+            await cleanup.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+            await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
+            await cleanup.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await cleanup.Sales.Where(x => x.Id == saleId).ExecuteDeleteAsync();
+            await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+            await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
+            await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
+            await cleanup.Customers.Where(x => x.Id == customerId).ExecuteDeleteAsync();
+            if (operatorId != Guid.Empty) await cleanup.OperatorUsers.Where(x => x.Id == operatorId).ExecuteDeleteAsync();
+        }
+    }
+
+    [Fact]
     public async Task Mixed_currency_checkout_converts_each_line_to_cash_currency_using_the_current_rate()
     {
         var options = new DbContextOptionsBuilder<PosDbContext>().UseNpgsql(ReadLocalConnectionString()).Options;

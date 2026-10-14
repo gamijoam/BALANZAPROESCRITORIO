@@ -4,6 +4,7 @@ using Pos.Domain;
 using Pos.Infrastructure.Identity;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Sales;
+using Pos.Infrastructure.Inventory;
 using Pos.Domain.Identity;
 using Pos.Domain.Inventory;
 using Pos.Domain.Finance;
@@ -14,6 +15,7 @@ using Pos.Server;
 using Pos.Modules.Packaging;
 using Pos.Infrastructure.Modules;
 using Pos.Modules.Abstractions;
+using Pos.Modules.Server.Abstractions;
 
 var windowsServiceMode = args.Contains("--windows-service", StringComparer.Ordinal);
 PosWindowsServiceConfiguration.ApplyFromEnvironment();
@@ -46,6 +48,7 @@ builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<SalesService>();
 builder.Services.AddScoped<SaleReturnService>();
+builder.Services.AddScoped<IPosInventoryReceiptService, PosInventoryReceiptService>();
 builder.Services.AddSingleton<SupervisorAuthorizationStore>();
 var app = builder.Build();
 app.Use(async (context, next) =>
@@ -65,7 +68,7 @@ app.Use(async (context, next) =>
     if (context.Request.Method != HttpMethods.Get && path.StartsWith("/api/v1/", StringComparison.Ordinal) &&
         !string.Equals(path, "/api/v1/modules/install", StringComparison.Ordinal) &&
         !(HttpMethods.IsPost(context.Request.Method) && System.Text.RegularExpressions.Regex.IsMatch(path,
-            @"^/api/v1/modules/[a-z][a-z0-9]*(?:-[a-z0-9]+)*/deactivate$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)))
+            @"^/api/v1/modules/[a-z][a-z0-9]*(?:-[a-z0-9]+)/(?:activate|deactivate)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant)))
     {
         await using var operation = await moduleMaintenanceGate.EnterOperationAsync(context.RequestAborted);
         await next();
@@ -812,8 +815,14 @@ app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService a
     if (access is null) return Results.Unauthorized();
     if (request.Checkout is null) return Results.BadRequest(new { error = "Checkout is required." });
     if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.ConfirmSale, cancellationToken)) return PermissionFailure(context);
-    if (request.Checkout.Lines.Any(x => x.UnitPriceOverride.HasValue) &&
-        !await AuthorizePermissionAsync(context, auth, approvals, access, Permission.OverrideSalePrice, cancellationToken)) return PermissionFailure(context);
+    var requiresPriceOverrideApproval = request.Checkout.Lines.Any(x => x.UnitPriceOverride.HasValue || x.PriceTier == "Price3");
+    if (requiresPriceOverrideApproval)
+    {
+        // One administrator approval for the higher-risk action also covers Price 2 lines in the same sale.
+        if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.OverrideSalePrice, cancellationToken)) return PermissionFailure(context);
+    }
+    else if (request.Checkout.Lines.Any(x => x.PriceTier == "Price2") &&
+             !await AuthorizePermissionAsync(context, auth, approvals, access, Permission.SelectPrice2, cancellationToken)) return PermissionFailure(context);
     if (request.Checkout.Payments.Any(x => IsCreditMethod(x.Method)) &&
         !await AuthorizePermissionAsync(context, auth, approvals, access, Permission.CreateCreditSale, cancellationToken)) return PermissionFailure(context);
     var key = context.Request.Headers["Idempotency-Key"].ToString();
@@ -872,7 +881,7 @@ app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, Auth
     var products = await db.Products.AsNoTracking()
         .Where(x => x.Active && (search == "" || EF.Functions.ILike(x.Sku, search + "%") || EF.Functions.ILike(x.Name, "%" + search + "%")))
         .OrderBy(x => x.Name).Take(30)
-        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Currency, hasImage = x.ImageFileName != null })
+        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Price2, x.Price3, x.TaxTreatment, x.Currency, hasImage = x.ImageFileName != null })
         .ToListAsync(cancellationToken);
     var productIds = products.Select(x => x.Id).ToArray();
     var quantities = await WarehouseStockBridge.GetStockForTerminalAsync(db, access.TerminalId, productIds, cancellationToken);
@@ -887,6 +896,9 @@ app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, Auth
         product.Sku,
         product.Name,
         product.UnitPrice,
+        product.Price2,
+        product.Price3,
+        product.TaxTreatment,
         product.Currency,
         product.hasImage,
         quantity = quantities.GetValueOrDefault(product.Id)
@@ -915,7 +927,9 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
     var inventoryQuery = from product in productsQuery
                            join stock in db.Stocks.AsNoTracking() on product.Id equals stock.ProductId into stockRows
                            from stockRow in stockRows.DefaultIfEmpty()
-                           select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Currency, Quantity = stockRow == null ? 0m : stockRow.Quantity, hasImage = product.ImageFileName != null, product.Active };
+                           select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3,
+                               product.TaxTreatment, product.Currency, Quantity = stockRow == null ? 0m : stockRow.Quantity,
+                               hasImage = product.ImageFileName != null, product.Active };
     if (stockFilter == "available") inventoryQuery = inventoryQuery.Where(x => x.Quantity > 0m);
     else if (stockFilter == "out-of-stock") inventoryQuery = inventoryQuery.Where(x => x.Quantity <= 0m);
     var inventory = await inventoryQuery.OrderBy(x => x.Name).ThenBy(x => x.Sku).ToListAsync(cancellationToken);
@@ -1085,6 +1099,12 @@ async Task ActivateInstalledModulesAsync()
                     "Warehouse.View" => Permission.ViewWarehouses,
                     "Warehouse.Manage" => Permission.ManageWarehouses,
                     "Warehouse.Transfer" => Permission.TransferInventory,
+                    "Supplier.View" => Permission.ViewSuppliers,
+                    "Supplier.Manage" => Permission.ManageSuppliers,
+                    "Purchase.View" => Permission.ViewPurchases,
+                    "Purchase.Manage" => Permission.ManagePurchases,
+                    "SupplierPayment.Manage" => Permission.ManageSupplierPayments,
+                    "Finance.Reports" => Permission.ViewFinancialReports,
                     "ThermalReceipts.Print" => Permission.ConfirmSale,
                     "ThermalReceipts.Configure" => Permission.ManageModules,
                     _ => throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' declara un permiso no compatible: '{endpoint.RequiredPermission}'.")
@@ -1194,6 +1214,12 @@ static Permission? ResolveModulePermission(string permission) => permission swit
     "Warehouse.View" => Permission.ViewWarehouses,
     "Warehouse.Manage" => Permission.ManageWarehouses,
     "Warehouse.Transfer" => Permission.TransferInventory,
+    "Supplier.View" => Permission.ViewSuppliers,
+    "Supplier.Manage" => Permission.ManageSuppliers,
+    "Purchase.View" => Permission.ViewPurchases,
+    "Purchase.Manage" => Permission.ManagePurchases,
+    "SupplierPayment.Manage" => Permission.ManageSupplierPayments,
+    "Finance.Reports" => Permission.ViewFinancialReports,
     "ThermalReceipts.Print" => Permission.ConfirmSale,
     "ThermalReceipts.Configure" => Permission.ManageModules,
     _ => null
