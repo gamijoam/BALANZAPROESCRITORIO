@@ -42,6 +42,7 @@ public sealed class FinanceModuleContractTests
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
 
         Assert.Equal("finance", manifest.Id);
+        Assert.Equal("1.0.2", manifest.Version.ToString(3));
         Assert.NotNull(manifest.EntryAssembly);
         Assert.NotNull(manifest.DesktopEntryAssembly);
         Assert.Contains("Supplier.View", manifest.Permissions);
