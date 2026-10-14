@@ -37,6 +37,10 @@ jobs:
         shell: pwsh
         run: .\tests\scripts\Test-AllModulePublishingAcceptance.ps1
 
+      - name: Comprobar firma DER y limpieza del runner
+        shell: pwsh
+        run: .\tests\scripts\Test-ModuleSigningWorkflowAcceptance.ps1
+
       - name: Compilar el módulo y preparar el paquete sin firma
         shell: pwsh
         env:
@@ -64,7 +68,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: module-release-input
-          path: incoming
+          path: ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/incoming
 
       - name: Validar, firmar y exportar solo archivos públicos
         shell: bash
@@ -73,7 +77,8 @@ jobs:
           PUBLISH_MODULE_INPUT: ${{ inputs.module }}
         run: |
           set -euo pipefail
-          mapfile -t unsigned_packages < <(find incoming/unsigned -maxdepth 1 -type f -name '*-unsigned.zip' -print)
+          RUN_ROOT="${RUNNER_TEMP}/module-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mapfile -t unsigned_packages < <(find "$RUN_ROOT/incoming/unsigned" -maxdepth 1 -type f -name '*-unsigned.zip' -print)
           case "$PUBLISH_MODULE_INPUT" in
             all) expected_modules=(warehouses thermal-receipts advanced-reports) ;;
             warehouses|thermal-receipts|advanced-reports) expected_modules=("$PUBLISH_MODULE_INPUT") ;;
@@ -95,26 +100,30 @@ jobs:
               exit 1
             fi
           done
-          publisher="$(find incoming/publisher -maxdepth 1 -type f -name 'Pos.Modules.Publisher' -print -quit)"
+          publisher="$(find "$RUN_ROOT/incoming/publisher" -maxdepth 1 -type f -name 'Pos.Modules.Publisher' -print -quit)"
           if [ -z "$publisher" ]; then
             echo "No se recibió el publicador Linux autónomo." >&2
             exit 1
           fi
           chmod u+x "$publisher"
-          mkdir -p signed
+          mkdir -p "$RUN_ROOT/signed"
           for unsigned_package in "${unsigned_packages[@]}"; do
             package_name="$(basename "$unsigned_package" -unsigned.zip).zip"
-            signed_package="signed/$package_name"
+            signed_package="$RUN_ROOT/signed/$package_name"
             "$publisher" sign-package \
               --input "$unsigned_package" \
               --output "$signed_package" \
               --private-key-pem "$POS_MODULE_SIGNING_KEY"
-            (cd signed && sha256sum "$package_name" > "$package_name.sha256")
+            (cd "$RUN_ROOT/signed" && sha256sum "$package_name" > "$package_name.sha256")
           done
           "$publisher" export-public-key \
             --private-key-pem "$POS_MODULE_SIGNING_KEY" \
-            --output signed/publisher-public.pem
-          cmp --silent <(tr -d '\r' < incoming/trusted-publisher.pem) <(tr -d '\r' < signed/publisher-public.pem) || {
+            --output "$RUN_ROOT/signed/publisher-public.pem"
+          openssl pkey -pubin -in "$RUN_ROOT/incoming/trusted-publisher.pem" \
+            -outform DER -out "$RUN_ROOT/trusted-publisher.der"
+          openssl pkey -in "$POS_MODULE_SIGNING_KEY" -pubout \
+            -outform DER -out "$RUN_ROOT/signer-public.der"
+          cmp --silent "$RUN_ROOT/trusted-publisher.der" "$RUN_ROOT/signer-public.der" || {
             echo "La clave privada del VPS no corresponde a la clave pública confiable del repositorio." >&2
             exit 1
           }
@@ -124,8 +133,13 @@ jobs:
         with:
           name: signed-module-output
           path: |
-            signed/*.zip
-            signed/publisher-public.pem
-            signed/*.sha256
+            ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/signed/*.zip
+            ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/signed/publisher-public.pem
+            ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/signed/*.sha256
           if-no-files-found: error
           retention-days: 30
+
+      - name: Limpiar archivos temporales
+        if: always()
+        shell: bash
+        run: rm -rf -- "${RUNNER_TEMP}/module-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
