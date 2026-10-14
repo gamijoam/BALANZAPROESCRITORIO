@@ -39,6 +39,39 @@ public static class FinancePurchasePolicy
         return ConvertUnitCost(invoiceUnitCost, invoiceCurrency, productCurrency, usdToVesRate);
     }
 
+    public static decimal? CalculateSuggestedPrice(decimal? unitCost, decimal? targetGrossMargin)
+    {
+        if (unitCost is null || targetGrossMargin is null) return null;
+        if (unitCost < 0m || targetGrossMargin < 0m || targetGrossMargin >= 1m)
+            throw new ArgumentOutOfRangeException(nameof(targetGrossMargin), "El costo debe ser no negativo y el margen debe estar entre 0 % y menos de 100 %.");
+        return Round(unitCost.Value / (1m - targetGrossMargin.Value));
+    }
+
+    public static ImmediateSettlement CalculateImmediateSettlement(decimal invoiceTotal, string invoiceCurrency,
+        decimal paymentAmount, string paymentCurrency, decimal currentUsdToVesRate, decimal invoiceUsdToVesRate)
+    {
+        if (invoiceTotal <= 0m || paymentAmount <= 0m || invoiceUsdToVesRate <= 0m)
+            throw new ArgumentOutOfRangeException(nameof(invoiceTotal), "El importe y la tasa de la factura deben ser positivos.");
+        ValidateCurrency(invoiceCurrency, nameof(invoiceCurrency));
+        ValidateCurrency(paymentCurrency, nameof(paymentCurrency));
+
+        var currentRate = currentUsdToVesRate;
+        if (invoiceCurrency != paymentCurrency && currentRate <= 0m)
+            throw new InvalidOperationException("exchange_rate_unavailable");
+        var conversionRate = invoiceCurrency == paymentCurrency ? 1m : currentRate;
+        var principal = ConvertPaymentToInvoiceCurrency(paymentAmount, paymentCurrency, invoiceCurrency, conversionRate);
+        if (principal != Round(invoiceTotal))
+            throw new InvalidOperationException("immediate_payment_must_equal_invoice_total");
+
+        var paymentUsdRate = currentRate > 0m ? currentRate : paymentCurrency == "USD" ? 1m : 0m;
+        decimal? paymentUsd = paymentUsdRate > 0m ? ToUsdEquivalent(paymentAmount, paymentCurrency, paymentUsdRate) : null;
+        decimal? fxDifference = paymentUsd.HasValue
+            ? CalculateRealizedFxGainUsd(principal, invoiceCurrency, invoiceUsdToVesRate, paymentAmount, paymentCurrency, paymentUsdRate)
+            : null;
+        var appliedRate = invoiceCurrency == paymentCurrency ? 1m : paymentCurrency == "USD" ? currentRate : 1m / currentRate;
+        return new(principal, appliedRate, paymentUsd, fxDifference);
+    }
+
     public static decimal ConvertPaymentToInvoiceCurrency(decimal paymentAmount, string paymentCurrency,
         string invoiceCurrency, decimal usdToVesRate)
     {
@@ -77,6 +110,9 @@ public static class FinancePurchasePolicy
         if (currency is not ("USD" or "VES")) throw new ArgumentOutOfRangeException(parameterName, "Solo se admiten USD y VES.");
     }
 }
+
+public sealed record ImmediateSettlement(decimal InvoiceCurrencyAmount, decimal AppliedExchangeRate,
+    decimal? PaymentUsdEquivalent, decimal? FxDifferenceUsd);
 
 public static class FinanceIdempotencyPolicy
 {

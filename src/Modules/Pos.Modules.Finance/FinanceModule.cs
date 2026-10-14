@@ -28,6 +28,10 @@ public sealed class FinanceModule : IPosServerModule
         new("POST", "purchases", CreatePurchaseDraftAsync, "Purchase.Manage"),
         new("PUT", "purchases/{id:guid}", UpdatePurchaseDraftAsync, "Purchase.Manage"),
         new("POST", "purchases/{id:guid}/post", PostPurchaseAsync, "Purchase.Manage"),
+        new("POST", "purchases/{id:guid}/post-and-pay", PostImmediatePurchaseAsync, "Purchase.Manage", "SupplierPayment.Manage"),
+        new("GET", "purchases/{id:guid}/price-suggestions", GetPriceSuggestionsAsync, "Purchase.View"),
+        new("GET", "price-suggestions/margins", GetPriceSuggestionMarginsAsync, "PriceSuggestion.Manage"),
+        new("PUT", "price-suggestions/margins", SetPriceSuggestionMarginsAsync, "PriceSuggestion.Manage"),
         new("GET", "purchases/{id:guid}/receipts", ListReceiptsAsync, "Purchase.View"),
         new("POST", "purchases/{id:guid}/receipts", ReceivePurchaseAsync, "Purchase.Manage"),
         new("POST", "purchases/{id:guid}/receipts/{receiptId:guid}/reverse", ReverseReceiptAsync, "Purchase.Manage"),
@@ -229,6 +233,7 @@ public sealed class FinanceModule : IPosServerModule
             return Results.Ok(new { id, status = header.Status, replayed = true });
         }
         if (header.Status != "Draft") return Results.Conflict(new { error = "purchase_state_not_postable" });
+        if (header.PaymentTerm == "Immediate") return Results.Conflict(new { error = "immediate_purchase_requires_payment" });
         var now = DateTime.UtcNow;
         var invoiceUsd = FinancePurchasePolicy.ToUsdEquivalent(header.Total, header.Currency, header.ExchangeRate);
         await using var charge = new NpgsqlCommand($"INSERT INTO {Table("supplier_payables")} (id,supplier_id,invoice_id,payment_id,entry_type,currency,amount,amount_usd_equivalent,applied_exchange_rate,fx_difference,reference,created_by,created_at_utc) VALUES (@id,@supplier,@invoice,NULL,'Invoice',@currency,@amount,@usd,@rate,0,@reference,@actor,@now)", connection, transaction);
@@ -242,6 +247,95 @@ public sealed class FinanceModule : IPosServerModule
         await WriteEventAsync(connection, transaction, context, "purchase.posted", new { id, header.Total, header.Currency, invoiceUsd }, now);
         await transaction.CommitAsync(context.RequestAborted);
         return Results.Ok(new { id, status = "Posted", replayed = false });
+    }
+
+    private static async Task<IResult> PostImmediatePurchaseAsync(HttpContext context)
+    {
+        var invoiceId = RouteGuid(context, "id");
+        var request = await context.Request.ReadFromJsonAsync<ImmediatePurchasePostingRequest>(cancellationToken: context.RequestAborted);
+        if (!ValidatePayment(request?.Payment, out var validationMessage))
+            return ValidationError("payment", validationMessage ?? "Indica un pago completo válido para la factura.");
+        var paymentRequest = request!.Payment!;
+        var requestHash = FinanceIdempotencyPolicy.HashPayment(invoiceId, paymentRequest);
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        await using var transaction = await connection.BeginTransactionAsync(context.RequestAborted);
+        var header = await ReadPurchaseHeaderAsync(connection, transaction, invoiceId, context.RequestAborted, forUpdate: true);
+        if (header is null) return Results.NotFound(new { error = "purchase_not_found" });
+
+        await using (var replay = new NpgsqlCommand($"SELECT id,idempotency_hash FROM {Table("supplier_payments")} WHERE idempotency_key=@key", connection, transaction))
+        {
+            replay.Parameters.AddWithValue("key", paymentRequest.IdempotencyKey.Trim());
+            await using var reader = await replay.ExecuteReaderAsync(context.RequestAborted);
+            if (await reader.ReadAsync(context.RequestAborted))
+            {
+                var replayedPaymentId = reader.GetGuid(0);
+                var previousHash = reader.GetString(1);
+                await reader.CloseAsync();
+                await transaction.CommitAsync(context.RequestAborted);
+                return string.Equals(previousHash, requestHash, StringComparison.Ordinal)
+                    ? Results.Ok(new { id = invoiceId, paymentId = replayedPaymentId, status = header.Status, replayed = true })
+                    : Results.Conflict(new { error = "supplier_payment_idempotency_conflict" });
+            }
+        }
+
+        if (header.Status != "Draft") return Results.Conflict(new { error = "purchase_state_not_postable" });
+        if (header.PaymentTerm != "Immediate") return Results.Conflict(new { error = "immediate_purchase_required" });
+
+        var currentRate = await ReadCurrentUsdToVesRateAsync(connection, transaction, context.RequestAborted) ?? 0m;
+        ImmediateSettlement settlement;
+        try
+        {
+            settlement = FinancePurchasePolicy.CalculateImmediateSettlement(header.Total, header.Currency,
+                paymentRequest.Amount, paymentRequest.Currency, currentRate, header.ExchangeRate);
+        }
+        catch (InvalidOperationException exception) when (exception.Message is "exchange_rate_unavailable" or "immediate_payment_must_equal_invoice_total")
+        { return Results.Conflict(new { error = exception.Message, invoiceTotal = header.Total, currency = header.Currency }); }
+
+        var now = DateTime.UtcNow;
+        var paymentId = Guid.NewGuid();
+        var invoiceUsd = FinancePurchasePolicy.ToUsdEquivalent(header.Total, header.Currency, header.ExchangeRate);
+        await using (var charge = new NpgsqlCommand($"INSERT INTO {Table("supplier_payables")} (id,supplier_id,invoice_id,payment_id,entry_type,currency,amount,amount_usd_equivalent,applied_exchange_rate,fx_difference,reference,created_by,created_at_utc) VALUES (@id,@supplier,@invoice,NULL,'Invoice',@currency,@amount,@usd,@rate,0,@reference,@actor,@now)", connection, transaction))
+        {
+            charge.Parameters.AddWithValue("id", Guid.NewGuid()); charge.Parameters.AddWithValue("supplier", header.SupplierId); charge.Parameters.AddWithValue("invoice", invoiceId);
+            charge.Parameters.AddWithValue("currency", header.Currency); charge.Parameters.AddWithValue("amount", header.Total); charge.Parameters.AddWithValue("usd", invoiceUsd);
+            charge.Parameters.AddWithValue("rate", header.ExchangeRate); charge.Parameters.AddWithValue("reference", $"{header.DocumentType} {header.DocumentNumber}");
+            charge.Parameters.AddWithValue("actor", GetActorId(context)); charge.Parameters.AddWithValue("now", now); await charge.ExecuteNonQueryAsync(context.RequestAborted);
+        }
+        await using (var payment = new NpgsqlCommand($"INSERT INTO {Table("supplier_payments")} (id,invoice_id,payment_currency,amount,invoice_currency_amount,applied_exchange_rate,fx_difference,method,receiving_account,reference,paid_at_utc,created_by,idempotency_key,idempotency_hash,reversed_at_utc) VALUES (@id,@invoice,@currency,@amount,@principal,@rate,@fx,@method,@account,@reference,@now,@actor,@key,@hash,NULL)", connection, transaction))
+        {
+            payment.Parameters.AddWithValue("id", paymentId); payment.Parameters.AddWithValue("invoice", invoiceId); payment.Parameters.AddWithValue("currency", paymentRequest.Currency);
+            payment.Parameters.AddWithValue("amount", paymentRequest.Amount); payment.Parameters.AddWithValue("principal", settlement.InvoiceCurrencyAmount);
+            payment.Parameters.AddWithValue("rate", settlement.AppliedExchangeRate); payment.Parameters.AddWithValue("fx", (object?)settlement.FxDifferenceUsd ?? DBNull.Value);
+            payment.Parameters.AddWithValue("method", paymentRequest.Method.Trim()); payment.Parameters.AddWithValue("account", paymentRequest.ReceivingAccount.Trim());
+            payment.Parameters.AddWithValue("reference", (object?)TrimOrNull(paymentRequest.Reference) ?? DBNull.Value); payment.Parameters.AddWithValue("now", now);
+            payment.Parameters.AddWithValue("actor", GetActorId(context)); payment.Parameters.AddWithValue("key", paymentRequest.IdempotencyKey.Trim()); payment.Parameters.AddWithValue("hash", requestHash);
+            await payment.ExecuteNonQueryAsync(context.RequestAborted);
+        }
+        await using (var ledger = new NpgsqlCommand($"INSERT INTO {Table("supplier_payables")} (id,supplier_id,invoice_id,payment_id,entry_type,currency,amount,amount_usd_equivalent,applied_exchange_rate,fx_difference,reference,created_by,created_at_utc) VALUES (@id,@supplier,@invoice,@payment,'Payment',@currency,@amount,@usd,@rate,@fx,@reference,@actor,@now)", connection, transaction))
+        {
+            ledger.Parameters.AddWithValue("id", Guid.NewGuid()); ledger.Parameters.AddWithValue("supplier", header.SupplierId); ledger.Parameters.AddWithValue("invoice", invoiceId);
+            ledger.Parameters.AddWithValue("payment", paymentId); ledger.Parameters.AddWithValue("currency", header.Currency); ledger.Parameters.AddWithValue("amount", -settlement.InvoiceCurrencyAmount);
+            ledger.Parameters.AddWithValue("usd", (object?)(settlement.PaymentUsdEquivalent is null ? null : -settlement.PaymentUsdEquivalent.Value) ?? DBNull.Value);
+            ledger.Parameters.AddWithValue("rate", settlement.AppliedExchangeRate); ledger.Parameters.AddWithValue("fx", (object?)settlement.FxDifferenceUsd ?? DBNull.Value);
+            ledger.Parameters.AddWithValue("reference", (object?)TrimOrNull(paymentRequest.Reference) ?? DBNull.Value); ledger.Parameters.AddWithValue("actor", GetActorId(context)); ledger.Parameters.AddWithValue("now", now);
+            await ledger.ExecuteNonQueryAsync(context.RequestAborted);
+        }
+        await using (var update = new NpgsqlCommand($"UPDATE {Table("purchase_invoices")} SET status='Paid',paid_amount=@amount,posted_at_utc=@now,updated_at_utc=@now WHERE id=@id AND status='Draft'", connection, transaction))
+        {
+            update.Parameters.AddWithValue("amount", header.Total); update.Parameters.AddWithValue("now", now); update.Parameters.AddWithValue("id", invoiceId);
+            if (await update.ExecuteNonQueryAsync(context.RequestAborted) != 1) return Results.Conflict(new { error = "purchase_state_changed" });
+        }
+        await WriteEventAsync(connection, transaction, context, "purchase.posted",
+            new { invoiceId, header.Total, header.Currency, invoiceUsd, paymentTerm = header.PaymentTerm, paymentId }, now);
+        await WriteEventAsync(connection, transaction, context, "supplier.payment_recorded",
+            new { paymentId, invoiceId, paymentRequest.Amount, paymentRequest.Currency, invoiceCurrencyAmount = settlement.InvoiceCurrencyAmount,
+                fxDifference = settlement.FxDifferenceUsd, newBalance = 0m, paymentTerm = "Immediate" }, now);
+        await transaction.CommitAsync(context.RequestAborted);
+        return Results.Created($"payments/{paymentId:D}", new
+        {
+            id = invoiceId, paymentId, status = "Paid", invoiceCurrencyAmount = settlement.InvoiceCurrencyAmount,
+            currency = header.Currency, balance = 0m, replayed = false
+        });
     }
 
     private static async Task<IResult> ListReceiptsAsync(HttpContext context)
@@ -624,6 +718,121 @@ public sealed class FinanceModule : IPosServerModule
         return Results.Ok(new { id = paymentId, reversed = true, balance });
     }
 
+    private static async Task<IResult> GetPriceSuggestionMarginsAsync(HttpContext context)
+    {
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        var margins = await ReadPriceSuggestionMarginsAsync(connection, null, context.RequestAborted);
+        return Results.Ok(new PriceSuggestionMarginSettings(
+            GetMarginPercent(margins, "Price1"),
+            GetMarginPercent(margins, "Price2"),
+            GetMarginPercent(margins, "Price3")));
+    }
+
+    private static async Task<IResult> SetPriceSuggestionMarginsAsync(HttpContext context)
+    {
+        var request = await context.Request.ReadFromJsonAsync<PriceSuggestionMarginRequest>(cancellationToken: context.RequestAborted);
+        if (request is null || !ValidMarginPercent(request.Price1MarginPercent) || !ValidMarginPercent(request.Price2MarginPercent) ||
+            !ValidMarginPercent(request.Price3MarginPercent))
+            return ValidationError("margins", "Cada margen debe ser un porcentaje entre 0 y menos de 100, con hasta dos decimales. Deja vacío un nivel para desactivar su sugerencia.");
+
+        var configured = new (string Tier, decimal? Percent)[]
+        {
+            ("Price1", request.Price1MarginPercent), ("Price2", request.Price2MarginPercent), ("Price3", request.Price3MarginPercent)
+        };
+        var now = DateTime.UtcNow;
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        await using var transaction = await connection.BeginTransactionAsync(context.RequestAborted);
+        foreach (var (tier, percent) in configured)
+        {
+            if (percent is null)
+            {
+                await using var delete = new NpgsqlCommand($"DELETE FROM {Table("price_suggestion_margins")} WHERE price_tier=@tier", connection, transaction);
+                delete.Parameters.AddWithValue("tier", tier); await delete.ExecuteNonQueryAsync(context.RequestAborted);
+                continue;
+            }
+            await using var upsert = new NpgsqlCommand($"INSERT INTO {Table("price_suggestion_margins")} (price_tier,margin_rate,updated_by,updated_at_utc) VALUES (@tier,@margin,@actor,@now) ON CONFLICT (price_tier) DO UPDATE SET margin_rate=EXCLUDED.margin_rate,updated_by=EXCLUDED.updated_by,updated_at_utc=EXCLUDED.updated_at_utc", connection, transaction);
+            upsert.Parameters.AddWithValue("tier", tier); upsert.Parameters.AddWithValue("margin", percent.Value / 100m);
+            upsert.Parameters.AddWithValue("actor", GetActorId(context)); upsert.Parameters.AddWithValue("now", now);
+            await upsert.ExecuteNonQueryAsync(context.RequestAborted);
+        }
+        await WriteEventAsync(connection, transaction, context, "price_suggestion.margins_updated",
+            new { request.Price1MarginPercent, request.Price2MarginPercent, request.Price3MarginPercent }, now);
+        await transaction.CommitAsync(context.RequestAborted);
+        return Results.Ok(new PriceSuggestionMarginSettings(request.Price1MarginPercent, request.Price2MarginPercent, request.Price3MarginPercent));
+    }
+
+    private static async Task<IResult> GetPriceSuggestionsAsync(HttpContext context)
+    {
+        var invoiceId = RouteGuid(context, "id");
+        await using var connection = await OpenAsync(context, context.RequestAborted);
+        string? documentNumber;
+        await using (var invoice = new NpgsqlCommand($"SELECT document_number FROM {Table("purchase_invoices")} WHERE id=@id", connection))
+        {
+            invoice.Parameters.AddWithValue("id", invoiceId);
+            documentNumber = await invoice.ExecuteScalarAsync(context.RequestAborted) as string;
+        }
+        if (documentNumber is null) return Results.NotFound(new { error = "purchase_not_found" });
+
+        var productIds = new List<Guid>();
+        await using (var received = new NpgsqlCommand($"SELECT DISTINCT l.product_id FROM {Table("purchase_receipts")} r JOIN {Table("purchase_receipt_lines")} l ON l.receipt_id=r.id WHERE r.invoice_id=@invoice AND r.completed_at_utc IS NOT NULL AND r.reversed_at_utc IS NULL ORDER BY l.product_id", connection))
+        {
+            received.Parameters.AddWithValue("invoice", invoiceId);
+            await using var reader = await received.ExecuteReaderAsync(context.RequestAborted);
+            while (await reader.ReadAsync(context.RequestAborted)) productIds.Add(reader.GetGuid(0));
+        }
+        var marginRates = await ReadPriceSuggestionMarginsAsync(connection, null, context.RequestAborted);
+        var missingMargins = new[] { "Price1", "Price2", "Price3" }.Where(tier => !marginRates.ContainsKey(tier)).ToArray();
+        if (productIds.Count == 0)
+            return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, [], missingMargins, [], false));
+
+        var catalog = await context.RequestServices.GetRequiredService<IPosProductPricingReadService>()
+            .GetSnapshotsAsync(productIds, context.RequestAborted);
+        var suggestions = new List<PriceSuggestionInfo>();
+        var unavailable = new List<PriceSuggestionUnavailableInfo>();
+        foreach (var product in catalog)
+        {
+            if (!product.IsActive)
+            {
+                unavailable.Add(new(product.ProductId, product.Sku, product.Name, "El artículo está inactivo."));
+                continue;
+            }
+            if (product.UnitCost is null)
+            {
+                unavailable.Add(new(product.ProductId, product.Sku, product.Name, "No hay costo promedio disponible."));
+                continue;
+            }
+            AddSuggestion("Price1", product.Price1);
+            AddSuggestion("Price2", product.Price2);
+            AddSuggestion("Price3", product.Price3);
+
+            void AddSuggestion(string tier, decimal? currentPrice)
+            {
+                if (!marginRates.TryGetValue(tier, out var margin)) return;
+                var suggested = FinancePurchasePolicy.CalculateSuggestedPrice(product.UnitCost, margin);
+                if (suggested.HasValue)
+                    suggestions.Add(new(product.ProductId, product.Sku, product.Name, product.Currency, product.UnitCost.Value,
+                        tier, margin * 100m, currentPrice, suggested.Value, invoiceId, documentNumber));
+            }
+        }
+        return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, suggestions, missingMargins, unavailable, true));
+    }
+
+    private static async Task<Dictionary<string, decimal>> ReadPriceSuggestionMarginsAsync(NpgsqlConnection connection,
+        NpgsqlTransaction? transaction, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand($"SELECT price_tier,margin_rate FROM {Table("price_suggestion_margins")} ORDER BY price_tier", connection, transaction);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        while (await reader.ReadAsync(cancellationToken)) result[reader.GetString(0)] = reader.GetDecimal(1);
+        return result;
+    }
+
+    private static decimal? ToMarginPercent(decimal? rate) => rate.HasValue ? rate.Value * 100m : null;
+    private static decimal? GetMarginPercent(IReadOnlyDictionary<string, decimal> margins, string tier)
+        => margins.TryGetValue(tier, out var rate) ? ToMarginPercent(rate) : null;
+    private static bool ValidMarginPercent(decimal? percent) => !percent.HasValue ||
+        percent.Value >= 0m && percent.Value < 100m && decimal.Round(percent.Value, 2) == percent.Value;
+
     private static async Task<IResult> GetFinanceSummaryAsync(HttpContext context)
     {
         await using var connection = await OpenAsync(context, context.RequestAborted);
@@ -816,6 +1025,14 @@ public sealed class FinanceModule : IPosServerModule
     }
     public sealed record SupplierPaymentRequest(decimal Amount, string Currency, string Method, string ReceivingAccount,
         string? Reference, string IdempotencyKey);
+    public sealed record ImmediatePurchasePostingRequest(SupplierPaymentRequest? Payment);
+    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
+    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
+    public sealed record PriceSuggestionResult(Guid InvoiceId, string DocumentNumber, IReadOnlyList<PriceSuggestionInfo> Suggestions,
+        IReadOnlyList<string> MissingMarginTiers, IReadOnlyList<PriceSuggestionUnavailableInfo> UnavailableProducts, bool HasReceivedItems);
+    public sealed record PriceSuggestionInfo(Guid ProductId, string Sku, string Name, string Currency, decimal UnitCost,
+        string PriceTier, decimal MarginPercent, decimal? CurrentPrice, decimal SuggestedPrice, Guid InvoiceId, string DocumentNumber);
+    public sealed record PriceSuggestionUnavailableInfo(Guid ProductId, string Sku, string Name, string Reason);
     public sealed record SupplierInfo(Guid Id, string Code, string LegalName, string? TaxId, string? Phone, string? Email,
         string? Address, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
     public sealed record PurchaseSummary(Guid Id, Guid SupplierId, string SupplierName, string DocumentType, string DocumentNumber,

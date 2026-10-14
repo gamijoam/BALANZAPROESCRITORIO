@@ -21,5 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Modules/Pos.Modules.Finance.Desktop/Pos.Modules.Finance.Desktop.csproj" />
     <Content Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceWindow.xaml" Link="FinanceWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../src/Modules/Pos.Modules.Finance.Desktop/SupplierPaymentWindow.xaml" Link="SupplierPaymentWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../src/Modules/Pos.Modules.Finance.Desktop/PriceSuggestionWindow.xaml" Link="PriceSuggestionWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

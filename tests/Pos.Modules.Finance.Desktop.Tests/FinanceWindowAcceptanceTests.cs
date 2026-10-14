@@ -23,17 +23,17 @@ public sealed class FinanceWindowAcceptanceTests
         AssertLabel(document, "SupplierEmailLabel", "Correo");
         AssertLabel(document, "SupplierAddressLabel", "Dirección");
 
-        AssertLabel(document, "DraftSupplierLabel", "Proveedor");
+        AssertLabel(document, "DraftSupplierLabel", "Proveedor (obligatorio)");
         AssertLabel(document, "DraftDocumentTypeLabel", "Tipo de documento");
-        AssertLabel(document, "DraftDocumentNumberLabel", "Número de factura");
-        AssertLabel(document, "DraftControlNumberLabel", "Número de control");
-        AssertLabel(document, "DraftCurrencyLabel", "Moneda");
-        AssertLabel(document, "DraftExchangeRateLabel", "Tasa de cambio");
+        AssertLabel(document, "DraftDocumentNumberLabel", "Número de factura (obligatorio)");
+        AssertLabel(document, "DraftControlNumberLabel", "Número de control (opcional)");
+        AssertLabel(document, "DraftCurrencyLabel", "Moneda de la factura");
+        AssertLabel(document, "DraftExchangeRateLabel", "Tasa VES por USD");
         AssertLabel(document, "DraftIssueDateLabel", "Fecha de emisión");
-        AssertLabel(document, "DraftDueDateLabel", "Fecha de vencimiento");
+        AssertLabel(document, "DraftDueDateLabel", "Vencimiento (opcional)");
         AssertLabel(document, "DraftFreightLabel", "Flete facturado");
         AssertLabel(document, "DraftPaymentTermLabel", "Condición de pago");
-        AssertLabel(document, "DraftProductLabel", "Artículo");
+        AssertLabel(document, "DraftProductLabel", "Artículo (busca y selecciona)");
         AssertLabel(document, "DraftQuantityLabel", "Cantidad");
         AssertLabel(document, "DraftUnitPriceLabel", "Precio unitario");
         AssertLabel(document, "DraftDiscountLabel", "Descuento");
@@ -54,6 +54,123 @@ public sealed class FinanceWindowAcceptanceTests
         Assert.Contains("Pagado", headers);
         Assert.Contains("Saldo pendiente", headers);
         Assert.Contains("Estado", headers);
+    }
+
+    [Fact]
+    public void Purchase_draft_has_a_separate_workspace_with_a_pinned_save_bar_and_line_recovery()
+    {
+        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "FinanceWindow.xaml"));
+        var invoiceWorkspace = FindNamedElement(document, "InvoiceWorkspace");
+        var draftEditor = FindNamedElement(document, "DraftEditor");
+        var footer = FindNamedElement(document, "DraftFooterPanel");
+
+        Assert.Equal("Collapsed", (string?)draftEditor.Attribute("Visibility"));
+        AssertLabel(document, "SaveDraftButton", "Guardar borrador");
+        AssertLabel(document, "CancelDraftButton", "Volver a facturas");
+        Assert.NotNull(FindNamedElement(document, "RemoveDraftLineButton"));
+        Assert.DoesNotContain(footer.Ancestors(), element => element.Name.LocalName == "ScrollViewer");
+        Assert.NotNull(invoiceWorkspace);
+    }
+
+    [Fact]
+    public void Supplier_payment_dialog_explains_the_invoice_context_and_labels_every_field()
+    {
+        var paymentWindow = typeof(FinanceWindow).Assembly.GetType("Pos.Modules.Finance.Desktop.SupplierPaymentWindow");
+        Assert.NotNull(paymentWindow);
+        var paymentXaml = Path.Combine(Path.GetDirectoryName(typeof(FinanceWindow).Assembly.Location)!, "SupplierPaymentWindow.xaml");
+        var document = XDocument.Load(paymentXaml);
+
+        AssertLabel(document, "PaymentSupplierLabel", "Proveedor");
+        AssertLabel(document, "PaymentDocumentLabel", "Factura");
+        AssertLabel(document, "PaymentBalanceLabel", "Saldo pendiente");
+        AssertLabel(document, "PaymentAmountLabel", "Importe que vas a pagar");
+        AssertLabel(document, "PaymentCurrencyLabel", "Moneda del pago");
+        AssertLabel(document, "PaymentMethodLabel", "Medio de pago");
+        AssertLabel(document, "PaymentReceivingAccountLabel", "Cuenta receptora");
+        AssertLabel(document, "PaymentReferenceLabel", "Referencia (opcional)");
+        Assert.NotNull(FindNamedElement(document, "PaymentConversionHelp"));
+        Assert.NotNull(FindNamedElement(document, "ConfirmPaymentButton"));
+    }
+
+    [Fact]
+    public void Selected_payment_has_a_detail_area_for_reconciliation_data()
+    {
+        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "FinanceWindow.xaml"));
+        var detail = FindNamedElement(document, "PaymentDetailLabel");
+
+        Assert.Equal("Visible", (string?)detail.Attribute("Visibility"));
+    }
+
+    [Fact]
+    public void Price_suggestions_require_configured_margins_and_an_explicit_review_action()
+    {
+        var windowDocument = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "FinanceWindow.xaml"));
+        AssertLabel(windowDocument, "Price1MarginLabel", "Precio 1 (%)");
+        AssertLabel(windowDocument, "Price2MarginLabel", "Precio 2 (%)");
+        AssertLabel(windowDocument, "Price3MarginLabel", "Precio 3 (%)");
+        AssertLabel(windowDocument, "SavePriceMarginsButton", "Guardar márgenes");
+        AssertLabel(windowDocument, "ViewPriceSuggestionsButton", "Revisar precios sugeridos");
+
+        var suggestionPath = Path.Combine(AppContext.BaseDirectory, "PriceSuggestionWindow.xaml");
+        var suggestionDocument = XDocument.Load(suggestionPath);
+        Assert.Equal("Propuestas de precio por producto y nivel",
+            (string?)FindNamedElement(suggestionDocument, "SuggestionsGrid").Attribute("AutomationProperties.Name"));
+        AssertLabel(suggestionDocument, "ApplySuggestionButton", "Confirmar precio seleccionado");
+        Assert.Contains("El servicio comprobará que costo y precio no hayan cambiado", suggestionDocument.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Retrying_the_same_supplier_payment_reuses_its_idempotency_key_but_changed_data_gets_a_new_key()
+    {
+        var assembly = typeof(FinanceWindow).Assembly;
+        var policy = assembly.GetType("Pos.Modules.Finance.Desktop.FinancePaymentRetryPolicy");
+        var requestType = typeof(FinanceWindow).GetNestedType("SupplierPaymentRequest");
+        Assert.NotNull(policy);
+        Assert.NotNull(requestType);
+        var method = policy!.GetMethod("CreateOrReuse", BindingFlags.Public | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var invoiceId = Guid.NewGuid();
+        var pending = Activator.CreateInstance(requestType!, [25m, "VES", "Transferencia", "Banco Uno", "ref-123", "first-key"]);
+        var retry = method!.Invoke(null, [invoiceId, invoiceId, pending, 25m, "VES", "Transferencia", "Banco Uno", "ref-123"]);
+        var changed = method.Invoke(null, [invoiceId, invoiceId, pending, 30m, "VES", "Transferencia", "Banco Uno", "ref-123"]);
+
+        Assert.Equal("first-key", requestType!.GetProperty("IdempotencyKey")!.GetValue(retry));
+        Assert.NotEqual("first-key", requestType.GetProperty("IdempotencyKey")!.GetValue(changed));
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData("F-001", true)]
+    public void Purchase_invoice_requires_a_document_number(string? documentNumber, bool expected)
+    {
+        var validation = typeof(FinanceWindow).Assembly.GetType("Pos.Modules.Finance.Desktop.FinanceDraftValidation");
+        Assert.NotNull(validation);
+        var method = validation!.GetMethod("HasDocumentNumber", BindingFlags.Public | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        Assert.Equal(expected, method!.Invoke(null, [documentNumber]));
+    }
+
+    [Fact]
+    public void Saving_a_new_draft_selects_it_so_the_next_invoice_action_is_available()
+    {
+        var createdId = Guid.NewGuid();
+        var created = new FinanceWindow.PurchaseSummaryClientInfo(createdId, Guid.NewGuid(), "Proveedor", "Invoice",
+            "F-002", null, "USD", new DateOnly(2026, 10, 14), null, 20m, "Draft", "Credit", 20m);
+        var prior = new FinanceWindow.PurchaseSummaryClientInfo(Guid.NewGuid(), Guid.NewGuid(), "Otro proveedor", "Invoice",
+            "F-001", null, "USD", new DateOnly(2026, 10, 13), null, 10m, "Draft", "Credit", 10m);
+
+        var selected = FinancePurchaseSelectionPolicy.Select([prior, created], createdId, prior.Id);
+
+        Assert.Equal(createdId, selected?.Id);
+
+        var request = new FinanceWindow.PurchaseDraftRequest(created.SupplierId, "Invoice", created.DocumentNumber,
+            null, "USD", 1m, new DateOnly(2026, 10, 14), null, 0m, "Credit", [], null, null);
+        var selectedWhenCreateResponseHasNoId = FinancePurchaseSelectionPolicy.Select([prior, created], null, prior.Id, request);
+        Assert.Equal(createdId, selectedWhenCreateResponseHasNoId?.Id);
     }
 
     [Theory]

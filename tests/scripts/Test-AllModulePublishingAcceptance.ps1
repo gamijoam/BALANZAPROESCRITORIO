@@ -27,6 +27,10 @@ foreach ($moduleId in $distributableIds) {
         throw "El módulo distribuible '$moduleId' no está incluido en la publicación completa."
     }
 }
+$financeSettingsPackageEntry = "Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0002.json'; Package = 'migrations/finance-0002.json'"
+if ($prepare -notmatch [regex]::Escape($financeSettingsPackageEntry)) {
+    throw 'RED: el paquete de Finanzas no incluye la migración finance-0002 para los márgenes de precios.'
+}
 if ($workflow -notmatch 'PUBLISH_MODULE_INPUT' -or $workflow -notmatch 'expected_modules') {
     throw 'RED: el firmador no valida que recibió todos los paquetes solicitados.'
 }

@@ -74,118 +74,155 @@
             </TabItem>
             <TabItem x:Name="PurchasesTab" Header="Facturas y cuentas por pagar">
                 <Grid Margin="10">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="2*"/><RowDefinition Height="3*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <DockPanel Grid.Row="0" Margin="0,0,0,8">
-                        <TextBlock Text="Facturas de compra" FontSize="17" FontWeight="SemiBold" Foreground="#17395F" VerticalAlignment="Center"/>
-                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
-                            <Button Content="Actualizar" Click="RefreshPurchases_Click"/>
-                            <Button x:Name="EditDraftButton" Content="Editar borrador" Click="EditDraft_Click"/>
-                            <Button x:Name="NewDraftButton" Content="Nueva factura" Background="#2E64B7" Foreground="White" Click="NewDraft_Click"/>
-                        </StackPanel>
-                    </DockPanel>
-                    <Grid Grid.Row="1" Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="1.25*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-                        <DataGrid x:Name="PurchaseGrid" Grid.Column="0" SelectionChanged="PurchaseGrid_SelectionChanged" AutomationProperties.Name="Facturas de compra">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Fecha" Binding="{Binding IssueDate}" Width="100"/>
-                                <DataGridTextColumn Header="Proveedor" Binding="{Binding SupplierName}" Width="*"/>
-                                <DataGridTextColumn Header="Documento" Binding="{Binding DocumentNumber}" Width="125"/>
-                                <DataGridTextColumn Header="Estado" Binding="{Binding StatusLabel}" Width="115"/>
-                                <DataGridTextColumn Header="Saldo" Binding="{Binding Balance, StringFormat=N2}" Width="105"/>
-                                <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="70"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#D7E0EB"/>
-                        <GroupBox Grid.Column="2" Header="Detalle de la factura seleccionada" Padding="7">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="76"/><RowDefinition Height="76"/></Grid.RowDefinitions>
-                                <TextBlock x:Name="PurchaseSummaryLabel" Grid.Row="0" Text="Selecciona una factura para ver su detalle y operaciones." Foreground="#61758D" TextWrapping="Wrap" Margin="3,2,3,7"/>
-                                <DataGrid x:Name="PurchaseDetailsGrid" Grid.Row="1" AutomationProperties.Name="Líneas de factura">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="90"/>
-                                        <DataGridTextColumn Header="Artículo" Binding="{Binding Name}" Width="*"/>
-                                        <DataGridTextColumn Header="Cantidad" Binding="{Binding Quantity, StringFormat=0.###}" Width="85"/>
-                                        <DataGridTextColumn Header="Recibido" Binding="{Binding ReceivedQuantity, StringFormat=0.###}" Width="85"/>
-                                        <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=N2}" Width="100"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <TextBlock x:Name="PaymentHistoryLabel" Grid.Row="2" Foreground="#61758D" TextWrapping="Wrap" Margin="3,7,3,0"/>
-                                <DataGrid x:Name="PaymentsGrid" Grid.Row="3" SelectionChanged="RelatedSelectionChanged" AutomationProperties.Name="Abonos de la factura seleccionada">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Fecha" Binding="{Binding PaidAtUtc, StringFormat=g}" Width="130"/>
-                                        <DataGridTextColumn Header="Importe" Binding="{Binding Amount, StringFormat=N2}" Width="90"/>
-                                        <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="65"/>
-                                        <DataGridTextColumn Header="Medio" Binding="{Binding Method}" Width="*"/>
-                                        <DataGridTextColumn Header="Anulado" Binding="{Binding ReversedAtUtc, StringFormat=g}" Width="120"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <DataGrid x:Name="ReceiptsGrid" Grid.Row="4" SelectionChanged="RelatedSelectionChanged" AutomationProperties.Name="Recepciones de la factura seleccionada">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Recibido" Binding="{Binding Header.CreatedAtUtc, StringFormat=g}" Width="145"/>
-                                        <DataGridTextColumn Header="Estado" Binding="{Binding Header.StatusLabel}" Width="105"/>
-                                        <DataGridTextColumn Header="Clave" Binding="{Binding Header.IdempotencyKey}" Width="*"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                            </Grid>
-                        </GroupBox>
-                    </Grid>
-                    <GroupBox x:Name="DraftEditor" Grid.Row="2" Header="Borrador de compra · el inventario y la deuda cambian al contabilizar / recibir" Padding="10">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel>
-                                <TextBlock Text="Datos de la factura" FontSize="15" FontWeight="SemiBold" Foreground="#17395F" Margin="2,0,0,5"/>
-                                <UniformGrid Columns="3" Margin="0,0,0,6">
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftSupplierLabel" Text="Proveedor" Margin="0,0,0,4"/><ComboBox x:Name="DraftSupplierPicker" DisplayMemberPath="LegalName" ToolTip="Selecciona el proveedor de esta factura"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftDocumentTypeLabel" Text="Tipo de documento" Margin="0,0,0,4"/><ComboBox x:Name="DraftDocumentTypePicker" SelectedIndex="0"><ComboBoxItem Content="Factura" Tag="Invoice"/><ComboBoxItem Content="Nota de débito" Tag="DebitNote"/></ComboBox></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftDocumentNumberLabel" Text="Número de factura" Margin="0,0,0,4"/><TextBox x:Name="DraftDocumentNumberBox" MaxLength="80" ToolTip="Número que aparece en la factura del proveedor"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftControlNumberLabel" Text="Número de control" Margin="0,0,0,4"/><TextBox x:Name="DraftControlNumberBox" MaxLength="80" ToolTip="Dato opcional impreso en el documento"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftCurrencyLabel" Text="Moneda" Margin="0,0,0,4"/><ComboBox x:Name="DraftCurrencyPicker" SelectedIndex="0" SelectionChanged="DraftCurrencyPicker_SelectionChanged"><ComboBoxItem Content="USD"/><ComboBoxItem Content="VES"/></ComboBox></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftExchangeRateLabel" Text="Tasa de cambio" Margin="0,0,0,4"/><TextBox x:Name="DraftExchangeRateBox" Text="1" ToolTip="Bolívares por dólar usados en esta factura"/></StackPanel>
-                                </UniformGrid>
-                                <UniformGrid Columns="4" Margin="0,0,0,6">
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftIssueDateLabel" Text="Fecha de emisión" Margin="0,0,0,4"/><DatePicker x:Name="DraftIssueDatePicker"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftDueDateLabel" Text="Fecha de vencimiento" Margin="0,0,0,4"/><DatePicker x:Name="DraftDueDatePicker"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftFreightLabel" Text="Flete facturado" Margin="0,0,0,4"/><TextBox x:Name="DraftFreightBox" Text="0" TextChanged="DraftFreightBox_TextChanged"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftPaymentTermLabel" Text="Condición de pago" Margin="0,0,0,4"/><ComboBox x:Name="DraftPaymentTermPicker" SelectedIndex="0"><ComboBoxItem Content="Crédito" Tag="Credit"/><ComboBoxItem Content="Contado" Tag="Immediate"/></ComboBox></StackPanel>
-                                </UniformGrid>
-                                <TextBlock Text="Agregar artículo a la factura" FontSize="15" FontWeight="SemiBold" Foreground="#17395F" Margin="2,4,0,5"/>
-                                <UniformGrid Columns="4" Margin="0,0,0,8">
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftProductLabel" Text="Artículo" Margin="0,0,0,4"/><DockPanel><Button x:Name="SearchProductsButton" DockPanel.Dock="Right" Content="Buscar" Click="SearchProducts_Click"/><ComboBox x:Name="DraftProductPicker" DisplayMemberPath="Name" IsEditable="True" ToolTip="Busca y selecciona un artículo"/></DockPanel></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftQuantityLabel" Text="Cantidad" Margin="0,0,0,4"/><TextBox x:Name="DraftQuantityBox" Text="1"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftUnitPriceLabel" Text="Precio unitario" Margin="0,0,0,4"/><TextBox x:Name="DraftUnitPriceBox" ToolTip="Precio unitario que indica la factura"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftDiscountLabel" Text="Descuento" Margin="0,0,0,4"/><TextBox x:Name="DraftDiscountBox" Text="0" ToolTip="Descuento total de esta línea"/></StackPanel>
-                                    <StackPanel Margin="4"><TextBlock x:Name="DraftTaxLabel" Text="Impuesto" Margin="0,0,0,4"/><TextBox x:Name="DraftTaxBox" Text="0" ToolTip="Importe de impuesto de esta línea"/></StackPanel>
-                                    <StackPanel Margin="4" VerticalAlignment="Bottom"><TextBlock Text="Tratamiento del impuesto" Margin="0,0,0,4"/><CheckBox x:Name="DraftTaxRecoverableCheck" Content="Impuesto recuperable" IsChecked="True" VerticalAlignment="Center" Height="34"/></StackPanel>
-                                    <StackPanel Margin="4" VerticalAlignment="Bottom"><TextBlock Text="Agregar artículo" Margin="0,0,0,4"/><Button Content="Agregar línea" Click="AddDraftLine_Click"/></StackPanel>
-                                </UniformGrid>
-                                <DataGrid x:Name="DraftLinesGrid" Height="168" IsReadOnly="True" AutomationProperties.Name="Artículos de la factura en borrador">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="110"/>
-                                        <DataGridTextColumn Header="Artículo" Binding="{Binding Name}" Width="*"/>
-                                        <DataGridTextColumn Header="Cantidad" Binding="{Binding Quantity, StringFormat=0.###}" Width="100"/>
-                                        <DataGridTextColumn Header="Precio" Binding="{Binding UnitPrice, StringFormat=N2}" Width="105"/>
-                                        <DataGridTextColumn Header="Descuento" Binding="{Binding Discount, StringFormat=N2}" Width="105"/>
-                                        <DataGridTextColumn Header="Impuesto" Binding="{Binding Tax, StringFormat=N2}" Width="100"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <Grid Margin="0,7,0,0">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <TextBlock x:Name="DraftTotalLabel" Grid.Column="0" Text="Total: 0,00" FontSize="15" FontWeight="Bold" Foreground="#17395F" VerticalAlignment="Center"/>
-                                    <Button x:Name="SaveDraftButton" Grid.Column="1" Content="Guardar borrador" Click="SaveDraft_Click"/>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="2,0,0,10">
+                        <TextBlock Text="Facturas de compra" FontSize="18" FontWeight="SemiBold" Foreground="#17395F"/>
+                        <TextBlock Text="Guarda primero el borrador. Después contabiliza para registrar la deuda y registra la recepción para actualizar el inventario." Foreground="#61758D" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1">
+                        <Grid x:Name="InvoiceWorkspace">
+                            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <DockPanel Grid.Row="0" Margin="0,0,0,6">
+                                        <TextBlock Text="Facturas registradas" FontSize="15" FontWeight="SemiBold" Foreground="#17395F" VerticalAlignment="Center"/>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                            <Button Content="Actualizar" Click="RefreshPurchases_Click"/>
+                                            <Button x:Name="EditDraftButton" Content="Editar borrador" Click="EditDraft_Click"/>
+                                            <Button x:Name="NewDraftButton" Content="Nueva factura" Background="#2E64B7" Foreground="White" Click="NewDraft_Click"/>
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <DataGrid x:Name="PurchaseGrid" Grid.Row="1" SelectionChanged="PurchaseGrid_SelectionChanged" AutomationProperties.Name="Facturas de compra">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Emisión" Binding="{Binding IssueDate}" Width="95"/>
+                                            <DataGridTextColumn Header="Proveedor" Binding="{Binding SupplierName}" Width="*"/>
+                                            <DataGridTextColumn Header="Documento" Binding="{Binding DocumentNumber}" Width="120"/>
+                                            <DataGridTextColumn Header="Estado de deuda" Binding="{Binding StatusLabel}" Width="125"/>
+                                            <DataGridTextColumn Header="Saldo" Binding="{Binding Balance, StringFormat=N2}" Width="105"/>
+                                            <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="70"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
                                 </Grid>
+                                <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#D7E0EB"/>
+                                <GroupBox Grid.Column="2" Header="Detalle y movimientos de la factura" Padding="8">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/><RowDefinition Height="1.4*"/>
+                                            <RowDefinition Height="Auto"/><RowDefinition Height="0.9*"/>
+                                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="0.9*"/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock x:Name="PurchaseSummaryLabel" Grid.Row="0" Text="Selecciona una factura para consultar deuda, líneas, abonos y recepciones." Foreground="#61758D" TextWrapping="Wrap" Margin="3,2,3,7"/>
+                                        <DataGrid x:Name="PurchaseDetailsGrid" Grid.Row="1" AutomationProperties.Name="Líneas de factura">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="85"/>
+                                                <DataGridTextColumn Header="Artículo" Binding="{Binding Name}" Width="*"/>
+                                                <DataGridTextColumn Header="Solicitado" Binding="{Binding Quantity, StringFormat=0.###}" Width="90"/>
+                                                <DataGridTextColumn Header="Recibido" Binding="{Binding ReceivedQuantity, StringFormat=0.###}" Width="85"/>
+                                                <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat=N2}" Width="100"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <TextBlock x:Name="PaymentHistoryLabel" Grid.Row="2" Text="Abonos registrados" FontWeight="SemiBold" Foreground="#17395F" Margin="3,7,3,4"/>
+                                        <DataGrid x:Name="PaymentsGrid" Grid.Row="3" SelectionChanged="PaymentSelectionChanged" AutomationProperties.Name="Abonos de la factura seleccionada">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Fecha" Binding="{Binding PaidAtUtc, StringFormat=g}" Width="115"/>
+                                                <DataGridTextColumn Header="Recibido" Binding="{Binding Amount, StringFormat=N2}" Width="95"/>
+                                                <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="65"/>
+                                                <DataGridTextColumn Header="Aplicado" Binding="{Binding InvoiceCurrencyAmount, StringFormat=N2}" Width="95"/>
+                                                <DataGridTextColumn Header="Medio" Binding="{Binding Method}" Width="*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <TextBlock x:Name="PaymentDetailLabel" Grid.Row="4" Text="Selecciona un abono para ver cuenta, referencia, tasa aplicada y diferencia cambiaria." Visibility="Visible" Foreground="#61758D" TextWrapping="Wrap" Margin="3,4,3,6"/>
+                                        <TextBlock Grid.Row="5" Text="Recepciones de inventario" FontWeight="SemiBold" Foreground="#17395F" Margin="3,5,3,4"/>
+                                        <DataGrid x:Name="ReceiptsGrid" Grid.Row="6" SelectionChanged="RelatedSelectionChanged" AutomationProperties.Name="Recepciones de la factura seleccionada">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Recibido" Binding="{Binding Header.CreatedAtUtc, StringFormat=g}" Width="125"/>
+                                                <DataGridTextColumn Header="Estado" Binding="{Binding Header.StatusLabel}" Width="100"/>
+                                                <DataGridTextColumn Header="Clave de operación" Binding="{Binding Header.IdempotencyKey}" Width="*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Grid>
+                                </GroupBox>
+                            </Grid>
+                            <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,3,0,0">
+                                <Button x:Name="PostSelectedPurchaseButton" Content="Contabilizar factura" Click="PostPurchase_Click"/>
+                                <Button x:Name="ReceiveSelectedPurchaseButton" Content="Registrar recepción" Click="ReceivePurchase_Click"/>
+                                <Button x:Name="ViewPriceSuggestionsButton" Content="Revisar precios sugeridos" Click="PriceSuggestions_Click"/>
+                                <Button x:Name="PaySelectedPurchaseButton" Content="Registrar abono" Click="PayPurchase_Click"/>
+                                <Button x:Name="ReverseReceiptButton" Content="Reversar recepción" Click="ReverseReceipt_Click"/>
+                                <Button x:Name="ReversePaymentButton" Content="Reversar abono" Click="ReversePayment_Click"/>
+                                <Button x:Name="ReversePurchaseButton" Content="Reversar factura" Click="ReversePurchase_Click"/>
+                            </WrapPanel>
+                        </Grid>
+                        <Grid x:Name="DraftEditor" Visibility="Collapsed">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock x:Name="DraftHeading" Text="Nueva factura" FontSize="18" FontWeight="SemiBold" Foreground="#17395F"/>
+                                <TextBlock Text="1. Completa los datos del documento.  2. Agrega y revisa los artículos.  3. Guarda el borrador; todavía no cambia el inventario ni la deuda." Foreground="#61758D" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <GroupBox Header="1 · Datos de la factura" Padding="8" Margin="0,8,0,0">
+                                    <UniformGrid Columns="5">
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftSupplierLabel" Text="Proveedor (obligatorio)" Margin="0,0,0,4"/><ComboBox x:Name="DraftSupplierPicker" DisplayMemberPath="LegalName" ToolTip="Selecciona el proveedor de esta factura"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftDocumentTypeLabel" Text="Tipo de documento" Margin="0,0,0,4"/><ComboBox x:Name="DraftDocumentTypePicker" SelectedIndex="0"><ComboBoxItem Content="Factura" Tag="Invoice"/><ComboBoxItem Content="Nota de débito" Tag="DebitNote"/></ComboBox></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftDocumentNumberLabel" Text="Número de factura (obligatorio)" Margin="0,0,0,4"/><TextBox x:Name="DraftDocumentNumberBox" MaxLength="80" ToolTip="Número que aparece en la factura del proveedor"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftControlNumberLabel" Text="Número de control (opcional)" Margin="0,0,0,4"/><TextBox x:Name="DraftControlNumberBox" MaxLength="80" ToolTip="Dato opcional impreso en el documento"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftCurrencyLabel" Text="Moneda de la factura" Margin="0,0,0,4"/><ComboBox x:Name="DraftCurrencyPicker" SelectedIndex="0" SelectionChanged="DraftCurrencyPicker_SelectionChanged"><ComboBoxItem Content="USD"/><ComboBoxItem Content="VES"/></ComboBox></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftExchangeRateLabel" Text="Tasa VES por USD" Margin="0,0,0,4"/><TextBox x:Name="DraftExchangeRateBox" Text="1" ToolTip="Tasa usada para esta factura"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftIssueDateLabel" Text="Fecha de emisión" Margin="0,0,0,4"/><DatePicker x:Name="DraftIssueDatePicker"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftDueDateLabel" Text="Vencimiento (opcional)" Margin="0,0,0,4"/><DatePicker x:Name="DraftDueDatePicker"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftFreightLabel" Text="Flete facturado" Margin="0,0,0,4"/><TextBox x:Name="DraftFreightBox" Text="0" TextChanged="DraftFreightBox_TextChanged"/></StackPanel>
+                                        <StackPanel Margin="4"><TextBlock x:Name="DraftPaymentTermLabel" Text="Condición de pago" Margin="0,0,0,4"/><ComboBox x:Name="DraftPaymentTermPicker" SelectedIndex="0"><ComboBoxItem Content="Crédito" Tag="Credit"/><ComboBoxItem Content="Contado" Tag="Immediate"/></ComboBox></StackPanel>
+                                    </UniformGrid>
+                                </GroupBox>
                             </StackPanel>
-                        </ScrollViewer>
-                    </GroupBox>
-                    <WrapPanel Grid.Row="3" HorizontalAlignment="Right" Margin="0,7,0,0">
-                        <Button x:Name="PostSelectedPurchaseButton" Content="Contabilizar factura seleccionada" Click="PostPurchase_Click"/>
-                        <Button x:Name="ReceiveSelectedPurchaseButton" Content="Registrar recepción" Click="ReceivePurchase_Click"/>
-                        <Button x:Name="PaySelectedPurchaseButton" Content="Registrar abono" Click="PayPurchase_Click"/>
-                        <Button x:Name="ReverseReceiptButton" Content="Reversar recepción seleccionada" Click="ReverseReceipt_Click"/>
-                        <Button x:Name="ReversePaymentButton" Content="Reversar abono seleccionado" Click="ReversePayment_Click"/>
-                        <Button x:Name="ReversePurchaseButton" Content="Reversar factura" Click="ReversePurchase_Click"/>
-                    </WrapPanel>
+                            <GroupBox Grid.Row="1" Header="2 · Agrega un artículo de la factura" Padding="7" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="0.75*"/><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="0.8*"/><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="4"><TextBlock x:Name="DraftProductLabel" Text="Artículo (busca y selecciona)" Margin="0,0,0,4"/><DockPanel><Button x:Name="SearchProductsButton" DockPanel.Dock="Right" Content="Buscar" Click="SearchProducts_Click"/><ComboBox x:Name="DraftProductPicker" DisplayMemberPath="Name" IsEditable="True" ToolTip="Escribe dos letras o un código, pulsa Buscar y selecciona el resultado"/></DockPanel></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="4"><TextBlock x:Name="DraftQuantityLabel" Text="Cantidad" Margin="0,0,0,4"/><TextBox x:Name="DraftQuantityBox" Text="1"/></StackPanel>
+                                    <StackPanel Grid.Column="2" Margin="4"><TextBlock x:Name="DraftUnitPriceLabel" Text="Precio unitario" Margin="0,0,0,4"/><TextBox x:Name="DraftUnitPriceBox" ToolTip="Precio unitario que indica la factura"/></StackPanel>
+                                    <StackPanel Grid.Column="3" Margin="4"><TextBlock x:Name="DraftDiscountLabel" Text="Descuento" Margin="0,0,0,4"/><TextBox x:Name="DraftDiscountBox" Text="0"/></StackPanel>
+                                    <StackPanel Grid.Column="4" Margin="4"><TextBlock x:Name="DraftTaxLabel" Text="Impuesto" Margin="0,0,0,4"/><TextBox x:Name="DraftTaxBox" Text="0"/></StackPanel>
+                                    <StackPanel Grid.Column="5" Margin="4" VerticalAlignment="Bottom"><TextBlock Text="Impuesto recuperable" Margin="0,0,0,4"/><CheckBox x:Name="DraftTaxRecoverableCheck" Content="Sí, se recupera" IsChecked="True" VerticalAlignment="Center" Height="34"/></StackPanel>
+                                    <StackPanel Grid.Column="6" Margin="4" VerticalAlignment="Bottom"><TextBlock Text="Acción" Margin="0,0,0,4"/><Button x:Name="AddDraftLineButton" Content="Agregar artículo" Click="AddDraftLine_Click" Background="#2E64B7" Foreground="White"/></StackPanel>
+                                </Grid>
+                            </GroupBox>
+                            <GroupBox Grid.Row="2" Header="3 · Artículos incluidos en el borrador" Padding="7" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                    <TextBlock x:Name="DraftLineStatus" Grid.Row="0" Text="Todavía no hay artículos. Agrégalos arriba para poder guardar la factura." Foreground="#61758D" TextWrapping="Wrap" Margin="3,0,3,6"/>
+                                    <Grid Grid.Row="1">
+                                        <DataGrid x:Name="DraftLinesGrid" SelectionChanged="DraftLinesGrid_SelectionChanged" AutomationProperties.Name="Artículos de la factura en borrador">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="110"/>
+                                                <DataGridTextColumn Header="Artículo" Binding="{Binding Name}" Width="*"/>
+                                                <DataGridTextColumn Header="Cantidad" Binding="{Binding Quantity, StringFormat=0.###}" Width="100"/>
+                                                <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat=N2}" Width="125"/>
+                                                <DataGridTextColumn Header="Descuento" Binding="{Binding Discount, StringFormat=N2}" Width="110"/>
+                                                <DataGridTextColumn Header="Impuesto" Binding="{Binding Tax, StringFormat=N2}" Width="100"/>
+                                                <DataGridTextColumn Header="Total de línea" Binding="{Binding Total, StringFormat=N2}" Width="125"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <TextBlock x:Name="DraftLinesEmptyLabel" Text="La factura aún no tiene líneas." Foreground="#61758D" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    </Grid>
+                                </Grid>
+                            </GroupBox>
+                            <Border x:Name="DraftFooterPanel" Grid.Row="3" Background="#EAF1FA" Padding="8" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="DraftTotalLabel" Text="Total de la factura: USD 0,00" FontSize="17" FontWeight="Bold" Foreground="#17395F"/>
+                                        <TextBlock Text="Guardar solo crea el borrador; contabilizar y recibir son pasos posteriores." Foreground="#61758D" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button x:Name="RemoveDraftLineButton" Grid.Column="1" Content="Quitar artículo seleccionado" Click="RemoveDraftLine_Click" IsEnabled="False"/>
+                                    <Button x:Name="CancelDraftButton" Grid.Column="2" Content="Volver a facturas" Click="CancelDraft_Click"/>
+                                    <Button x:Name="SaveDraftButton" Grid.Column="3" Content="Guardar borrador" Click="SaveDraft_Click" Background="#2E64B7" Foreground="White"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Grid>
                 </Grid>
-            </TabItem>
-            <TabItem x:Name="SummaryTab" Header="Resumen preliminar">
+            </TabItem>            <TabItem x:Name="SummaryTab" Header="Resumen preliminar">
                 <Grid Margin="18">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="150"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <DockPanel Grid.Row="0" Margin="0,0,0,10"><StackPanel><TextBlock Text="Cuentas por pagar" FontSize="18" FontWeight="SemiBold" Foreground="#17395F"/><TextBlock Text="Cada fila muestra el proveedor, el documento y los abonos que explican el saldo pendiente." Foreground="#61758D" Margin="0,3,0,0"/></StackPanel><Button Content="Actualizar resumen" DockPanel.Dock="Right" Click="RefreshSummary_Click"/></DockPanel>
@@ -213,6 +250,27 @@
                         </DataGrid>
                         <TextBlock x:Name="OpenPayablesEmptyLabel" Text="No hay facturas con saldo pendiente." Foreground="#61758D" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False"/>
                     </Grid>
+                </Grid>
+            </TabItem>
+            <TabItem x:Name="MarginSettingsTab" Header="Márgenes de precios">
+                <Grid Margin="22" MaxWidth="980" HorizontalAlignment="Left">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,18">
+                        <TextBlock Text="Configuración de precios sugeridos" FontSize="19" FontWeight="SemiBold" Foreground="#17395F"/>
+                        <TextBlock Text="Define el margen bruto para cada nivel. Una compra solo calcula propuestas cuando el artículo tiene costo promedio y el nivel tiene un margen configurado." Foreground="#61758D" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <GroupBox Grid.Row="1" Header="Margen bruto objetivo por nivel" Padding="14" Background="White">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="5"><TextBlock x:Name="Price1MarginLabel" Text="Precio 1 (%)" Margin="0,0,0,5"/><TextBox x:Name="Price1MarginBox" MaxLength="12" ToolTip="Ejemplo: 25 para un margen bruto del 25 %"/></StackPanel>
+                            <StackPanel Grid.Column="1" Margin="5"><TextBlock x:Name="Price2MarginLabel" Text="Precio 2 (%)" Margin="0,0,0,5"/><TextBox x:Name="Price2MarginBox" MaxLength="12" ToolTip="Ejemplo: 20 para un margen bruto del 20 %"/></StackPanel>
+                            <StackPanel Grid.Column="2" Margin="5"><TextBlock x:Name="Price3MarginLabel" Text="Precio 3 (%)" Margin="0,0,0,5"/><TextBox x:Name="Price3MarginBox" MaxLength="12" ToolTip="Ejemplo: 15 para un margen bruto del 15 %"/></StackPanel>
+                            <Button x:Name="SavePriceMarginsButton" Grid.Column="3" Content="Guardar márgenes" VerticalAlignment="Bottom" Background="#2E64B7" Foreground="White" Click="SavePriceMargins_Click"/>
+                        </Grid>
+                    </GroupBox>
+                    <Border Grid.Row="2" Background="#F4F7FB" Padding="14" CornerRadius="5" Margin="0,12,0,0">
+                        <TextBlock Text="El margen se calcula sobre el precio de venta: precio sugerido = costo promedio ÷ (1 − margen). Ejemplo: costo 10 y margen 25 % producen 13,3333. Deja vacío un nivel para desactivar esa propuesta. Ningún precio cambia hasta que un operador con permiso lo confirme." TextWrapping="Wrap" Foreground="#425B77"/>
+                    </Border>
                 </Grid>
             </TabItem>
         </TabControl>

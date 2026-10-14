@@ -153,6 +153,10 @@ internal static class Hito4Endpoints
             var priceTier = ParsePriceTier(request.PriceTier);
             if (priceTier is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["priceTier"] = ["Selecciona un nivel de precio válido."] });
             var oldPrice = priceTier switch { "Price1" => product.UnitPrice, "Price2" => product.Price2, _ => product.Price3 };
+            if (request.ValidateSnapshot && (oldPrice != request.ExpectedCurrentPrice || product.UnitCost != request.ExpectedUnitCost))
+                return Results.Conflict(new { error = "stale_price_suggestion" });
+            if (request.ValidateSnapshot && oldPrice == request.NewPrice)
+                return Results.Ok(new { productId, oldPrice, newPrice = request.NewPrice, priceTier, product.Currency, unchanged = true });
             var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             if (priceTier == "Price1") product.UnitPrice = request.NewPrice;
@@ -842,7 +846,8 @@ internal static class Hito4Endpoints
 public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock,
     decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null);
 public sealed record UpdateProductRequest(string? Sku, string? Name);
-public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1");
+public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1",
+    decimal? ExpectedCurrentPrice = null, decimal? ExpectedUnitCost = null, bool ValidateSnapshot = false);
 public sealed record ChangeProductTaxTreatmentRequest(string? TaxTreatment);
 public sealed record SetExchangeRateRequest(string? FromCurrency, string? ToCurrency, decimal Rate, DateTimeOffset EffectiveAtUtc, string? Source);
 public sealed record CreateCustomerRequest(string? Name, string? DocumentNumber, string? Phone, string? Currency, decimal CreditLimit);

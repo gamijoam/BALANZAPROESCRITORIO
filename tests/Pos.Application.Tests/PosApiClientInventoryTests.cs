@@ -84,6 +84,27 @@ public sealed class PosApiClientInventoryTests
     }
 
     [Fact]
+    public async Task Suggested_price_change_sends_expected_cost_and_current_price_for_server_validation()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler(async (request, ct) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal($"/api/v1/products/{id}/price-changes", request.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.Equal("Price2", body.RootElement.GetProperty("priceTier").GetString());
+            Assert.Equal(15m, body.RootElement.GetProperty("newPrice").GetDecimal());
+            Assert.Equal(12m, body.RootElement.GetProperty("expectedCurrentPrice").GetDecimal());
+            Assert.Equal(10m, body.RootElement.GetProperty("expectedUnitCost").GetDecimal());
+            Assert.True(body.RootElement.GetProperty("validateSnapshot").GetBoolean());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        using var client = await CreateClientAsync(handler);
+
+        await client.ApplySuggestedPriceAsync(id, "Price2", 15m, 12m, 10m, "Sugerencia de prueba.");
+    }
+
+    [Fact]
     public async Task Inventory_query_sends_filters_and_maps_active_state()
     {
         var id = Guid.NewGuid();

@@ -35,6 +35,34 @@ public sealed class FinanceModuleContractTests
     public void Purchase_total_is_calculated_from_subtotal_discount_freight_and_tax()
         => Assert.Equal(40m, FinancePurchasePolicy.CalculateInvoiceTotal(40m, 5m, 3m, 2m));
 
+    [Theory]
+    [InlineData(10, 0.25, 13.3333)]
+    [InlineData(12.5, 0, 12.5)]
+    public void Suggested_price_uses_the_configured_gross_margin_and_decimal_rounding(
+        decimal cost, decimal targetMargin, decimal expectedPrice)
+        => Assert.Equal(expectedPrice, FinancePurchasePolicy.CalculateSuggestedPrice(cost, targetMargin));
+
+    [Fact]
+    public void Suggested_price_rejects_missing_cost_and_margin_outside_zero_to_one()
+    {
+        Assert.Null(FinancePurchasePolicy.CalculateSuggestedPrice(null, 0.25m));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FinancePurchasePolicy.CalculateSuggestedPrice(10m, 1m));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FinancePurchasePolicy.CalculateSuggestedPrice(10m, -0.01m));
+    }
+
+    [Fact]
+    public void Immediate_purchase_payment_must_settle_the_whole_invoice_using_the_current_rate()
+    {
+        var settlement = FinancePurchasePolicy.CalculateImmediateSettlement(4000m, "VES", 100m, "USD", 40m, 35m);
+
+        Assert.Equal(4000m, settlement.InvoiceCurrencyAmount);
+        Assert.Equal(40m, settlement.AppliedExchangeRate);
+        Assert.Equal(100m, settlement.PaymentUsdEquivalent);
+        Assert.Equal(14.2857m, settlement.FxDifferenceUsd);
+        Assert.Throws<InvalidOperationException>(() => FinancePurchasePolicy.CalculateImmediateSettlement(4000m, "VES", 99m, "USD", 40m, 35m));
+        Assert.Throws<InvalidOperationException>(() => FinancePurchasePolicy.CalculateImmediateSettlement(4000m, "VES", 100m, "USD", 0m, 35m));
+    }
+
     [Fact]
     public void Manifest_declares_a_signed_installable_desktop_server_module()
     {
@@ -42,7 +70,7 @@ public sealed class FinanceModuleContractTests
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
 
         Assert.Equal("finance", manifest.Id);
-        Assert.Equal("1.0.2", manifest.Version.ToString(3));
+        Assert.Equal("1.0.3", manifest.Version.ToString(3));
         Assert.NotNull(manifest.EntryAssembly);
         Assert.NotNull(manifest.DesktopEntryAssembly);
         Assert.Contains("Supplier.View", manifest.Permissions);
@@ -71,6 +99,10 @@ public sealed class FinanceModuleContractTests
         Assert.Contains("supplier_events", tables);
         Assert.Contains(migration.Operations.OfType<CreateModuleIndex>(), index => index.Unique && index.Table == "purchase_invoices");
         Assert.All(migration.Operations, operation => Assert.True(operation is CreateModuleTable or CreateModuleIndex));
+
+        var settingsPath = Path.Combine(AppContext.BaseDirectory, "finance", "finance-0002.json");
+        var settingsMigration = ModuleMigrationReader.Parse(File.ReadAllText(settingsPath));
+        Assert.Contains(settingsMigration.Operations.OfType<CreateModuleTable>(), table => table.Table == "price_suggestion_margins");
     }
 
     [Fact]
@@ -79,15 +111,35 @@ public sealed class FinanceModuleContractTests
         var manifestPath = Path.Combine(AppContext.BaseDirectory, "finance", "module.manifest.json");
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(manifestPath));
         var permissions = new FinanceModule().GetEndpoints()
-            .Select(endpoint => endpoint.RequiredPermission)
-            .Where(permission => permission is not null)
+            .SelectMany(endpoint => endpoint.RequiredPermissions)
             .Distinct(StringComparer.Ordinal);
 
         Assert.All(permissions, permission => Assert.Contains(permission, manifest.Permissions));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/post", StringComparison.Ordinal));
+        Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/post-and-pay", StringComparison.Ordinal));
+        Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "GET" && endpoint.Route.Contains("price-suggestions", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/receipts", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/payments", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.Contains("receipts/{receiptId:guid}/reverse", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Immediate_purchase_posting_requires_purchase_and_payment_permissions()
+    {
+        var endpoint = Assert.Single(new FinanceModule().GetEndpoints(), item => item.Method == "POST" && item.Route.EndsWith("/post-and-pay", StringComparison.Ordinal));
+
+        Assert.Equal(new[] { "Purchase.Manage", "SupplierPayment.Manage" }, endpoint.RequiredPermissions);
+    }
+
+    [Fact]
+    public void Finance_module_declares_price_suggestion_configuration_and_its_additive_migration()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "finance", "module.manifest.json");
+        var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
+
+        Assert.Contains("PriceSuggestion.Manage", manifest.Permissions);
+        Assert.Contains("finance:0002", manifest.Migrations);
+        Assert.Equal("1.0.3", manifest.Version.ToString(3));
     }
 
     [Fact]

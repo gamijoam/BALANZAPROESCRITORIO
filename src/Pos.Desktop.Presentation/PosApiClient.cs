@@ -315,6 +315,15 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task ApplySuggestedPriceAsync(Guid productId, string priceTier, decimal newPrice, decimal? expectedCurrentPrice,
+        decimal expectedUnitCost, string reason, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"api/v1/products/{productId}/price-changes");
+        request.Content = JsonContent.Create(new { priceTier, newPrice, reason, expectedCurrentPrice, expectedUnitCost, validateSnapshot = true }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ExchangeRateInfo>> GetExchangeRatesAsync(CancellationToken cancellationToken = default)
     {
         using var request = CreateRequest(HttpMethod.Get, "api/v1/exchange-rates");

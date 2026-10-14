@@ -75,7 +75,8 @@ $specs = foreach ($moduleId in $moduleIds) {
             Files = @(
                 @{ Source = 'src\Modules\Pos.Modules.Finance\bin\Release\net10.0\Pos.Modules.Finance.dll'; Package = 'Pos.Modules.Finance.dll' },
                 @{ Source = 'src\Modules\Pos.Modules.Finance.Desktop\bin\Release\net10.0-windows\Pos.Modules.Finance.Desktop.dll'; Package = 'Pos.Modules.Finance.Desktop.dll' },
-                @{ Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0001.json'; Package = 'migrations/finance-0001.json' }
+                @{ Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0001.json'; Package = 'migrations/finance-0001.json' },
+                @{ Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0002.json'; Package = 'migrations/finance-0002.json' }
             )
         }
     }

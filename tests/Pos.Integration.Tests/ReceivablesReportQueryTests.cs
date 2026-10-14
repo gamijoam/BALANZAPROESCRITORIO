@@ -5,6 +5,7 @@ using Pos.Infrastructure.Reporting;
 
 namespace Pos.Integration.Tests;
 
+[Collection(SharedPostgresCollection.Name)]
 public sealed class ReceivablesReportQueryTests
 {
     [Fact]

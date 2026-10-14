@@ -21,6 +21,17 @@ public sealed class FinanceWindowInitializationTests
                     (_, _) => Task.FromResult<IReadOnlyList<ProductInfo>>(Array.Empty<ProductInfo>()));
                 var window = new FinanceWindow(context);
                 Assert.Equal("Compras, proveedores y cuentas por pagar", window.Title);
+                var owner = new Window();
+                owner.Show();
+                var paymentWindow = new SupplierPaymentWindow(owner, "Proveedor de prueba", "Factura F-001", "USD", 84.50m);
+                Assert.Equal("Registrar abono al proveedor", paymentWindow.Title);
+                Assert.Same(owner, paymentWindow.Owner);
+                var suggestionsWindow = new PriceSuggestionWindow(context, Guid.NewGuid(), "Factura F-001") { Owner = owner };
+                Assert.Equal("Precios sugeridos", suggestionsWindow.Title);
+                Assert.Same(owner, suggestionsWindow.Owner);
+                suggestionsWindow.Close();
+                paymentWindow.Close();
+                owner.Close();
                 window.Close();
                 application.Shutdown();
             }
@@ -36,4 +47,5 @@ public sealed class FinanceWindowInitializationTests
 
         Assert.True(failure is null, failure?.ToString());
     }
+
 }
