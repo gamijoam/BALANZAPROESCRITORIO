@@ -164,6 +164,14 @@ $installationMode = if ($null -eq $profile) { 'Standalone' } else { [string]$pro
 if ($installationMode -notin @('Standalone', 'Server', 'ClientTerminal')) {
     throw "El modo de instalación '$installationMode' no es compatible con este actualizador."
 }
+$publisherKeyId = 'pos-publisher-vps-2026'
+$publisherKeyPath = Join-Path $package 'trusted-publishers\pos-publisher-vps-2026.pem'
+$publisherTrustScript = Join-Path $packageScripts 'Install-ModulePublisherTrust.ps1'
+if ((Test-Path -LiteralPath $publisherKeyPath -PathType Leaf) -and
+    (Test-Path -LiteralPath $publisherTrustScript -PathType Leaf)) {
+    & $publisherTrustScript -PublicKeyPath $publisherKeyPath -KeyId $publisherKeyId
+    if (-not $?) { throw 'No se pudo agregar la clave pública oficial al anillo de confianza del POS.' }
+}
 $database = if ($installationMode -eq 'ClientTerminal') { $null } else { Get-PosDatabaseSettings }
 if ($installationMode -ne 'ClientTerminal') {
     try { $env:POS_POSTGRES_BIN = Get-PostgreSqlBinaryDirectory }

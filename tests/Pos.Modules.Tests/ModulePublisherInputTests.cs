@@ -48,6 +48,40 @@ public sealed class ModulePublisherInputTests
     }
 
     [Fact]
+    public void Parse_BuildUnsignedAndSignPackageAcceptPemInputsWithoutWindowsCertificate()
+    {
+        var build = PublisherArguments.Parse([
+            "build-unsigned", "--manifest", "module.json", "--stage", "stage",
+            "--files", "files.json", "--output", "unsigned.zip", "--key-id", "pos-vps-publisher"]);
+        var sign = PublisherArguments.Parse([
+            "sign-package", "--input", "unsigned.zip", "--output", "signed.zip",
+            "--private-key-pem", "private.pem"]);
+        var export = PublisherArguments.Parse([
+            "export-public-key", "--private-key-pem", "private.pem", "--output", "public.pem"]);
+
+        Assert.Equal(PublisherCommand.BuildUnsigned, build.Command);
+        Assert.Equal("pos-vps-publisher", build.KeyId);
+        Assert.Equal(PublisherCommand.SignPackage, sign.Command);
+        Assert.Equal("unsigned.zip", sign.InputPath);
+        Assert.Equal("private.pem", sign.PrivateKeyPemPath);
+        Assert.Equal(PublisherCommand.ExportPublicKey, export.Command);
+        Assert.Equal("private.pem", export.PrivateKeyPemPath);
+    }
+
+    [Fact]
+    public void Parse_RejectsPemCommandsWithMissingOrUnexpectedOptions()
+    {
+        Assert.Throws<PublisherUsageException>(() => PublisherArguments.Parse([
+            "sign-package", "--input", "unsigned.zip", "--output", "signed.zip"]));
+        Assert.Throws<PublisherUsageException>(() => PublisherArguments.Parse([
+            "sign-package", "--input", "unsigned.zip", "--output", "signed.zip",
+            "--private-key-pem", "private.pem", "--thumbprint", "abcd"]));
+        Assert.Throws<PublisherUsageException>(() => PublisherArguments.Parse([
+            "build-unsigned", "--manifest", "module.json", "--stage", "stage",
+            "--files", "files.json", "--output", "unsigned.zip", "--key-id", "bad id"]));
+    }
+
+    [Fact]
     public void PackageFileList_RequiresUniqueSafeAllowlistedFilesAndBlocksSecretFileNames()
     {
         var files = PackageFileList.Parse("""
