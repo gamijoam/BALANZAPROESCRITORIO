@@ -2,6 +2,8 @@ using Pos.Desktop.Modules.Abstractions;
 using Pos.Desktop.Presentation;
 using Pos.Shared.Contracts;
 using Pos.Modules.Reporting.Desktop;
+using System.Net;
+using System.Net.Http.Json;
 using System.IO.Compression;
 using System.Xml.Linq;
 using Pos.Application.Reporting;
@@ -9,6 +11,7 @@ using System.Runtime.ExceptionServices;
 
 namespace Pos.Application.Tests;
 
+[Collection("WPF UI")]
 public sealed class AdvancedReportModuleContractTests
 {
     [Fact]
@@ -127,7 +130,7 @@ public sealed class AdvancedReportModuleContractTests
     }
 
     [Fact]
-    public void AdvancedReportsModule_DeclaresAuthorizedCoreAndWarehouseReportSources()
+    public void AdvancedReportsModule_DeclaresReceivableAndCashMethodReportSources()
     {
         var registry = new PosDesktopModuleRegistry("advanced-reports", ["Reports.View", "Reports.Inventory"]);
         new ReportingDesktopModule().Configure(registry);
@@ -135,9 +138,37 @@ public sealed class AdvancedReportModuleContractTests
         Assert.NotNull(registry.ReportCenter);
         Assert.Contains(registry.ReportSources, source => source.Id == "reports.sales.detail");
         Assert.Contains(registry.ReportSources, source => source.Id == "reports.inventory.movements");
+        Assert.Contains(registry.ReportSources, source => source.Id == "reports.receivables.balances" && !source.SupportsDateRange);
+        Assert.Contains(registry.ReportSources, source => source.Id == "reports.receivables.movements" && source.SupportsDateRange);
+        Assert.Contains(registry.ReportSources, source => source.Id == "reports.cash.methods" && source.SupportsDateRange);
         Assert.All(registry.ReportSources.Where(source => source.Id.StartsWith("reports.sales.", StringComparison.Ordinal)),
             source => Assert.Equal("Reports.View", source.RequiredPermission));
+        Assert.All(registry.ReportSources.Where(source => source.Id.StartsWith("reports.receivables.", StringComparison.Ordinal) || source.Id == "reports.cash.methods"),
+            source => Assert.Equal("Reports.View", source.RequiredPermission));
         Assert.Contains(registry.ReportSources, source => source.Id == "reports.inventory.products" && source.RequiredPermission == "Reports.Inventory");
+    }
+
+    [Fact]
+    public async Task Cash_methods_source_flattens_collection_and_refund_totals_by_session()
+    {
+        using var handler = new CashMethodsRequestHandler();
+        using var api = new PosApiClient(new Uri("http://localhost:5155"), new HttpClient(handler));
+        await api.LoginAsync("demo", "4826", handler.TerminalId);
+        var context = new PosDesktopModuleContext(api, handler.TerminalId, new HashSet<string>(["Reports.View"]),
+            "advanced-reports", (_, _) => Task.FromResult<IReadOnlyList<ProductInfo>>([])) { ReportApiClient = api };
+        var registry = new PosDesktopModuleRegistry("advanced-reports", ["Reports.View", "Reports.Inventory"]);
+        new ReportingDesktopModule().Configure(registry);
+        var source = Assert.Single(registry.ReportSources, item => item.Id == "reports.cash.methods");
+
+        var result = await source.LoadAsync(context,
+            new PosDesktopReportQuery(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, null, new Dictionary<string, string>()),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Rows.Count);
+        Assert.Contains(result.Rows, row => Equals(row["operacion"], "Cobro") && Equals(row["metodo"], "Transferencia") &&
+            Equals(row["moneda"], "USD") && Equals(row["importe"], 25m));
+        Assert.Contains(result.Rows, row => Equals(row["operacion"], "Reintegro") && Equals(row["metodo"], "Efectivo") &&
+            Equals(row["moneda"], "VES") && Equals(row["importe"], 125m));
     }
 
     [Fact]
@@ -151,6 +182,25 @@ public sealed class AdvancedReportModuleContractTests
         Assert.Contains("\"Reports.Inventory\"", manifest);
         Assert.Contains("\"Reports.View\" => Permission.ViewReports", server);
         Assert.Contains("\"Reports.Inventory\" => Permission.ViewInventory", server);
+        Assert.Contains("\"version\": \"1.1.0\"", manifest);
+        Assert.Contains("\"min\": \"1.4.0\"", manifest);
+    }
+
+    [Fact]
+    public void Receivable_report_endpoints_require_view_reports_and_validate_the_reporting_period()
+    {
+        var root = FindRepositoryRoot();
+        var endpoints = File.ReadAllText(Path.Combine(root, "src", "Pos.Server", "Hito4Endpoints.cs"));
+        var balances = EndpointBlock(endpoints, "app.MapGet(\"/api/v1/reports/receivables/balances\"");
+        var movements = EndpointBlock(endpoints, "app.MapGet(\"/api/v1/reports/receivables/movements\"");
+
+        Assert.Contains("Permission.ViewReports", balances, StringComparison.Ordinal);
+        Assert.Contains("Permission.ViewReports", movements, StringComparison.Ordinal);
+        Assert.Contains("TimeSpan.FromDays(92)", movements, StringComparison.Ordinal);
+        Assert.Contains("toUtc <= fromUtc", movements, StringComparison.Ordinal);
+        Assert.Contains("toUtc", movements, StringComparison.Ordinal);
+        Assert.Contains("pageSize", balances, StringComparison.Ordinal);
+        Assert.Contains("pageSize", movements, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,4 +243,48 @@ public sealed class AdvancedReportModuleContractTests
 
     private static PosDesktopReportSource CreateSalesSource() => new(
         "sales.summary", "Ventas", "Reports.View", [], (_, _, _) => Task.FromResult(PosDesktopReportResult.Empty));
+
+    private static string EndpointBlock(string source, string route)
+    {
+        var start = source.IndexOf(route, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"No se encontró la ruta {route}.");
+        var end = source.IndexOf("app.MapGet(\"/api/v1/", start + route.Length, StringComparison.Ordinal);
+        if (end < 0) end = source.IndexOf("app.MapPost(\"/api/v1/", start + route.Length, StringComparison.Ordinal);
+        return source[start..(end < 0 ? source.Length : end)];
+    }
+
+    private sealed class CashMethodsRequestHandler : HttpMessageHandler
+    {
+        public Guid TerminalId { get; } = Guid.NewGuid();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/v1/auth/login")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        operatorId = Guid.NewGuid(), terminalId = TerminalId,
+                        expiresAtUtc = DateTime.UtcNow.AddHours(1), accessToken = "test-token"
+                    })
+                });
+
+            Assert.Equal("/api/v1/reports/cash-sessions", request.RequestUri.AbsolutePath);
+            var opened = new DateTime(2026, 10, 12, 10, 0, 0, DateTimeKind.Utc);
+            var closed = opened.AddHours(8);
+            var row = new CashSessionReportRow(Guid.NewGuid(), "Closed", "VES", opened, closed, "cajera", 0m, 0m,
+                100m, 100m, 0m, 1000m, 1000m, 0m)
+            {
+                Payments =
+                [
+                    new CashMethodSummary("Cobro", "Transferencia", "USD", 25m),
+                    new CashMethodSummary("Reintegro", "Efectivo", "VES", 125m)
+                ]
+            };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new CashSessionReportInfo(1, 250, 1, [row]))
+            });
+        }
+    }
 }

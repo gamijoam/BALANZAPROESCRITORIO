@@ -14,7 +14,7 @@ foreach ($path in @($preparePath, $workflowPath, $catalogPath)) {
 $prepare = Get-Content -LiteralPath $preparePath -Raw
 $workflow = Get-Content -LiteralPath $workflowPath -Raw
 $catalog = Get-Content -LiteralPath $catalogPath -Raw
-$distributableIds = @('warehouses', 'thermal-receipts', 'advanced-reports')
+$distributableIds = @('warehouses', 'thermal-receipts', 'advanced-reports', 'finance')
 
 if ($prepare -notmatch "ValidateSet\([^\)]*'all'") {
     throw 'RED: el preparador todavía no admite publicar todos los módulos en una ejecución.'

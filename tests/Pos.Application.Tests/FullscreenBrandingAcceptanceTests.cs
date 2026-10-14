@@ -5,6 +5,7 @@ using Pos.Desktop.Presentation;
 
 namespace Pos.Application.Tests;
 
+[Collection("WPF UI")]
 public sealed class FullscreenBrandingAcceptanceTests
 {
     [Fact]

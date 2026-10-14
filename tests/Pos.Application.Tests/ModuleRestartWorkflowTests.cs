@@ -69,6 +69,20 @@ public sealed class ModuleRestartWorkflowTests
         Assert.Contains("module_reactivation_failed", File.ReadAllText(Path.Combine(root, "src", "Pos.Server", "Program.cs")), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Reactivation_route_does_not_hold_an_operation_lease_while_waiting_for_exclusive_maintenance()
+    {
+        var root = FindRepositoryRoot();
+        var program = File.ReadAllText(Path.Combine(root, "src", "Pos.Server", "Program.cs"));
+        var gateStart = program.IndexOf("if (context.Request.Method != HttpMethods.Get", StringComparison.Ordinal);
+        Assert.True(gateStart >= 0, "No se encontró el middleware que protege las operaciones POS.");
+        var gateEnd = program.IndexOf("await using var operation = await moduleMaintenanceGate.EnterOperationAsync", gateStart, StringComparison.Ordinal);
+        Assert.True(gateEnd > gateStart, "No se encontró la adquisición del bloqueo de operación POS.");
+        var gateCondition = program[gateStart..gateEnd];
+
+        Assert.Contains("(?:activate|deactivate)$", gateCondition, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

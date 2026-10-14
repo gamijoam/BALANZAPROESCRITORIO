@@ -74,7 +74,7 @@ Remove-PublishedBuildArtifacts -PublishRoot $desktopOutput
 
 $scriptsOutput = Join-Path $packageDirectory 'scripts'
 New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
-foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Install-ModulePublisherTrust.ps1', 'Manage-PosWindowsService.ps1')) {
+foreach ($name in @('Pos-DatabaseSupport.ps1', 'Pos-InvariantDecimalSupport.ps1', 'Pos-JsonArraySupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Install-ModulePublisherTrust.ps1', 'Manage-PosWindowsService.ps1', 'Import-LegacyReceivableOpeningBalances.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
 }
 $trustedPublisherDirectory = Join-Path $packageDirectory 'trusted-publishers'
@@ -163,7 +163,26 @@ if errorlevel 1 (
 )
 '@
 Write-WindowsCommandFile -Path $serviceLauncherPath -Content $serviceLauncherContent
+$debtImportLauncherPath = Join-Path $packageDirectory 'Importar deudas pendientes.cmd'
+$debtImportLauncherContent = @'
+@echo off
+setlocal
+chcp 65001 >nul
+set "IMPORTER=%~dp0scripts\Import-LegacyReceivableOpeningBalances.ps1"
+if not exist "%IMPORTER%" (
+  echo No se encontro el importador de saldos pendientes.
+  pause
+  exit /b 1
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%IMPORTER%" -Apply
+set "RESULT=%ERRORLEVEL%"
+echo.
+pause
+exit /b %RESULT%
+'@
+Write-WindowsCommandFile -Path $debtImportLauncherPath -Content $debtImportLauncherContent
 Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\manuales\INSTRUCCIONES-INSTALACION-POS.md') -Destination (Join-Path $packageDirectory 'INSTRUCCIONES.md') -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\runbooks\importar-saldos-iniciales-legado.md') -Destination (Join-Path $packageDirectory 'IMPORTAR SALDOS PENDIENTES.md') -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\security\publicar-modulos-desde-cualquier-equipo.md') -Destination (Join-Path $packageDirectory 'PUBLICAR MODULOS DESDE CUALQUIER PC.md') -Force
 $legacyModesGuide = Join-Path $packageDirectory 'MODOS DE INSTALACION.md'
 if (Test-Path -LiteralPath $legacyModesGuide) { Remove-Item -LiteralPath $legacyModesGuide -Force }

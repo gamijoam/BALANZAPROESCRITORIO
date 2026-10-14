@@ -12,6 +12,7 @@ on:
           - warehouses
           - thermal-receipts
           - advanced-reports
+          - finance
 
 permissions:
   contents: read
@@ -80,8 +81,8 @@ jobs:
           RUN_ROOT="${RUNNER_TEMP}/module-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mapfile -t unsigned_packages < <(find "$RUN_ROOT/incoming/unsigned" -maxdepth 1 -type f -name '*-unsigned.zip' -print)
           case "$PUBLISH_MODULE_INPUT" in
-            all) expected_modules=(warehouses thermal-receipts advanced-reports) ;;
-            warehouses|thermal-receipts|advanced-reports) expected_modules=("$PUBLISH_MODULE_INPUT") ;;
+            all) expected_modules=(warehouses thermal-receipts advanced-reports finance) ;;
+            warehouses|thermal-receipts|advanced-reports|finance) expected_modules=("$PUBLISH_MODULE_INPUT") ;;
             *) echo "Selección de módulo inválida." >&2; exit 1 ;;
           esac
           if [ "${#unsigned_packages[@]}" -ne "${#expected_modules[@]}" ]; then

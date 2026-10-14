@@ -31,13 +31,14 @@
                     <DataGridTextColumn Header="Existencia" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="105"/>
                     <DataGridTextColumn Header="Precio" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="105"/>
                     <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="72"/>
+                    <DataGridTextColumn Header="Impuesto" Binding="{Binding TaxTreatmentLabel}" Width="130"/>
                     <DataGridTextColumn Header="Foto" Binding="{Binding ImageStatusLabel}" Width="62"/>
                     <DataGridTextColumn Header="Estado" Binding="{Binding ActiveStatusLabel}" Width="82"/>
                 </DataGrid.Columns>
             </DataGrid>
             <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="12" Margin="10,0,0,0">
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="100"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="100"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock Text="PRODUCTO SELECCIONADO" Foreground="#173F78" FontSize="15" FontWeight="Bold"/>
                     <StackPanel Grid.Row="1" Margin="0,4,0,7">
                         <TextBlock x:Name="SelectedProductName" Text="Selecciona un producto" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -61,7 +62,9 @@
                         <Button x:Name="ChangePriceButton" Grid.Column="1" Content="Cambiar precio" Height="32" Margin="4,0,0,0" Click="ChangePrice_Click" IsEnabled="False"/>
                     </Grid>
                     <Button x:Name="ToggleProductActiveButton" Grid.Row="6" Content="Desactivar producto" Height="32" Click="ToggleProductActive_Click" IsEnabled="False"/>
-                    <Button Grid.Row="7" Content="Historial de movimientos" Height="32" Margin="0,7,0,0" Click="History_Click" AutomationProperties.Name="Ver historial de movimientos"/>
+                    <TextBlock x:Name="TaxTreatmentStatusLabel" Grid.Row="7" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,4"/>
+                    <Button x:Name="ChangeTaxTreatmentButton" Grid.Row="8" Content="Asignar impuesto" Height="32" Margin="0,3,0,0" Click="ChangeTaxTreatment_Click" IsEnabled="False" AutomationProperties.Name="Asignar tratamiento de impuesto al producto"/>
+                    <Button Grid.Row="9" Content="Historial de movimientos" Height="32" Margin="0,7,0,0" Click="History_Click" AutomationProperties.Name="Ver historial de movimientos"/>
                 </Grid>
             </Border>
         </Grid>

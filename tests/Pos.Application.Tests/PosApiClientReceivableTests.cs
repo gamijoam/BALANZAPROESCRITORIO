@@ -7,6 +7,39 @@ namespace Pos.Application.Tests;
 public sealed class PosApiClientReceivableTests
 {
     [Fact]
+    public async Task Receivable_opening_balance_uses_the_authenticated_api_contract()
+    {
+        var customerId = Guid.NewGuid();
+        var terminalId = Guid.NewGuid();
+        var reason = "Migración de saldo al 13/10/2026";
+        var idempotencyKey = $"legacy-opening-{Guid.NewGuid():N}";
+        using var handler = new ReceivableHandler((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/api/v1/auth/login")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new { operatorId = Guid.NewGuid(), terminalId, expiresAtUtc = DateTime.UtcNow.AddHours(1), accessToken = "test-token" })
+                });
+
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal($"/api/v1/customers/{customerId}/receivables/opening-balance", request.RequestUri.AbsolutePath);
+            Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+            using var json = System.Text.Json.JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Assert.Equal(1260.0513m, json.RootElement.GetProperty("amountUsd").GetDecimal());
+            Assert.Equal(reason, json.RootElement.GetProperty("reason").GetString());
+            Assert.Equal(idempotencyKey, json.RootElement.GetProperty("idempotencyKey").GetString());
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = JsonContent.Create(new { id = Guid.NewGuid(), amount = 1260.0513m, replayed = false })
+            });
+        });
+        using var client = new PosApiClient(new Uri("http://localhost:5155"), new HttpClient(handler, disposeHandler: false));
+        await client.LoginAsync("api-test", "test-pin", terminalId);
+
+        await client.RecordReceivableOpeningBalanceAsync(customerId, 1260.0513m, reason, idempotencyKey);
+    }
+
+    [Fact]
     public async Task Receivable_query_deserializes_sale_items_and_current_ves_equivalent()
     {
         var customerId = Guid.NewGuid();
@@ -43,7 +76,7 @@ public sealed class PosApiClientReceivableTests
             });
         });
         using var client = new PosApiClient(new Uri("http://localhost:5155"), new HttpClient(handler, disposeHandler: false));
-        await client.LoginAsync("demo", "4826", terminalId);
+        await client.LoginAsync("api-test", "test-pin", terminalId);
 
         var account = await client.GetReceivablesAsync(customerId);
 

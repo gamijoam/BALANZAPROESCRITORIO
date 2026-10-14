@@ -2,6 +2,13 @@ namespace Pos.Domain.Finance;
 
 public static class CreditAccountCurrency
 {
+    public static decimal SumToUsd(IEnumerable<PaymentTender> tenders, decimal usdToVesRate)
+    {
+        ArgumentNullException.ThrowIfNull(tenders);
+        return tenders.GroupBy(x => x.Currency)
+            .Sum(group => ToUsd(group.Sum(x => x.Amount), group.Key, usdToVesRate));
+    }
+
     public static decimal ToUsd(decimal amount, string currency, decimal usdToVesRate)
     {
         if (amount < 0m) throw new ArgumentOutOfRangeException(nameof(amount));

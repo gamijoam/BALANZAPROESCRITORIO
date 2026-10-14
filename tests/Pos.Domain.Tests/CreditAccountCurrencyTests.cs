@@ -18,4 +18,12 @@ public sealed class CreditAccountCurrencyTests
         Assert.Equal(5253.90m, CreditAccountCurrency.ToVes(6m, 875.65m));
         Assert.Equal(0.00114201m, CreditAccountCurrency.UsdPerVes(875.65m));
     }
+
+    [Fact]
+    public void Credit_tenders_in_usd_and_ves_sum_in_usd_using_each_tenders_own_currency()
+    {
+        var tenders = new[] { new PaymentTender(1m, "USD"), new PaymentTender(875.65m, "VES") };
+
+        Assert.Equal(2m, CreditAccountCurrency.SumToUsd(tenders, 875.65m));
+    }
 }

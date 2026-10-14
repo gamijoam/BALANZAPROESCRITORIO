@@ -10,6 +10,8 @@ Por defecto usa el ID `pos-warehouses-dev-2026`, que debe estar registrado como 
 
 La firma solo se puede producir en una cuenta que tenga acceso a la clave privada. La clave del publicador actual es no exportable y permanece en la PC firmante; copiar el PEM público a otra PC no le da capacidad para firmar. Para cambiar de computadora publicadora, crea un par nuevo con un `keyId` único, distribuye primero su clave pública a los servidores POS y luego firma con ese nuevo ID.
 
+Para publicar desde cualquier PC con la firma custodiada en el VPS, sigue la [guía de publicación remota](publicar-modulos-desde-cualquier-equipo.md). El flujo existente con certificado de Windows descrito aquí se mantiene disponible.
+
 ## Preparar un certificado de publicación en Windows
 
 Para desarrollo o publicación interna, PowerShell puede crear una clave RSA no exportable en el almacén del usuario actual:

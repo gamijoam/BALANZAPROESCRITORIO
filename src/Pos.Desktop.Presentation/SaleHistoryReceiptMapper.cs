@@ -13,7 +13,11 @@ public static class SaleHistoryReceiptMapper
             line.LineTotal,
             line.OriginalUnitPrice,
             line.OriginalCurrency,
-            null)).ToArray();
+            null,
+            line.PriceTier,
+            line.TaxTreatment,
+            line.TaxRate,
+            line.TaxAmount)).ToArray();
         var payments = sale.Payments
             .Select(payment => new SalePaymentInput(payment.Method, payment.Amount, payment.Currency))
             .ToArray();

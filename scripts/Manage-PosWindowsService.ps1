@@ -44,8 +44,8 @@ function Set-PosServiceRegistration {
             Name = $serviceName
             DisplayName = $displayName
             PathName = $binaryPath
-            ServiceType = 16
-            ErrorControl = 1
+            ServiceType = [byte]16
+            ErrorControl = [byte]1
             StartMode = 'Automatic'
             StartName = 'LocalSystem'
         }
@@ -160,7 +160,11 @@ function Set-PosServiceConfiguration {
     try {
         $protected = [PosLocalDpapi]::ProtectMachine($plain)
         [IO.File]::WriteAllBytes($temporaryPath, $protected)
-        Move-Item -LiteralPath $temporaryPath -Destination $configPath -Force
+        if (Test-Path -LiteralPath $configPath -PathType Leaf) {
+            [IO.File]::Replace($temporaryPath, $configPath, [NullString]::Value)
+        } else {
+            [IO.File]::Move($temporaryPath, $configPath)
+        }
     } finally {
         [Array]::Clear($plain, 0, $plain.Length)
         if ($null -ne $protected) { [Array]::Clear($protected, 0, $protected.Length) }

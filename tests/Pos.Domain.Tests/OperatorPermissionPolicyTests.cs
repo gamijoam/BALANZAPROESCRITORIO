@@ -38,6 +38,39 @@ public sealed class OperatorPermissionPolicyTests
     }
 
     [Fact]
+    public void Price2_is_supervisor_only_by_default_and_can_be_delegated_per_operator()
+    {
+        Assert.Equal(PermissionAccessMode.Deny, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Cashier, Permission.SelectPrice2, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Supervisor, Permission.SelectPrice2, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Cashier, Permission.SelectPrice2, PermissionOverrideMode.Allow));
+    }
+
+    [Fact]
+    public void Supplier_payments_require_administrator_approval_for_non_admin_roles_by_default()
+    {
+        Assert.Equal(PermissionAccessMode.RequireAdminPin, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Cashier, Permission.ManageSupplierPayments, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.RequireAdminPin, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Supervisor, Permission.ManageSupplierPayments, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Administrator, Permission.ManageSupplierPayments, PermissionOverrideMode.Deny));
+    }
+
+    [Fact]
+    public void Finance_view_and_purchase_management_permissions_default_to_supervisor()
+    {
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Supervisor, Permission.ViewSuppliers, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Supervisor, Permission.ManagePurchases, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Deny, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Cashier, Permission.ManagePurchases, PermissionOverrideMode.Inherit));
+    }
+
+    [Fact]
     public void Per_operator_override_can_allow_deny_or_require_admin_pin()
     {
         Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(

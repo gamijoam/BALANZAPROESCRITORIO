@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[A-Fa-f0-9]{40}$')][string]$CertificateThumbprint,
     [string]$KeyId = 'pos-warehouses-dev-2026',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.0.2',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '1.1.0',
     [string]$OutputZip
 )
 

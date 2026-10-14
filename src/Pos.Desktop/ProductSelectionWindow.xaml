@@ -57,6 +57,10 @@
                                         <Setter Property="IsEnabled" Value="False"/>
                                         <Setter Property="Opacity" Value="0.55"/>
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding Product.IsTaxClassified}" Value="False">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                        <Setter Property="Opacity" Value="0.62"/>
+                                    </DataTrigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Setter.Value>
@@ -103,7 +107,10 @@
                             </Grid>
                         </Border>
                         <TextBlock Grid.Column="1" Text="{Binding Product.Sku}" FontWeight="Bold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="8,0"/>
-                        <TextBlock Grid.Column="2" Text="{Binding Product.Name}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="8,0"/>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,4">
+                            <TextBlock Text="{Binding Product.Name}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="42"/>
+                            <TextBlock Text="{Binding Product.TaxTreatmentLabel}" Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/>
+                        </StackPanel>
                         <TextBlock Grid.Column="3" Text="{Binding Product.Currency}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" VerticalAlignment="Center" Margin="8,0"/>
                         <TextBlock Grid.Column="4" Text="{Binding StockLabel}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
                         <TextBlock Grid.Column="5" Text="{Binding Product.PriceLabel}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" HorizontalAlignment="Right" FontWeight="Bold" VerticalAlignment="Center" Margin="8,0"/>

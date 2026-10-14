@@ -28,6 +28,8 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<PairedTerminalRecord> PairedTerminals => Set<PairedTerminalRecord>();
     public DbSet<TerminalClientVersionRecord> TerminalClientVersions => Set<TerminalClientVersionRecord>();
     public DbSet<OperatorReportViewRecord> OperatorReportViews => Set<OperatorReportViewRecord>();
+    public DbSet<PurchaseReceiptEffectRecord> PurchaseReceiptEffects => Set<PurchaseReceiptEffectRecord>();
+    public DbSet<PurchaseReceiptEffectLineRecord> PurchaseReceiptEffectLines => Set<PurchaseReceiptEffectLineRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -35,6 +37,9 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.ToTable("products"); e.HasKey(x => x.Id); e.Property(x => x.Sku).HasMaxLength(64).IsRequired();
             e.HasIndex(x => x.Sku).IsUnique(); e.Property(x => x.Name).HasMaxLength(200).IsRequired();
             e.Property(x => x.UnitPrice).HasPrecision(18, 4); e.Property(x => x.Currency).HasMaxLength(3).IsRequired(); e.Property(x => x.ImageFileName).HasMaxLength(80);
+            e.Property(x => x.Price2).HasPrecision(18, 4); e.Property(x => x.Price3).HasPrecision(18, 4);
+            e.Property(x => x.UnitCost).HasPrecision(18, 4);
+            e.Property(x => x.TaxTreatment).HasMaxLength(24).HasDefaultValue("Unclassified").IsRequired();
         });
         model.Entity<StockRecord>(e => {
             e.ToTable("stocks"); e.HasKey(x => x.ProductId); e.Property(x => x.Quantity).HasPrecision(18, 3);
@@ -55,6 +60,10 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.Property(x => x.UnitPrice).HasPrecision(18, 4); e.Property(x => x.LineTotal).HasPrecision(18, 4);
             e.Property(x => x.OriginalUnitPrice).HasPrecision(18, 4); e.Property(x => x.OriginalCurrency).HasMaxLength(3);
             e.Property(x => x.AppliedExchangeRate).HasPrecision(18, 8);
+            e.Property(x => x.TaxRate).HasPrecision(9, 6); e.Property(x => x.TaxAmount).HasPrecision(18, 4);
+            e.Property(x => x.UnitCost).HasPrecision(18, 4); e.Property(x => x.PriceTier).HasMaxLength(16).HasDefaultValue("Price1").IsRequired();
+            e.Property(x => x.TaxTreatment).HasMaxLength(24).HasDefaultValue("NotCaptured").IsRequired();
+            e.Property(x => x.CostCurrency).HasMaxLength(3);
             e.HasOne<ExchangeRateRecord>().WithMany().HasForeignKey(x => x.ExchangeRateId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<SaleRecord>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -114,6 +123,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
         model.Entity<PriceHistoryRecord>(e => {
             e.ToTable("price_history"); e.HasKey(x => x.Id); e.Property(x => x.OldPrice).HasPrecision(18, 4); e.Property(x => x.NewPrice).HasPrecision(18, 4);
             e.Property(x => x.Currency).HasMaxLength(3).IsRequired(); e.Property(x => x.Reason).HasMaxLength(250).IsRequired();
+            e.Property(x => x.PriceTier).HasMaxLength(16).HasDefaultValue("Price1").IsRequired();
             e.HasIndex(x => new { x.ProductId, x.ChangedAtUtc }); e.HasOne<ProductRecord>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<ExchangeRateRecord>(e => {
@@ -128,10 +138,14 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.HasIndex(x => x.DocumentNumber).IsUnique().HasFilter("\"DocumentNumber\" IS NOT NULL");
         });
         model.Entity<ReceivableEntryRecord>(e => {
-            e.ToTable("receivable_entries"); e.HasKey(x => x.Id); e.Property(x => x.Amount).HasPrecision(18, 4);
+            e.ToTable("receivable_entries", table => table.HasCheckConstraint("CK_receivable_entries_opening_balance_charge", "\"IsOpeningBalance\" = FALSE OR (\"EntryType\" = 'Charge' AND \"SaleId\" IS NULL)"));
+            e.HasKey(x => x.Id); e.Property(x => x.Amount).HasPrecision(18, 4);
             e.Property(x => x.OriginalAmount).HasPrecision(18, 4); e.Property(x => x.AppliedExchangeRate).HasPrecision(18, 8);
             e.Property(x => x.OriginalCurrency).HasMaxLength(3);
             e.Property(x => x.EntryType).HasMaxLength(16).IsRequired(); e.Property(x => x.Currency).HasMaxLength(3).IsRequired(); e.Property(x => x.Reason).HasMaxLength(250).IsRequired();
+            e.Property(x => x.IdempotencyKey).HasMaxLength(128);
+            e.HasIndex(x => x.IdempotencyKey).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL");
+            e.HasIndex(x => x.CustomerId).IsUnique().HasFilter("\"IsOpeningBalance\" = TRUE");
             e.HasIndex(x => new { x.CustomerId, x.OccurredAtUtc }); e.HasOne<CustomerRecord>().WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<SaleRecord>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -179,13 +193,37 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.HasIndex(x => new { x.OperatorId, x.ReportId, x.Name }).IsUnique();
             e.HasOne<OperatorUserRecord>().WithMany().HasForeignKey(x => x.OperatorId).OnDelete(DeleteBehavior.Cascade);
         });
+        model.Entity<PurchaseReceiptEffectRecord>(e => {
+            e.ToTable("purchase_receipt_effects"); e.HasKey(x => x.ReceiptId);
+            e.Property(x => x.ReceiptId).HasColumnName("receipt_id");
+            e.Property(x => x.PayloadHash).HasColumnName("payload_hash").HasMaxLength(64).IsRequired();
+            e.Property(x => x.ActorId).HasColumnName("actor_id");
+            e.Property(x => x.TerminalId).HasColumnName("terminal_id");
+            e.Property(x => x.AppliedAtUtc).HasColumnName("applied_at_utc").IsRequired();
+            e.Property(x => x.ReversedAtUtc).HasColumnName("reversed_at_utc");
+            e.Property(x => x.ReversedByActorId).HasColumnName("reversed_by_actor_id");
+            e.Property(x => x.ReversedByTerminalId).HasColumnName("reversed_by_terminal_id");
+        });
+        model.Entity<PurchaseReceiptEffectLineRecord>(e => {
+            e.ToTable("purchase_receipt_effect_lines"); e.HasKey(x => new { x.ReceiptId, x.ProductId });
+            e.Property(x => x.ReceiptId).HasColumnName("receipt_id");
+            e.Property(x => x.ProductId).HasColumnName("product_id");
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.Property(x => x.PriorStockQuantity).HasColumnName("prior_stock_quantity").HasPrecision(18, 4);
+            e.Property(x => x.PriorUnitCost).HasColumnName("prior_unit_cost").HasPrecision(18, 4);
+            e.Property(x => x.UnitCostAfter).HasColumnName("unit_cost_after").HasPrecision(18, 4);
+            e.Property(x => x.QuantityAfterReceipt).HasColumnName("quantity_after_receipt").HasPrecision(18, 4);
+            e.Property(x => x.WarehouseId).HasColumnName("warehouse_id");
+            e.Property(x => x.MovementId).HasColumnName("movement_id");
+            e.HasOne<PurchaseReceiptEffectRecord>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }
 
-public sealed class ProductRecord { public Guid Id { get; set; } public string Sku { get; set; } = ""; public string Name { get; set; } = ""; public decimal UnitPrice { get; set; } public string Currency { get; set; } = "VES"; public string? ImageFileName { get; set; } public bool Active { get; set; } = true; public DateTime CreatedAtUtc { get; set; } }
+public sealed class ProductRecord { public Guid Id { get; set; } public string Sku { get; set; } = ""; public string Name { get; set; } = ""; public decimal UnitPrice { get; set; } public decimal? Price2 { get; set; } public decimal? Price3 { get; set; } public decimal? UnitCost { get; set; } public string TaxTreatment { get; set; } = "Unclassified"; public string Currency { get; set; } = "VES"; public string? ImageFileName { get; set; } public bool Active { get; set; } = true; public DateTime CreatedAtUtc { get; set; } }
 public sealed class StockRecord { public Guid ProductId { get; set; } public decimal Quantity { get; set; } public long Version { get; set; } }
 public sealed class SaleRecord { public Guid Id { get; set; } public Guid TerminalId { get; set; } public Guid CashSessionId { get; set; } public Guid OperatorId { get; set; } public Guid? CustomerId { get; set; } public decimal Total { get; set; } public decimal RoundingAdjustment { get; set; } public decimal? AppliedUsdToVesRate { get; set; } public string Currency { get; set; } = "VES"; public string Status { get; set; } = "Confirmed"; public DateTime CreatedAtUtc { get; set; } }
-public sealed class SaleLineRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid ProductId { get; set; } public string Sku { get; set; } = ""; public string Description { get; set; } = ""; public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } public decimal? OriginalUnitPrice { get; set; } public string? OriginalCurrency { get; set; } public Guid? ExchangeRateId { get; set; } public decimal? AppliedExchangeRate { get; set; } }
+public sealed class SaleLineRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid ProductId { get; set; } public string Sku { get; set; } = ""; public string Description { get; set; } = ""; public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } public decimal? OriginalUnitPrice { get; set; } public string? OriginalCurrency { get; set; } public Guid? ExchangeRateId { get; set; } public decimal? AppliedExchangeRate { get; set; } public string PriceTier { get; set; } = "Price1"; public string TaxTreatment { get; set; } = "NotCaptured"; public decimal TaxRate { get; set; } public decimal TaxAmount { get; set; } public decimal? UnitCost { get; set; } public string? CostCurrency { get; set; } }
 public sealed class PaymentRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public string Method { get; set; } = ""; public decimal Amount { get; set; } public string Currency { get; set; } = "VES"; public Guid? ExchangeRateId { get; set; } public decimal? AppliedExchangeRate { get; set; } }
 public sealed class IdempotencyRecord { public Guid Id { get; set; } public Guid TerminalId { get; set; } public string Key { get; set; } = ""; public string PayloadHash { get; set; } = ""; public Guid SaleId { get; set; } public DateTime CreatedAtUtc { get; set; } }
 public sealed class AuditRecord { public Guid Id { get; set; } public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public string Action { get; set; } = ""; public string Payload { get; set; } = "{}"; public DateTime OccurredAtUtc { get; set; } }
@@ -195,10 +233,10 @@ public sealed class AccessSessionRecord { public Guid Id { get; set; } public Gu
 public sealed class CashSessionRecord { public Guid Id { get; set; } public Guid OperatorId { get; set; } public Guid? ActiveOperatorId { get; set; } public Guid TerminalId { get; set; } public decimal OpeningBalance { get; set; } public decimal? ExpectedClosingBalance { get; set; } public decimal? CountedClosingBalance { get; set; } public decimal? Variance { get; set; } public decimal OpeningBalanceUsd { get; set; } public decimal OpeningBalanceVes { get; set; } public decimal? ExpectedClosingBalanceUsd { get; set; } public decimal? CountedClosingBalanceUsd { get; set; } public decimal? VarianceUsd { get; set; } public decimal? ExpectedClosingBalanceVes { get; set; } public decimal? CountedClosingBalanceVes { get; set; } public decimal? VarianceVes { get; set; } public string Currency { get; set; } = "VES"; public string Status { get; set; } = "Open"; public DateTime OpenedAtUtc { get; set; } public DateTime? ClosedAtUtc { get; set; } }
 public sealed class StockMovementRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public decimal QuantityDelta { get; set; } public string Reason { get; set; } = ""; public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime OccurredAtUtc { get; set; } }
 public sealed class CashMovementRecord { public Guid Id { get; set; } public Guid CashSessionId { get; set; } public decimal Amount { get; set; } public string Currency { get; set; } = "VES"; public string Direction { get; set; } = "In"; public string Reason { get; set; } = ""; public Guid ActorId { get; set; } public DateTime OccurredAtUtc { get; set; } }
-public sealed class PriceHistoryRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public decimal OldPrice { get; set; } public decimal NewPrice { get; set; } public string Currency { get; set; } = "VES"; public string Reason { get; set; } = ""; public Guid ActorId { get; set; } public DateTime ChangedAtUtc { get; set; } }
+public sealed class PriceHistoryRecord { public Guid Id { get; set; } public Guid ProductId { get; set; } public decimal? OldPrice { get; set; } public decimal NewPrice { get; set; } public string Currency { get; set; } = "VES"; public string PriceTier { get; set; } = "Price1"; public string Reason { get; set; } = ""; public Guid ActorId { get; set; } public DateTime ChangedAtUtc { get; set; } }
 public sealed class ExchangeRateRecord { public Guid Id { get; set; } public string FromCurrency { get; set; } = "USD"; public string ToCurrency { get; set; } = "VES"; public decimal Rate { get; set; } public DateTime EffectiveAtUtc { get; set; } public string Source { get; set; } = ""; public Guid ActorId { get; set; } public DateTime CreatedAtUtc { get; set; } }
 public sealed class CustomerRecord { public Guid Id { get; set; } public string Name { get; set; } = ""; public string? DocumentNumber { get; set; } public string? Phone { get; set; } public string Currency { get; set; } = "USD"; public decimal CreditLimit { get; set; } public bool Active { get; set; } = true; public DateTime CreatedAtUtc { get; set; } }
-public sealed class ReceivableEntryRecord { public Guid Id { get; set; } public Guid CustomerId { get; set; } public Guid? SaleId { get; set; } public string EntryType { get; set; } = "Charge"; public decimal Amount { get; set; } public string Currency { get; set; } = "USD"; public decimal? OriginalAmount { get; set; } public string? OriginalCurrency { get; set; } public decimal? AppliedExchangeRate { get; set; } public string Reason { get; set; } = ""; public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime OccurredAtUtc { get; set; } }
+public sealed class ReceivableEntryRecord { public Guid Id { get; set; } public Guid CustomerId { get; set; } public Guid? SaleId { get; set; } public string EntryType { get; set; } = "Charge"; public decimal Amount { get; set; } public string Currency { get; set; } = "USD"; public decimal? OriginalAmount { get; set; } public string? OriginalCurrency { get; set; } public decimal? AppliedExchangeRate { get; set; } public string Reason { get; set; } = ""; public string? IdempotencyKey { get; set; } public bool IsOpeningBalance { get; set; } public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime OccurredAtUtc { get; set; } }
 public sealed class SaleReturnRecord { public Guid Id { get; set; } public Guid SaleId { get; set; } public Guid OperatorId { get; set; } public Guid TerminalId { get; set; } public Guid CashSessionId { get; set; } public decimal Amount { get; set; } public string Currency { get; set; } = "VES"; public string Reason { get; set; } = ""; public DateTime CreatedAtUtc { get; set; } }
 public sealed class SaleReturnLineRecord { public Guid Id { get; set; } public Guid SaleReturnId { get; set; } public Guid SaleLineId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal Amount { get; set; } public bool Restock { get; set; } }
 public sealed class SaleReturnPaymentRecord { public Guid Id { get; set; } public Guid SaleReturnId { get; set; } public Guid OriginalPaymentId { get; set; } public string Method { get; set; } = ""; public decimal Amount { get; set; } public string Currency { get; set; } = "VES"; public decimal? AppliedExchangeRate { get; set; } public string? Reference { get; set; } }
@@ -206,3 +244,5 @@ public sealed class ReturnIdempotencyRecord { public Guid Id { get; set; } publi
 public sealed class PairedTerminalRecord { public Guid TerminalId { get; set; } public string CredentialHash { get; set; } = ""; public Guid PairedByOperatorId { get; set; } public DateTime PairedAtUtc { get; set; } public bool Active { get; set; } = true; }
 public sealed class TerminalClientVersionRecord { public Guid TerminalId { get; set; } public string? ClientVersion { get; set; } public DateTime LastReportedAtUtc { get; set; } }
 public sealed class OperatorReportViewRecord { public Guid Id { get; set; } public Guid OperatorId { get; set; } public string ReportId { get; set; } = ""; public string Name { get; set; } = ""; public string ColumnsJson { get; set; } = "[]"; public string FiltersJson { get; set; } = "{}"; public DateTime UpdatedAtUtc { get; set; } }
+public sealed class PurchaseReceiptEffectRecord { public Guid ReceiptId { get; set; } public string PayloadHash { get; set; } = ""; public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime AppliedAtUtc { get; set; } public DateTime? ReversedAtUtc { get; set; } public Guid? ReversedByActorId { get; set; } public Guid? ReversedByTerminalId { get; set; } }
+public sealed class PurchaseReceiptEffectLineRecord { public Guid ReceiptId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal PriorStockQuantity { get; set; } public decimal? PriorUnitCost { get; set; } public decimal? UnitCostAfter { get; set; } public decimal QuantityAfterReceipt { get; set; } public Guid? WarehouseId { get; set; } public Guid MovementId { get; set; } }

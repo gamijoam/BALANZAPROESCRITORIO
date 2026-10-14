@@ -25,9 +25,11 @@ public partial class MainWindow : Window
 
     public MainWindow(PosViewModel viewModel, IPosApiClient apiClient,
         Func<CancellationToken, Task>? restartLocalServiceAsync = null,
-        bool stopsLocalServerOnExit = false)
+        bool stopsLocalServerOnExit = false,
+        bool startSessionOnLoad = true)
     {
         InitializeComponent();
+        if (!startSessionOnLoad) Loaded -= Window_Loaded;
         _viewModel = viewModel;
         _apiClient = apiClient;
         _restartLocalServiceAsync = restartLocalServiceAsync;
@@ -315,6 +317,11 @@ public partial class MainWindow : Window
             CartGrid.CancelEdit(DataGridEditingUnit.Cell);
             CartGrid.CancelEdit(DataGridEditingUnit.Row);
         }
+    }
+
+    private void CartGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+    {
+        e.Row.ToolTip = e.Row.Item is CartLineViewModel line ? line.Product.Name : null;
     }
 
     private void FocusCartQuantity(CartLineViewModel? line)

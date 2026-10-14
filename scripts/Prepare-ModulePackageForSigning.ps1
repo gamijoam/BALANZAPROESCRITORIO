@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('warehouses', 'thermal-receipts', 'advanced-reports', 'all')]
+    [ValidateSet('warehouses', 'thermal-receipts', 'advanced-reports', 'finance', 'all')]
     [string]$Module,
     [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\module-release-input'),
     [string]$KeyId = 'pos-publisher-vps-2026'
@@ -16,7 +16,7 @@ if (-not $outputRoot.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnor
 }
 if ($KeyId -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$') { throw 'El identificador de publicador no es válido.' }
 
-$moduleIds = if ($Module -eq 'all') { @('warehouses', 'thermal-receipts', 'advanced-reports') } else { @($Module) }
+$moduleIds = if ($Module -eq 'all') { @('warehouses', 'thermal-receipts', 'advanced-reports', 'finance') } else { @($Module) }
 $specs = foreach ($moduleId in $moduleIds) {
     switch ($moduleId) {
     'warehouses' {
@@ -61,6 +61,21 @@ $specs = foreach ($moduleId in $moduleIds) {
             Files = @(
                 @{ Source = 'src\Modules\Pos.Modules.Reporting\bin\Release\net10.0\Pos.Modules.Reporting.dll'; Package = 'Pos.Modules.Reporting.dll' },
                 @{ Source = 'src\Modules\Pos.Modules.Reporting.Desktop\bin\Release\net10.0-windows\Pos.Modules.Reporting.Desktop.dll'; Package = 'Pos.Modules.Reporting.Desktop.dll' }
+            )
+        }
+    }
+    'finance' {
+        [pscustomobject]@{
+            Id = 'finance'
+            Manifest = 'src\Modules\Pos.Modules.Finance\module.manifest.json'
+            BuildProjects = @(
+                'src\Modules\Pos.Modules.Finance\Pos.Modules.Finance.csproj',
+                'src\Modules\Pos.Modules.Finance.Desktop\Pos.Modules.Finance.Desktop.csproj'
+            )
+            Files = @(
+                @{ Source = 'src\Modules\Pos.Modules.Finance\bin\Release\net10.0\Pos.Modules.Finance.dll'; Package = 'Pos.Modules.Finance.dll' },
+                @{ Source = 'src\Modules\Pos.Modules.Finance.Desktop\bin\Release\net10.0-windows\Pos.Modules.Finance.Desktop.dll'; Package = 'Pos.Modules.Finance.Desktop.dll' },
+                @{ Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0001.json'; Package = 'migrations/finance-0001.json' }
             )
         }
     }

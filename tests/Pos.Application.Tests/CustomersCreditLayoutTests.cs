@@ -179,6 +179,16 @@ public sealed class CustomersCreditLayoutTests
         Assert.Contains("Se permiten pagos parciales hasta cubrir el saldo.", accountText);
     }
 
+    [Fact]
+    public void Receivables_view_exposes_opening_balance_action()
+    {
+        var receivables = LoadView("ReceivablesWindow.xaml");
+        var accountText = string.Join(" ", receivables.Descendants().Attributes()
+            .Where(x => x.Name.LocalName is "Text" or "Content").Select(x => x.Value));
+
+        Assert.Contains("Registrar saldo inicial", accountText);
+    }
+
     private static XDocument LoadView(string fileName)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

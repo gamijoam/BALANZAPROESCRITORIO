@@ -131,6 +131,32 @@ public sealed class WindowsServiceDeploymentAcceptanceTests
     }
 
     [Fact]
+    public void Service_creation_uses_byte_values_required_by_the_Win32_Service_CIM_contract()
+    {
+        var root = FindRepositoryRoot();
+        var manager = File.ReadAllText(Path.Combine(root, "scripts", "Manage-PosWindowsService.ps1"));
+        var createStart = manager.IndexOf("MethodName Create", StringComparison.Ordinal);
+        var createEnd = manager.IndexOf("} else {", createStart, StringComparison.Ordinal);
+        Assert.True(createStart >= 0 && createEnd > createStart, "No se encontró la llamada que registra el servicio Windows.");
+        var createArguments = manager[createStart..createEnd];
+
+        Assert.Contains("ServiceType = [byte]16", createArguments, StringComparison.Ordinal);
+        Assert.Contains("ErrorControl = [byte]1", createArguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Service_configuration_can_replace_an_existing_machine_protected_file()
+    {
+        var root = FindRepositoryRoot();
+        var manager = File.ReadAllText(Path.Combine(root, "scripts", "Manage-PosWindowsService.ps1"));
+
+        Assert.Contains("if (Test-Path -LiteralPath $configPath -PathType Leaf)", manager, StringComparison.Ordinal);
+        Assert.Contains("[IO.File]::Replace($temporaryPath, $configPath, [NullString]::Value)", manager, StringComparison.Ordinal);
+        Assert.Contains("[IO.File]::Move($temporaryPath, $configPath)", manager, StringComparison.Ordinal);
+        Assert.DoesNotContain("Move-Item -LiteralPath $temporaryPath -Destination $configPath", manager, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Installed_updater_lets_the_user_select_a_new_extracted_package()
     {
         var root = FindRepositoryRoot();
