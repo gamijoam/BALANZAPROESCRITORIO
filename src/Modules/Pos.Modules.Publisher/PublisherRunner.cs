@@ -12,6 +12,12 @@ public static class PublisherRunner
     public static void Run(PublisherOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (options.Command is PublisherCommand.BuildUnsigned or PublisherCommand.SignPackage ||
+            (options.Command == PublisherCommand.ExportPublicKey && options.PrivateKeyPemPath is not null))
+        {
+            RunPem(options);
+            return;
+        }
         using var certificate = FindCertificate(options.CertificateThumbprint, options.StoreLocation);
         Run(options, certificate);
     }
@@ -35,6 +41,9 @@ public static class PublisherRunner
             return;
         }
 
+        if (options.Command != PublisherCommand.Build)
+            throw new InvalidOperationException("Este comando requiere una clave PEM o un certificado compatible.");
+
         if (!certificate.HasPrivateKey)
             throw new InvalidOperationException("El certificado encontrado no tiene una clave privada accesible para esta cuenta.");
 
@@ -57,6 +66,68 @@ public static class PublisherRunner
         WriteAtomically(outputPath, packageBytes);
         Console.WriteLine($"Paquete firmado creado: {outputPath}");
         Console.WriteLine($"Archivos incluidos (sin contar manifiesto, índice ni firma): {fileContents.Count}");
+    }
+
+    private static void RunPem(PublisherOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.Command == PublisherCommand.BuildUnsigned)
+        {
+            var manifestPath = Path.GetFullPath(options.ManifestPath!);
+            var stageRoot = Path.GetFullPath(options.StagingDirectory!);
+            var filesListPath = Path.GetFullPath(options.FilesListPath!);
+            var outputPath = Path.GetFullPath(options.OutputPath);
+            EnsureDirectory(stageRoot, "directorio de preparación");
+            EnsureOutsideRoot(outputPath, stageRoot, "La salida del paquete no puede guardarse dentro del directorio preparado.");
+            var filePaths = PackageFileList.Parse(File.ReadAllText(filesListPath));
+            var fileContents = ReadExplicitFiles(stageRoot, filePaths);
+            var packageBytes = ModulePackageBuilder.BuildUnsigned(
+                File.ReadAllText(manifestPath), fileContents, options.KeyId!);
+            WriteAtomically(outputPath, packageBytes);
+            Console.WriteLine($"Paquete sin firma preparado: {outputPath}");
+            Console.WriteLine("El paquete no se puede instalar hasta pasar por el firmador autorizado.");
+            return;
+        }
+
+        var privateKeyPemPath = Path.GetFullPath(options.PrivateKeyPemPath!);
+        var privateKeyPem = File.ReadAllText(privateKeyPemPath);
+        if (!privateKeyPem.Contains("PRIVATE KEY-----", StringComparison.Ordinal) ||
+            privateKeyPem.Contains("ENCRYPTED PRIVATE KEY", StringComparison.Ordinal))
+            throw new InvalidOperationException("Se requiere una clave privada RSA PEM sin contraseña, protegida por los permisos del sistema operativo.");
+
+        using var signingKey = RSA.Create();
+        try
+        {
+            signingKey.ImportFromPem(privateKeyPem);
+        }
+        catch (Exception exception) when (exception is ArgumentException or CryptographicException)
+        {
+            throw new InvalidOperationException("No se pudo leer la clave privada RSA PEM.", exception);
+        }
+        if (signingKey.KeySize < 2048)
+            throw new InvalidOperationException("La clave RSA de publicación debe tener al menos 2048 bits.");
+
+        if (options.Command == PublisherCommand.ExportPublicKey)
+        {
+            WriteAtomically(options.OutputPath, System.Text.Encoding.ASCII.GetBytes(signingKey.ExportSubjectPublicKeyInfoPem()));
+            Console.WriteLine($"Clave pública SPKI exportada a: {Path.GetFullPath(options.OutputPath)}");
+            return;
+        }
+
+        if (options.Command != PublisherCommand.SignPackage)
+            throw new InvalidOperationException("Comando PEM desconocido.");
+
+        var inputPath = Path.GetFullPath(options.InputPath!);
+        var inputInfo = new FileInfo(inputPath);
+        if (!inputInfo.Exists)
+            throw new FileNotFoundException("No se encontró el paquete que se debe firmar.", inputPath);
+        if (inputInfo.Length > 640L * 1024 * 1024)
+            throw new InvalidOperationException("El paquete sin firma supera el límite de 640 MiB.");
+
+        var unsignedPackage = File.ReadAllBytes(inputPath);
+        var signedPackage = ModulePackageSigner.SignUnsignedPackage(unsignedPackage, signingKey);
+        WriteAtomically(options.OutputPath, signedPackage);
+        Console.WriteLine($"Paquete firmado y validado: {Path.GetFullPath(options.OutputPath)}");
     }
 
     private static Dictionary<string, byte[]> ReadExplicitFiles(string stageRoot, IReadOnlyList<string> paths)

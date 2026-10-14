@@ -10,7 +10,7 @@ namespace Pos.Modules.Packaging;
 
 public sealed class ModulePackageBuildException(string message) : Exception(message);
 
-/// <summary>Creates the v1 package archive. The caller owns and protects the signing key.</summary>
+/// <summary>Creates v1 package archives. The caller owns and protects any signing key.</summary>
 public static class ModulePackageBuilder
 {
     private const int MaxEntryCount = 2048;
@@ -34,6 +34,28 @@ public static class ModulePackageBuilder
     {
         ArgumentNullException.ThrowIfNull(moduleFiles);
         ArgumentNullException.ThrowIfNull(signingKey);
+        return BuildCore(moduleManifestJson, moduleFiles, signerKeyId, signingKey);
+    }
+
+    /// <summary>
+    /// Builds a package for a separate signing service. The resulting archive is not installable until
+    /// <see cref="ModulePackageSigner.SignUnsignedPackage(byte[], RSA)"/> adds its signature.
+    /// </summary>
+    public static byte[] BuildUnsigned(
+        string moduleManifestJson,
+        IReadOnlyDictionary<string, byte[]> moduleFiles,
+        string signerKeyId)
+    {
+        ArgumentNullException.ThrowIfNull(moduleFiles);
+        return BuildCore(moduleManifestJson, moduleFiles, signerKeyId, null);
+    }
+
+    private static byte[] BuildCore(
+        string moduleManifestJson,
+        IReadOnlyDictionary<string, byte[]> moduleFiles,
+        string signerKeyId,
+        RSA? signingKey)
+    {
         try
         {
             if (string.IsNullOrWhiteSpace(moduleManifestJson))
@@ -48,7 +70,7 @@ public static class ModulePackageBuilder
                 throw BuildFailure("El manifiesto del módulo supera el tamaño permitido en UTF-8.");
             ModuleManifestReader.ParseAndValidate(moduleManifestJson);
 
-            if (moduleFiles.Count + 3 > MaxEntryCount)
+            if (moduleFiles.Count + (signingKey is null ? 2 : 3) > MaxEntryCount)
                 throw BuildFailure("El paquete excede el límite de archivos.");
 
             var normalizedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -74,7 +96,7 @@ public static class ModulePackageBuilder
                 allFiles.Add((path, contents));
             }
 
-            if (signingKey.KeySize < 2048)
+            if (signingKey is not null && signingKey.KeySize < 2048)
                 throw BuildFailure("La clave de publicación debe ser una clave RSA de al menos 2048 bits.");
 
             var inventory = allFiles
@@ -88,12 +110,13 @@ public static class ModulePackageBuilder
             if (indexBytes.LongLength > MaxIndexBytes)
                 throw BuildFailure("El índice excede el tamaño permitido.");
 
-            var signature = signingKey.SignData(indexBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
+            var signature = signingKey?.SignData(indexBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
             using var output = new MemoryStream();
             using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
             {
                 WriteEntry(archive, ModulePackageVerifier.IndexPath, indexBytes);
-                WriteEntry(archive, ModulePackageVerifier.SignaturePath, Encoding.ASCII.GetBytes(Convert.ToBase64String(signature)));
+                if (signature is not null)
+                    WriteEntry(archive, ModulePackageVerifier.SignaturePath, Encoding.ASCII.GetBytes(Convert.ToBase64String(signature)));
                 foreach (var file in allFiles.OrderBy(file => file.Path, StringComparer.Ordinal))
                     WriteEntry(archive, file.Path, file.Contents);
             }

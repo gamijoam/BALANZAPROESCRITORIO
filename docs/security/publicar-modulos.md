@@ -1,6 +1,6 @@
 # Publicar paquetes de módulos
 
-`Pos.Modules.Publisher` crea ZIP firmados y exporta claves públicas. Está pensado para ejecutarse en la computadora de publicación. La instalación se hace desde **Administración → Módulos** en el POS, no desde esta CLI. La clave privada se conserva en el almacén de certificados de Windows; la herramienta solo la abre para firmar y nunca la exporta.
+`Pos.Modules.Publisher` crea ZIP firmados y exporta claves públicas. Está pensado para ejecutarse en la computadora de publicación. La instalación se hace desde **Administración → Módulos** en el POS, no desde esta CLI. La clave privada se conserva en el almacén de certificados de Windows; la herramienta solo la abre para firmar y nunca la exporta. La clave pública del VPS y el flujo para publicar desde cualquier equipo se describen en la [guía de publicación remota](publicar-modulos-desde-cualquier-equipo.md); el firmado local con certificado de Windows se mantiene.
 
 ## Firma rápida desde una carpeta preparada
 

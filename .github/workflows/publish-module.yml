@@ -1,0 +1,131 @@
+name: Publicar módulo firmado
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: Módulo que se compilará y publicará
+        required: true
+        type: choice
+        options:
+          - all
+          - warehouses
+          - thermal-receipts
+          - advanced-reports
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-unsigned-package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - name: Descargar el código de main
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Probar el empaquetador y el firmador
+        run: dotnet test .\tests\Pos.Modules.Tests\Pos.Modules.Tests.csproj --configuration Release --filter "FullyQualifiedName~PublisherWorkflowTests|FullyQualifiedName~ModulePublisherInputTests|FullyQualifiedName~ModulePackageVerifierTests"
+
+      - name: Comprobar que la opción todos incluye el catálogo distribuible
+        shell: pwsh
+        run: .\tests\scripts\Test-AllModulePublishingAcceptance.ps1
+
+      - name: Compilar el módulo y preparar el paquete sin firma
+        shell: pwsh
+        env:
+          MODULE_TO_PUBLISH: ${{ inputs.module }}
+        run: .\scripts\Prepare-ModulePackageForSigning.ps1 -Module $env:MODULE_TO_PUBLISH
+
+      - name: Enviar paquete temporal al firmador privado
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-release-input
+          path: |
+            artifacts/module-release-input/unsigned/
+            artifacts/module-release-input/publisher/
+            artifacts/module-release-input/trusted-publisher.pem
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-and-publish:
+    if: github.ref == 'refs/heads/main'
+    needs: build-unsigned-package
+    runs-on: [self-hosted, linux, x64, pos-module-signing]
+    environment: module-signing
+    steps:
+      - name: Recibir el paquete temporal
+        uses: actions/download-artifact@v4
+        with:
+          name: module-release-input
+          path: incoming
+
+      - name: Validar, firmar y exportar solo archivos públicos
+        shell: bash
+        env:
+          POS_MODULE_SIGNING_KEY: /etc/pos-module-signer/pos-publisher-vps-2026-private.pem
+          PUBLISH_MODULE_INPUT: ${{ inputs.module }}
+        run: |
+          set -euo pipefail
+          mapfile -t unsigned_packages < <(find incoming/unsigned -maxdepth 1 -type f -name '*-unsigned.zip' -print)
+          case "$PUBLISH_MODULE_INPUT" in
+            all) expected_modules=(warehouses thermal-receipts advanced-reports) ;;
+            warehouses|thermal-receipts|advanced-reports) expected_modules=("$PUBLISH_MODULE_INPUT") ;;
+            *) echo "Selección de módulo inválida." >&2; exit 1 ;;
+          esac
+          if [ "${#unsigned_packages[@]}" -ne "${#expected_modules[@]}" ]; then
+            echo "Se recibieron ${#unsigned_packages[@]} paquetes; se esperaban ${#expected_modules[@]}." >&2
+            exit 1
+          fi
+          for module_id in "${expected_modules[@]}"; do
+            matches=0
+            for package in "${unsigned_packages[@]}"; do
+              case "$(basename "$package")" in
+                "$module_id-"*-unsigned.zip) matches=$((matches + 1)) ;;
+              esac
+            done
+            if [ "$matches" -ne 1 ]; then
+              echo "Falta el paquete esperado del módulo $module_id." >&2
+              exit 1
+            fi
+          done
+          publisher="$(find incoming/publisher -maxdepth 1 -type f -name 'Pos.Modules.Publisher' -print -quit)"
+          if [ -z "$publisher" ]; then
+            echo "No se recibió el publicador Linux autónomo." >&2
+            exit 1
+          fi
+          chmod u+x "$publisher"
+          mkdir -p signed
+          for unsigned_package in "${unsigned_packages[@]}"; do
+            package_name="$(basename "$unsigned_package" -unsigned.zip).zip"
+            signed_package="signed/$package_name"
+            "$publisher" sign-package \
+              --input "$unsigned_package" \
+              --output "$signed_package" \
+              --private-key-pem "$POS_MODULE_SIGNING_KEY"
+            (cd signed && sha256sum "$package_name" > "$package_name.sha256")
+          done
+          "$publisher" export-public-key \
+            --private-key-pem "$POS_MODULE_SIGNING_KEY" \
+            --output signed/publisher-public.pem
+          cmp --silent <(tr -d '\r' < incoming/trusted-publisher.pem) <(tr -d '\r' < signed/publisher-public.pem) || {
+            echo "La clave privada del VPS no corresponde a la clave pública confiable del repositorio." >&2
+            exit 1
+          }
+
+      - name: Publicar ZIP firmado, clave pública y SHA-256
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-module-output
+          path: |
+            signed/*.zip
+            signed/publisher-public.pem
+            signed/*.sha256
+          if-no-files-found: error
+          retention-days: 30

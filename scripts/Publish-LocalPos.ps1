@@ -74,9 +74,13 @@ Remove-PublishedBuildArtifacts -PublishRoot $desktopOutput
 
 $scriptsOutput = Join-Path $packageDirectory 'scripts'
 New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
-foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Manage-PosWindowsService.ps1')) {
+foreach ($name in @('Pos-DatabaseSupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Install-ModulePublisherTrust.ps1', 'Manage-PosWindowsService.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
 }
+$trustedPublisherDirectory = Join-Path $packageDirectory 'trusted-publishers'
+New-Item -ItemType Directory -Path $trustedPublisherDirectory -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $repoRoot 'security\module-publishers\pos-publisher-vps-2026.pem') `
+    -Destination (Join-Path $trustedPublisherDirectory 'pos-publisher-vps-2026.pem') -Force
 function Write-WindowsCommandFile {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Content)
     $windowsContent = $Content -replace "`r?`n", "`r`n"
@@ -160,6 +164,7 @@ if errorlevel 1 (
 '@
 Write-WindowsCommandFile -Path $serviceLauncherPath -Content $serviceLauncherContent
 Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\manuales\INSTRUCCIONES-INSTALACION-POS.md') -Destination (Join-Path $packageDirectory 'INSTRUCCIONES.md') -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\security\publicar-modulos-desde-cualquier-equipo.md') -Destination (Join-Path $packageDirectory 'PUBLICAR MODULOS DESDE CUALQUIER PC.md') -Force
 $legacyModesGuide = Join-Path $packageDirectory 'MODOS DE INSTALACION.md'
 if (Test-Path -LiteralPath $legacyModesGuide) { Remove-Item -LiteralPath $legacyModesGuide -Force }
 Compress-Archive -Path (Join-Path $packageDirectory '*') -DestinationPath $archiveFullPath -CompressionLevel Optimal -Force

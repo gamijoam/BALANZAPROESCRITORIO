@@ -11,6 +11,9 @@ catch (PublisherUsageException exception)
     Console.Error.WriteLine($"Error de argumentos: {exception.Message}");
     Console.Error.WriteLine("Uso:");
     Console.Error.WriteLine("  Pos.Modules.Publisher build --manifest <archivo> --stage <carpeta> --files <lista.json> --output <paquete.zip> --key-id <id> --thumbprint <huella> [--store CurrentUser|LocalMachine]");
+    Console.Error.WriteLine("  Pos.Modules.Publisher build-unsigned --manifest <archivo> --stage <carpeta> --files <lista.json> --output <paquete.zip> --key-id <id>");
+    Console.Error.WriteLine("  Pos.Modules.Publisher sign-package --input <paquete-sin-firma.zip> --output <paquete-firmado.zip> --private-key-pem <clave-privada.pem>");
+    Console.Error.WriteLine("  Pos.Modules.Publisher export-public-key --private-key-pem <clave-privada.pem> --output <clave-publica.pem>");
     Console.Error.WriteLine("  Pos.Modules.Publisher export-public-key --thumbprint <huella> --output <clave-publica.pem> [--store CurrentUser|LocalMachine]");
     return 2;
 }
