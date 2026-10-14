@@ -11,16 +11,19 @@ public interface IPosServerModule
 
 public sealed record PosModuleEndpoint
 {
-    public PosModuleEndpoint(string method, string route, RequestDelegate handler, string? requiredPermission = null)
-    { Method = method; Route = route; Handler = handler; RequiredPermission = requiredPermission; }
+    public PosModuleEndpoint(string method, string route, RequestDelegate handler, string? requiredPermission = null,
+        params string[] additionalRequiredPermissions)
+    { Method = method; Route = route; Handler = handler; RequiredPermissions = BuildPermissions(requiredPermission, additionalRequiredPermissions); }
 
-    public PosModuleEndpoint(string method, string route, Func<HttpContext, Task<IResult>> handler, string? requiredPermission = null)
-    { Method = method; Route = route; Handler = handler; RequiredPermission = requiredPermission; }
+    public PosModuleEndpoint(string method, string route, Func<HttpContext, Task<IResult>> handler, string? requiredPermission = null,
+        params string[] additionalRequiredPermissions)
+    { Method = method; Route = route; Handler = handler; RequiredPermissions = BuildPermissions(requiredPermission, additionalRequiredPermissions); }
 
     public string Method { get; }
     public string Route { get; }
     public Delegate Handler { get; }
-    public string? RequiredPermission { get; }
+    public IReadOnlyList<string> RequiredPermissions { get; }
+    public string? RequiredPermission => RequiredPermissions.Count == 0 ? null : RequiredPermissions[0];
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -36,5 +39,15 @@ public sealed record PosModuleEndpoint
             return;
         }
         throw new InvalidOperationException("Tipo de controlador de módulo no compatible.");
+    }
+
+    private static IReadOnlyList<string> BuildPermissions(string? requiredPermission, IReadOnlyCollection<string>? additionalPermissions)
+    {
+        var permissions = (requiredPermission is null ? [] : new[] { requiredPermission })
+            .Concat(additionalPermissions ?? [])
+            .ToArray();
+        if (permissions.Any(string.IsNullOrWhiteSpace) || permissions.Distinct(StringComparer.Ordinal).Count() != permissions.Length)
+            throw new ArgumentException("Los permisos requeridos del endpoint deben ser válidos y no repetirse.");
+        return permissions;
     }
 }

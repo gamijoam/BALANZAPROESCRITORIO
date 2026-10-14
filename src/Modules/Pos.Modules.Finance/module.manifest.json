@@ -1,6 +1,6 @@
 {
   "id": "finance",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "hostApi": { "min": 1, "max": 1 },
   "clientApi": { "min": "1.0.0", "maxExclusive": "2.0.0" },
   "entryAssembly": "Pos.Modules.Finance.dll",
@@ -9,7 +9,7 @@
   "desktopEntryType": "Pos.Modules.Finance.Desktop.FinanceDesktopModule",
   "desktopApi": { "min": "1.1.0", "maxExclusive": "2.0.0" },
   "dependencies": [],
-  "permissions": ["Supplier.View", "Supplier.Manage", "Purchase.View", "Purchase.Manage", "SupplierPayment.Manage", "Finance.Reports"],
+  "permissions": ["Supplier.View", "Supplier.Manage", "Purchase.View", "Purchase.Manage", "SupplierPayment.Manage", "PriceSuggestion.Manage", "Finance.Reports"],
   "entitlement": null,
-  "migrations": ["finance:0001"]
+  "migrations": ["finance:0001", "finance:0002"]
 }

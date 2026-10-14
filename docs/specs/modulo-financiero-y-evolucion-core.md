@@ -36,7 +36,8 @@ El core debe permitir vender aunque finance no esté instalado. En ese caso el c
 - Un precio manual distinto de los niveles publicados requerirá motivo, permiso y auditoría.
 - Al confirmar una venta se guardarán el nivel elegido y el precio efectivamente aplicado.
 - El margen bruto objetivo se interpreta como (precio menos costo) dividido entre precio. El precio sugerido para margen m es costo dividido entre (1 menos m).
-- Una compra podrá mostrar propuestas de actualización de Precio 1/2/3, pero nunca cambiará el catálogo sin confirmación explícita de un operador autorizado. Cada cambio confirmado genera historial.
+- Un administrador configura por separado el margen objetivo de Precio 1/2/3. Un nivel sin margen configurado no genera sugerencias.
+- Una compra podrá mostrar propuestas de actualización de Precio 1/2/3 a partir del costo promedio actual, pero nunca cambiará el catálogo sin confirmación explícita de un operador autorizado. El servicio verifica que costo y precio sigan iguales a los revisados; cada cambio confirmado genera historial y auditoría.
 
 ### 3.2 Impuestos
 
@@ -53,17 +54,20 @@ El core debe permitir vender aunque finance no esté instalado. En ese caso el c
 - Al vencer la tasa, el servidor bloquea operaciones que necesiten conversión hasta que exista una tasa vigente. Las operaciones que no necesiten conversión pueden continuar.
 - La tasa, moneda de origen y conversión aplicada quedan congeladas en ventas, facturas y pagos.
 - La deuda de una factura mantiene la moneda original de esa factura. Un abono en otra moneda registra el importe recibido, su tasa y su diferencia cambiaria sin reescribir el saldo original.
+- Los pagos en otra moneda usan la tasa vigente al registrar el pago. Se conserva importe recibido, moneda, principal aplicado en moneda de factura, tasa y diferencia cambiaria.
 
 ### 3.4 Costo e historia
 
 - La valoración de existencia usará costo promedio ponderado, sujeto a las definiciones técnicas pendientes de la sección 7.
+- El costo promedio se expresa en la moneda base del producto. Se conserva la moneda y la tasa de cada factura para explicar las conversiones.
+- El costo de inventario usa el precio neto de los artículos (incluyendo el descuento directo de su línea); el flete y los impuestos no se distribuyen al costo.
 - El costo aplicado se guarda en cada nueva línea de venta al confirmar. Después no se recalcula por cambios de costo.
 - Las ventas antiguas sin snapshot de costo se reportan como costo no disponible; no se completan con costo cero ni con una estimación presentada como real.
 - La moneda de la factura, la tasa utilizada y los cargos incluidos en el costo deben conservarse para explicar el cálculo.
 
 ### 3.5 Finanzas y reportes
 
-- La primera fase de finance cubre proveedores, facturas/recepciones, cuentas por pagar y pagos parciales.
+- La primera fase de finance cubre proveedores, facturas/recepciones, cuentas por pagar, pagos parciales y facturas de contado pagadas al contabilizar.
 - Tesorería y gastos operativos quedan para una fase posterior. Nómina no forma parte de la primera fase.
 - Métodos de pago y cuentas receptoras son conceptos separados. Por ejemplo, Zelle puede ser un método de pago vinculado a una cuenta USD.
 - El cierre de caja concilia importes; no crea automáticamente un segundo ingreso en tesorería. El traspaso a una cuenta requiere una acción explícita.
@@ -90,10 +94,10 @@ El core debe permitir vender aunque finance no esté instalado. En ese caso el c
 - **FIN-01:** Una factura de proveedor se registra como borrador antes de afectar inventario o saldos.
 - **FIN-02:** La contabilización de una factura y la recepción asociada son idempotentes. Un reintento no repite stock ni deuda.
 - **FIN-03:** Se rechaza una factura duplicada según una clave de negocio definida con proveedor y número de documento/control.
-- **FIN-04:** Una factura a crédito crea la obligación por el importe y moneda originales. Una factura pagada registra el pago relacionado.
+- **FIN-04:** Una factura a crédito crea la obligación por el importe y moneda originales. Una factura de contado se contabiliza junto con el pago completo en una operación atómica; si se paga en otra moneda, usa la tasa vigente y conserva conversión/diferencia. El reintento no duplica deuda ni pago.
 - **FIN-05:** La recepción actualiza existencias y costo promedio a través de servicios/contratos del servidor, coordinando la transacción con inventario.
 - **FIN-06:** El costo unitario incluye únicamente los componentes que el propietario defina como atribuibles al inventario. El cálculo muestra moneda, tasa, flete/descuentos y resultado antes de confirmar.
-- **FIN-07:** Los nuevos precios sugeridos se muestran para revisión. No se publican hasta una confirmación autorizada y su correspondiente historial.
+- **FIN-07:** Administración configura márgenes independientes para Precio 1/2/3. Solo se proponen precios para niveles configurados y productos recibidos con costo promedio; la fórmula es costo / (1 - margen). La propuesta requiere revisión y confirmación autorizada, y el servicio comprueba que costo/precio no hayan cambiado antes de guardar el nuevo precio con historial.
 - **FIN-08:** Una recepción, factura, pago o corrección mantiene actor, fecha, referencia y auditoría; la corrección genera reverso.
 
 ### Cuentas por pagar y tesorería — módulo finance
@@ -139,6 +143,8 @@ Las siguientes pruebas se escribirán primero y deberán fallar por el comportam
 | AC-16 | La interfaz traduce estados y tipos de documento para mostrarlos, pero conserva los códigos originales para las reglas de negocio. | Purchase_status_is_localized_only_for_display |
 | AC-17 | La búsqueda de una recepción previa cierra el lector antes de consultar factura o inventario; un reintento usa la misma clave idempotente y las mismas cantidades para no duplicar existencias. | Receipt_replay_lookup_closes_its_reader_before_the_next_database_command; Retrying_a_pending_receipt_reuses_the_original_idempotency_key_and_quantities |
 | AC-18 | El resumen identifica proveedor, documento, fechas, importe, pagos, saldo y estado; los totales por moneda coinciden con la suma de sus facturas abiertas. | Finance_summary_includes_invoice_obligations_as_well_as_currency_totals |
+| AC-19 | Dada una factura de contado, cuando se contabiliza, entonces el servicio registra la obligación y el pago completo juntos; una falla o reintento no deja una deuda impaga ni duplica el pago. Si se paga en otra moneda, usa la tasa vigente y conserva la conversión/diferencia. | Immediate_purchase_posting_is_atomic_idempotent_and_uses_current_rate |
+| AC-20 | Dado un artículo recibido y márgenes configurados, cuando se revisa su propuesta, entonces se muestra el cálculo para cada nivel configurado; los niveles vacíos no se sugieren y el catálogo solo cambia tras confirmación autorizada con snapshot vigente. | Price_suggestions_require_configured_margins_and_an_explicit_review_action |
 
 ## 6. Fuera de alcance inicial
 
@@ -149,20 +155,17 @@ Las siguientes pruebas se escribirán primero y deberán fallar por el comportam
 - Acceso directo desde el escritorio a tablas PostgreSQL.
 - Multitenancy SaaS o sincronización entre bases independientes.
 
-## 7. Definiciones técnicas pendientes antes de implementar
+## 7. Decisiones cerradas y definiciones técnicas por fase
 
-Estas preguntas no revierten las decisiones aceptadas; concretan cómo implementarlas con datos reales.
+Las decisiones de negocio siguientes ya están cerradas y guían la implementación:
 
-1. **Clasificación de productos existentes:** aprobado: los artículos existentes se migran como pendientes y no se pueden vender hasta que un administrador asigne su tratamiento fiscal. No aplicar una tasa global silenciosamente.
-2. **Taxonomía fiscal del producto:** cerrar si “sin impuesto” es un tratamiento distinto de “exento”. Mantener “gravado 0 %” separado de “exento”, según lo ya acordado.
-3. **Moneda del costo promedio:** propuesta para validar: mantener el costo promedio en la moneda base del producto y conservar además moneda/importe/tasa de cada factura.
-4. **Costo puesto en inventario:** definir distribución de flete, descuentos, impuestos recuperables/no recuperables, devoluciones y diferencias de unidades/presentaciones.
-5. **Ciclo de factura y recepción:** definir borrador, contabilizada, recepción parcial/total, devolución, anulación por reverso y regla exacta para identificar duplicados del proveedor.
-6. **Diferencia cambiaria:** definir la tasa que se usará al pagar parcialmente una factura y la fórmula de reconocimiento de la diferencia.
-7. **Almacenes:** declarar si finance requiere obligatoriamente warehouses o si una compra puede recibirse en el inventario básico. Fijar versiones mínimas de API y módulo.
-8. **Reportes:** cerrar moneda de presentación, zonas horarias, filtros, tratamiento de devoluciones y fecha de corte.
-9. **Precisión y redondeo:** fijar escalas monetarias, cantidad, tasa y orden de redondeo con casos de aceptación antes de migrar datos.
-10. **Permisos:** agregar a la matriz los permisos de compra, recepción, cambios de costo/precio sugerido, pagos de proveedor, tesorería y exportación financiera.
+1. **Impuestos por artículo:** cada producto tiene su propio tratamiento. Los existentes migran como pendientes y se bloquean al vender hasta que un administrador los clasifique. “Gravado 0 %” permanece separado de “exento”.
+2. **Costo promedio:** se guarda en la moneda base del producto; solo incorpora el precio neto de artículos y su descuento directo de línea. No se distribuyen flete ni impuestos. La moneda y tasa de la factura quedan guardadas.
+3. **Pagos:** una factura de contado debe pagarse completa junto con su contabilización. Los abonos a crédito pueden ser parciales; aceptar otra moneda usa la tasa vigente y guarda la conversión/diferencia sin cambiar la moneda del saldo original.
+4. **Precios sugeridos:** el administrador configura por separado los márgenes de Precio 1/2/3. Un margen vacío desactiva ese nivel. Ningún precio cambia sin confirmación autorizada e historial.
+5. **Tesorería y bóveda:** permanecen fuera de esta fase; se abordarán posteriormente con cuentas, conciliación y prevención de doble conteo.
+
+Los detalles de almacenes/versiones mínimas, devoluciones, formatos de reporte y casos adicionales de precisión se concretarán en sus respectivos hitos antes de ampliar esas funciones. No cambian las decisiones ya cerradas ni autorizan acceso directo desde WPF a PostgreSQL.
 
 ## 8. Fases propuestas
 

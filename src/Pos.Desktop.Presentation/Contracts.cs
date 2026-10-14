@@ -341,6 +341,9 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
     Task ChangePriceAsync(Guid productId, decimal newPrice, string reason, CancellationToken cancellationToken = default);
     Task ChangePriceAsync(Guid productId, string priceTier, decimal newPrice, string reason, CancellationToken cancellationToken = default)
         => ChangePriceAsync(productId, newPrice, reason, cancellationToken);
+    Task ApplySuggestedPriceAsync(Guid productId, string priceTier, decimal newPrice, decimal? expectedCurrentPrice,
+        decimal expectedUnitCost, string reason, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no permite aplicar una sugerencia de precio con verificación de costo.");
     Task<IReadOnlyList<ExchangeRateInfo>> GetExchangeRatesAsync(CancellationToken cancellationToken = default);
     Task SetExchangeRateAsync(string fromCurrency, string toCurrency, decimal rate, DateTime effectiveAtUtc, string source, CancellationToken cancellationToken = default);
     Task<SalesReportInfo> GetSalesReportAsync(DateTime fromUtc, DateTime toUtc, CancellationToken cancellationToken = default);

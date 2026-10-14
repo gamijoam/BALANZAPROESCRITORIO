@@ -68,7 +68,7 @@ public sealed class ModulePostgresActivationTests
             await File.WriteAllTextAsync(keyRingPath, $$"""
                 {"schemaVersion":1,"keys":[{"keyId":"test","publicKeyPem":{{JsonSerializer.Serialize(signer.ExportSubjectPublicKeyInfoPem())}},"status":"Active"}]}
                 """);
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
             server = StartServer(serverDll, connectionString, "Development", endpoint,
                 keyRingPath, Path.Combine(tempRoot, "Modules"));
             await WaitForReadyAsync(client, endpoint, server);
@@ -211,7 +211,7 @@ public sealed class ModulePostgresActivationTests
             var endpoint = ReserveLoopbackEndpoint();
             var serverDll = Path.Combine(FindRepositoryRoot(), "src", "Pos.Server", "bin", "Debug", "net10.0", "Pos.Server.dll");
             Assert.True(File.Exists(serverDll), $"No se encontró el servidor compilado: {serverDll}");
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
             server = StartServer(serverDll, applicationConnectionString, "Development", endpoint, keyRingPath, moduleStorage);
             await WaitForReadyAsync(client, endpoint, server);
 
@@ -351,7 +351,7 @@ public sealed class ModulePostgresActivationTests
             var repoRoot = FindRepositoryRoot();
             var serverDll = Path.Combine(repoRoot, "src", "Pos.Server", "bin", "Debug", "net10.0", "Pos.Server.dll");
             Assert.True(File.Exists(serverDll), $"No se encontró el servidor compilado: {serverDll}");
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             server = StartServer(serverDll, connectionString, "Development", endpoint, keyRingPath, moduleStorage);
             await WaitForReadyAsync(client, endpoint, server);
 

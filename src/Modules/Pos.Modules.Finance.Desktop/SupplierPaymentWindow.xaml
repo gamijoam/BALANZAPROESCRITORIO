@@ -1,0 +1,80 @@
+<Window x:Class="Pos.Modules.Finance.Desktop.SupplierPaymentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Registrar abono al proveedor" Width="720" Height="650" MinWidth="620" MinHeight="560"
+        ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="#EEF3F8" Language="es-VE">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="16,8"/><Setter Property="Margin" Value="4"/>
+            <Setter Property="MinHeight" Value="38"/><Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Height" Value="38"/><Setter Property="Padding" Value="9,5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="38"/><Setter Property="Padding" Value="8,5"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Margin="2,0,2,12">
+            <TextBlock x:Name="PaymentHeading" Text="REGISTRAR ABONO" FontSize="22" FontWeight="Bold" Foreground="#17395F"/>
+            <TextBlock x:Name="PaymentIntro" Text="Confirma la factura y completa los datos del pago." Foreground="#61758D" Margin="0,4,0,0"/>
+        </StackPanel>
+        <Border Grid.Row="1" Background="#E2ECF8" BorderBrush="#CAD9EB" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,14">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock x:Name="PaymentSupplierLabel" Text="Proveedor" FontSize="12" Foreground="#61758D"/>
+                    <TextBlock x:Name="PaymentSupplierValue" Text="—" FontSize="16" FontWeight="SemiBold" Foreground="#17395F" TextWrapping="Wrap" Margin="0,2,12,8"/>
+                    <TextBlock x:Name="PaymentDocumentLabel" Text="Factura" FontSize="12" Foreground="#61758D"/>
+                    <TextBlock x:Name="PaymentDocumentValue" Text="—" FontSize="14" Foreground="#17395F" TextWrapping="Wrap" Margin="0,2,12,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="175">
+                    <TextBlock x:Name="PaymentBalanceLabel" Text="Saldo pendiente" FontSize="12" Foreground="#61758D" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="PaymentBalanceValue" Text="—" FontSize="21" FontWeight="Bold" Foreground="#17395F" HorizontalAlignment="Right" Margin="0,3,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <GroupBox Grid.Row="2" Header="Datos del pago" Padding="14" Background="White">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.8*"/></Grid.ColumnDefinitions>
+                <StackPanel Grid.Row="0" Grid.Column="0" Margin="5,4,8,10">
+                    <TextBlock x:Name="PaymentAmountLabel" Text="Importe que vas a pagar" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                    <TextBox x:Name="PaymentAmountBox" MaxLength="32" ToolTip="Escribe el importe en la moneda seleccionada" AutomationProperties.Name="Importe que vas a pagar"/>
+                </StackPanel>
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,4,5,10">
+                    <TextBlock x:Name="PaymentCurrencyLabel" Text="Moneda del pago" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="PaymentCurrencyPicker" AutomationProperties.Name="Moneda del pago">
+                        <ComboBoxItem Content="USD"/><ComboBoxItem Content="VES"/>
+                    </ComboBox>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="5,2,5,10">
+                    <TextBlock x:Name="PaymentMethodLabel" Text="Medio de pago" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                    <TextBox x:Name="PaymentMethodBox" MaxLength="32" ToolTip="Ejemplos: transferencia, pago móvil o efectivo" AutomationProperties.Name="Medio de pago"/>
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="5,2,5,10">
+                    <TextBlock x:Name="PaymentReceivingAccountLabel" Text="Cuenta receptora" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                    <TextBox x:Name="PaymentReceivingAccountBox" MaxLength="100" ToolTip="Indica dónde queda este pago, por ejemplo banco y cuenta" AutomationProperties.Name="Cuenta receptora"/>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="5,2,5,10">
+                    <TextBlock x:Name="PaymentReferenceLabel" Text="Referencia (opcional)" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                    <TextBox x:Name="PaymentReferenceBox" MaxLength="100" ToolTip="Número de transferencia, recibo u otra referencia" AutomationProperties.Name="Referencia opcional"/>
+                </StackPanel>
+                <Border Grid.Row="4" Grid.ColumnSpan="2" Background="#F4F7FB" CornerRadius="4" Padding="10" Margin="5,2,5,8">
+                    <TextBlock x:Name="PaymentConversionHelp" Text="El servidor aplicará la tasa vigente al registrar el abono. Si pagas en otra moneda, la deuda se reducirá en la moneda de la factura; la tasa y la diferencia quedarán en el historial." TextWrapping="Wrap" Foreground="#425B77"/>
+                </Border>
+                <TextBlock x:Name="PaymentErrorLabel" Grid.Row="5" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="Firebrick" VerticalAlignment="Top" Margin="5,4,5,0" Visibility="Collapsed"/>
+            </Grid>
+        </GroupBox>
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="PaymentRetryHint" Grid.Column="0" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#61758D" Margin="3,0,8,0" Visibility="Collapsed"/>
+            <Button x:Name="CancelPaymentButton" Grid.Column="1" Content="Cancelar" IsCancel="True"/>
+            <Button x:Name="ConfirmPaymentButton" Grid.Column="2" Content="Registrar abono" IsDefault="True" Click="ConfirmPayment_Click" Background="#2E64B7" Foreground="White"/>
+        </Grid>
+    </Grid>
+</Window>

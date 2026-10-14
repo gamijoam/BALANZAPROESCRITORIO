@@ -5,6 +5,7 @@ using Pos.Infrastructure.Identity;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Sales;
 using Pos.Infrastructure.Inventory;
+using Pos.Infrastructure.Catalog;
 using Pos.Domain.Identity;
 using Pos.Domain.Inventory;
 using Pos.Domain.Finance;
@@ -49,6 +50,7 @@ builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<SalesService>();
 builder.Services.AddScoped<SaleReturnService>();
 builder.Services.AddScoped<IPosInventoryReceiptService, PosInventoryReceiptService>();
+builder.Services.AddScoped<IPosProductPricingReadService, PosProductPricingReadService>();
 builder.Services.AddSingleton<SupervisorAuthorizationStore>();
 var app = builder.Build();
 app.Use(async (context, next) =>
@@ -1093,24 +1095,15 @@ async Task ActivateInstalledModulesAsync()
             });
             foreach (var endpoint in item.Runtime.Endpoints)
             {
-                var permission = endpoint.RequiredPermission switch
-                {
-                    null => Permission.ManageModules,
-                    "Warehouse.View" => Permission.ViewWarehouses,
-                    "Warehouse.Manage" => Permission.ManageWarehouses,
-                    "Warehouse.Transfer" => Permission.TransferInventory,
-                    "Supplier.View" => Permission.ViewSuppliers,
-                    "Supplier.Manage" => Permission.ManageSuppliers,
-                    "Purchase.View" => Permission.ViewPurchases,
-                    "Purchase.Manage" => Permission.ManagePurchases,
-                    "SupplierPayment.Manage" => Permission.ManageSupplierPayments,
-                    "Finance.Reports" => Permission.ViewFinancialReports,
-                    "ThermalReceipts.Print" => Permission.ConfirmSale,
-                    "ThermalReceipts.Configure" => Permission.ManageModules,
-                    _ => throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' declara un permiso no compatible: '{endpoint.RequiredPermission}'.")
-                };
-                if (endpoint.RequiredPermission is not null && !item.Runtime.Package.Module.Permissions.Contains(endpoint.RequiredPermission, StringComparer.Ordinal))
-                    throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' usa un permiso que no declara en su manifiesto: '{endpoint.RequiredPermission}'.");
+                var requiredPermissions = endpoint.RequiredPermissions.Count == 0
+                    ? new[] { Permission.ManageModules }
+                    : endpoint.RequiredPermissions.Select(permissionName =>
+                    {
+                        if (!item.Runtime.Package.Module.Permissions.Contains(permissionName, StringComparer.Ordinal))
+                            throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' usa un permiso que no declara en su manifiesto: '{permissionName}'.");
+                        return ResolveModulePermission(permissionName)
+                            ?? throw new InvalidOperationException($"El endpoint del módulo '{moduleId}' declara un permiso no compatible: '{permissionName}'.");
+                    }).ToArray();
                 group.MapMethods(endpoint.Route, [endpoint.Method.ToUpperInvariant()], endpoint.Handler)
                     .AddEndpointFilter(async (filterContext, next) =>
                     {
@@ -1121,8 +1114,9 @@ async Task ActivateInstalledModulesAsync()
                         var access = await auth.FindValidSessionAsync(token, http.RequestAborted);
                         if (access is null) return Results.Unauthorized();
                         var approvals = http.RequestServices.GetRequiredService<SupervisorAuthorizationStore>();
-                        if (!await AuthorizePermissionAsync(http, auth, approvals, access, permission, http.RequestAborted))
-                            return PermissionFailure(http);
+                        foreach (var permission in requiredPermissions)
+                            if (!await AuthorizePermissionAsync(http, auth, approvals, access, permission, http.RequestAborted))
+                                return PermissionFailure(http);
                         http.Items["Pos.OperatorId"] = access.OperatorId;
                         http.Items["Pos.TerminalId"] = access.TerminalId;
                         return await next(filterContext);
@@ -1219,6 +1213,7 @@ static Permission? ResolveModulePermission(string permission) => permission swit
     "Purchase.View" => Permission.ViewPurchases,
     "Purchase.Manage" => Permission.ManagePurchases,
     "SupplierPayment.Manage" => Permission.ManageSupplierPayments,
+    "PriceSuggestion.Manage" => Permission.ChangePrice,
     "Finance.Reports" => Permission.ViewFinancialReports,
     "ThermalReceipts.Print" => Permission.ConfirmSale,
     "ThermalReceipts.Configure" => Permission.ManageModules,

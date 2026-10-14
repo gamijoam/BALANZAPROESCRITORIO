@@ -7,6 +7,7 @@ using Pos.Infrastructure.Sales;
 
 namespace Pos.Integration.Tests;
 
+[Collection(SharedPostgresCollection.Name)]
 public sealed class PostgresSchemaTests
 {
     [Fact]
@@ -111,7 +112,7 @@ public sealed class PostgresSchemaTests
         await using (var db = new PosDbContext(options))
         {
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
-            db.Products.Add(new ProductRecord { Id = productId, Sku = $"TEST-{productId:N}", Name = "Test item", UnitPrice = 10, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            db.Products.Add(new ProductRecord { Id = productId, Sku = $"TEST-{productId:N}", Name = "Test item", UnitPrice = 10, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2 });
             db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0, OpenedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
@@ -169,7 +170,7 @@ public sealed class PostgresSchemaTests
         await using (var db = new PosDbContext(options))
         {
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
-            db.Products.Add(new ProductRecord { Id = productId, Sku = $"RETURN-{productId:N}", Name = "Return item", UnitPrice = 10m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            db.Products.Add(new ProductRecord { Id = productId, Sku = $"RETURN-{productId:N}", Name = "Return item", UnitPrice = 10m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 3m });
             db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await db.SaveChangesAsync();
@@ -237,7 +238,7 @@ public sealed class PostgresSchemaTests
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
             var usdToVes = new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 875.65m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow };
             db.ExchangeRates.Add(usdToVes);
-            db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-{productId:N}", Name = "Credit item", UnitPrice = 875.65m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-{productId:N}", Name = "Credit item", UnitPrice = 875.65m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
             db.Customers.Add(new CustomerRecord { Id = customerId, Name = "Credit customer", Currency = "USD", CreditLimit = 0.99m, CreatedAtUtc = DateTime.UtcNow });
             db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
@@ -278,6 +279,7 @@ public sealed class PostgresSchemaTests
             await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await cleanup.Sales.Where(x => x.Id == saleId).ExecuteDeleteAsync();
             await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+            await cleanup.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
             await cleanup.Customers.Where(x => x.Id == customerId).ExecuteDeleteAsync();
@@ -299,7 +301,7 @@ public sealed class PostgresSchemaTests
                 operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
                 var rate = new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 875.65m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow };
                 db.ExchangeRates.Add(rate);
-                db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-USD-{productId:N}", Name = "Credit item USD tender", UnitPrice = 875.65m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+                db.Products.Add(new ProductRecord { Id = productId, Sku = $"CREDIT-USD-{productId:N}", Name = "Credit item USD tender", UnitPrice = 875.65m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
                 db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
                 db.Customers.Add(new CustomerRecord { Id = customerId, Name = "Credit customer USD tender", Currency = "USD", CreditLimit = 2m, CreatedAtUtc = DateTime.UtcNow });
                 db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
@@ -353,8 +355,8 @@ public sealed class PostgresSchemaTests
         {
             operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
             db.Products.AddRange(
-                new ProductRecord { Id = usdProductId, Sku = $"USD-{usdProductId:N}", Name = "USD item", UnitPrice = 2m, Currency = "USD", CreatedAtUtc = DateTime.UtcNow },
-                new ProductRecord { Id = vesProductId, Sku = $"VES-{vesProductId:N}", Name = "VES item", UnitPrice = 80m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+                new ProductRecord { Id = usdProductId, Sku = $"USD-{usdProductId:N}", Name = "USD item", UnitPrice = 2m, TaxTreatment = "Taxable0", Currency = "USD", CreatedAtUtc = DateTime.UtcNow },
+                new ProductRecord { Id = vesProductId, Sku = $"VES-{vesProductId:N}", Name = "VES item", UnitPrice = 80m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             db.Stocks.AddRange(new StockRecord { ProductId = usdProductId, Quantity = 2m }, new StockRecord { ProductId = vesProductId, Quantity = 2m });
             db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "USD", OpenedAtUtc = DateTime.UtcNow });
             db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "VES", ToCurrency = "USD", Rate = 0.025m, EffectiveAtUtc = DateTime.UtcNow.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = DateTime.UtcNow });
@@ -403,6 +405,7 @@ public sealed class PostgresSchemaTests
             await cleanup.Sales.Where(x => saleIds.Contains(x.Id)).ExecuteDeleteAsync();
             await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
             await cleanup.CashSessions.Where(x => x.Id == cashId || x.Id == cashVesId).ExecuteDeleteAsync();
+            await cleanup.StockMovements.Where(x => x.ProductId == usdProductId || x.ProductId == vesProductId).ExecuteDeleteAsync();
             await cleanup.Stocks.Where(x => x.ProductId == usdProductId || x.ProductId == vesProductId).ExecuteDeleteAsync();
             await cleanup.Products.Where(x => x.Id == usdProductId || x.Id == vesProductId).ExecuteDeleteAsync();
             await cleanup.AccessSessions.Where(x => x.OperatorId == operatorId).ExecuteDeleteAsync();
@@ -422,7 +425,7 @@ public sealed class PostgresSchemaTests
             await using (var db = new PosDbContext(options))
             {
                 operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
-                db.Products.Add(new ProductRecord { Id = productId, Sku = $"ROUND-{productId:N}", Name = "Producto de redondeo", UnitPrice = 1_000m, Currency = "VES", CreatedAtUtc = now });
+                db.Products.Add(new ProductRecord { Id = productId, Sku = $"ROUND-{productId:N}", Name = "Producto de redondeo", UnitPrice = 1_000m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = now });
                 db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1m });
                 db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalanceVes = 0m, OpeningBalanceUsd = 0m, OpenedAtUtc = now });
                 db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 36.50m, EffectiveAtUtc = now.AddSeconds(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = now });
@@ -468,6 +471,7 @@ public sealed class PostgresSchemaTests
             {
                 await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
                 await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+                await cleanup.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
                 await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
                 await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
                 await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
@@ -488,7 +492,7 @@ public sealed class PostgresSchemaTests
             await using (var db = new PosDbContext(options))
             {
                 operatorId = await new AuthenticationService(db).CreateOperatorAsync(username, "4826");
-                db.Products.Add(new ProductRecord { Id = productId, Sku = $"CASH-{productId:N}", Name = "Cash report item", UnitPrice = 100m, Currency = "VES", CreatedAtUtc = now });
+                db.Products.Add(new ProductRecord { Id = productId, Sku = $"CASH-{productId:N}", Name = "Cash report item", UnitPrice = 100m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = now });
                 db.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1m });
                 db.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpeningBalance = 0m, OpeningBalanceUsd = 0m, OpeningBalanceVes = 0m, OpenedAtUtc = now });
                 db.ExchangeRates.Add(new ExchangeRateRecord { Id = rateId, FromCurrency = "USD", ToCurrency = "VES", Rate = 100m, EffectiveAtUtc = now.AddMinutes(-1), Source = "integration-test", ActorId = operatorId, CreatedAtUtc = now });
@@ -526,6 +530,7 @@ public sealed class PostgresSchemaTests
                 }
                 await cleanup.ExchangeRates.Where(x => x.Id == rateId).ExecuteDeleteAsync();
                 await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
+                await cleanup.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
                 await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
                 await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
                 await cleanup.OperatorUsers.Where(x => x.Id == operatorId).ExecuteDeleteAsync();
@@ -545,7 +550,7 @@ public sealed class PostgresSchemaTests
         await using (var setup = new PosDbContext(options))
         {
             operatorId = await new AuthenticationService(setup).CreateOperatorAsync(username, "4826");
-            setup.Products.Add(new ProductRecord { Id = productId, Sku = $"RACE-{productId:N}", Name = "Last unit", UnitPrice = 7, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            setup.Products.Add(new ProductRecord { Id = productId, Sku = $"RACE-{productId:N}", Name = "Last unit", UnitPrice = 7, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             setup.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 1 });
             setup.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = operatorId, ActiveOperatorId = operatorId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await setup.SaveChangesAsync();
@@ -576,6 +581,7 @@ public sealed class PostgresSchemaTests
             await verify.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await verify.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await verify.Sales.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
+            await verify.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await verify.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await verify.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
             await verify.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();
@@ -598,7 +604,7 @@ public sealed class PostgresSchemaTests
             var auth = new AuthenticationService(setup);
             openerId = await auth.CreateOperatorAsync($"cash-owner-{Guid.NewGuid():N}", "4826");
             sellerId = await auth.CreateOperatorAsync($"cash-seller-{Guid.NewGuid():N}", "4826");
-            setup.Products.Add(new ProductRecord { Id = productId, Sku = $"SWITCH-{productId:N}", Name = "Cambio de operador", UnitPrice = 10m, Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
+            setup.Products.Add(new ProductRecord { Id = productId, Sku = $"SWITCH-{productId:N}", Name = "Cambio de operador", UnitPrice = 10m, TaxTreatment = "Taxable0", Currency = "VES", CreatedAtUtc = DateTime.UtcNow });
             setup.Stocks.Add(new StockRecord { ProductId = productId, Quantity = 2m });
             setup.CashSessions.Add(new CashSessionRecord { Id = cashId, OperatorId = openerId, ActiveOperatorId = openerId, TerminalId = terminalId, Currency = "VES", OpenedAtUtc = DateTime.UtcNow });
             await setup.SaveChangesAsync();
@@ -641,6 +647,7 @@ public sealed class PostgresSchemaTests
             await cleanup.IdempotencyRecords.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await cleanup.AuditEvents.Where(x => x.TerminalId == terminalId).ExecuteDeleteAsync();
             await cleanup.Sales.Where(x => saleIds.Contains(x.Id)).ExecuteDeleteAsync();
+            await cleanup.StockMovements.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await cleanup.Stocks.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
             await cleanup.Products.Where(x => x.Id == productId).ExecuteDeleteAsync();
             await cleanup.CashSessions.Where(x => x.Id == cashId).ExecuteDeleteAsync();

@@ -5,6 +5,7 @@ using Pos.Infrastructure.Receivables;
 
 namespace Pos.Integration.Tests;
 
+[Collection(SharedPostgresCollection.Name)]
 public sealed class ReceivableOpeningBalanceTests
 {
     [Fact]

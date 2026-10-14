@@ -25,4 +25,12 @@ public static class FinanceDisplayText
         "Immediate" => "Contado",
         _ => "Condición desconocida"
     };
+
+    public static string PriceTier(string? priceTier) => priceTier switch
+    {
+        "Price1" => "Precio 1",
+        "Price2" => "Precio 2",
+        "Price3" => "Precio 3",
+        _ => "Nivel desconocido"
+    };
 }

@@ -13,6 +13,7 @@ public partial class FinanceWindow : Window
     private const string ModuleId = "finance";
     private readonly PosDesktopModuleContext _context;
     private readonly ObservableCollection<PurchaseDraftLine> _draftLines = [];
+    private readonly Dictionary<Guid, SupplierPaymentRequest> _pendingPaymentRequests = [];
     private PurchaseSummaryClientInfo? _selectedPurchase;
     private PurchaseDetailClientInfo? _purchaseDetail;
     private Guid? _editingDraftId;
@@ -30,11 +31,13 @@ public partial class FinanceWindow : Window
         var canViewPurchases = context.GrantedPermissions.Contains("Purchase.View");
         var canManagePurchases = context.GrantedPermissions.Contains("Purchase.Manage");
         var canManagePayments = context.GrantedPermissions.Contains("SupplierPayment.Manage");
+        var canManagePriceSuggestions = context.GrantedPermissions.Contains("PriceSuggestion.Manage");
         var canViewFinance = context.GrantedPermissions.Contains("Finance.Reports");
 
         SuppliersTab.Visibility = canViewSuppliers ? Visibility.Visible : Visibility.Collapsed;
         PurchasesTab.Visibility = canViewPurchases ? Visibility.Visible : Visibility.Collapsed;
         SummaryTab.Visibility = canViewFinance ? Visibility.Visible : Visibility.Collapsed;
+        MarginSettingsTab.Visibility = canManagePriceSuggestions ? Visibility.Visible : Visibility.Collapsed;
         CreateSupplierButton.Visibility = canManageSuppliers ? Visibility.Visible : Visibility.Collapsed;
         ToggleSupplierButton.Visibility = canManageSuppliers ? Visibility.Visible : Visibility.Collapsed;
         DraftEditor.Visibility = canManagePurchases ? Visibility.Visible : Visibility.Collapsed;
@@ -44,9 +47,13 @@ public partial class FinanceWindow : Window
         ReceiveSelectedPurchaseButton.Visibility = canManagePurchases ? Visibility.Visible : Visibility.Collapsed;
         ReverseReceiptButton.Visibility = canManagePurchases ? Visibility.Visible : Visibility.Collapsed;
         ReversePurchaseButton.Visibility = canManagePurchases ? Visibility.Visible : Visibility.Collapsed;
+        ViewPriceSuggestionsButton.Visibility = canManagePriceSuggestions ? Visibility.Visible : Visibility.Collapsed;
         PaySelectedPurchaseButton.Visibility = canManagePayments ? Visibility.Visible : Visibility.Collapsed;
         ReversePaymentButton.Visibility = canManagePayments ? Visibility.Visible : Visibility.Collapsed;
         DraftEditor.IsEnabled = false;
+        DraftEditor.Visibility = Visibility.Collapsed;
+        InvoiceWorkspace.Visibility = Visibility.Visible;
+        DraftLinesEmptyLabel.Visibility = Visibility.Visible;
         DraftIssueDatePicker.SelectedDate = DateTime.Today;
         UpdateActionButtons();
         if (openSummary && canViewFinance) FinanceTabs.SelectedItem = SummaryTab;
@@ -61,6 +68,7 @@ public partial class FinanceWindow : Window
         if (_context.GrantedPermissions.Contains("Supplier.View")) await LoadSuppliersAsync();
         if (_context.GrantedPermissions.Contains("Purchase.View")) await LoadPurchasesAsync();
         if (_context.GrantedPermissions.Contains("Finance.Reports")) await LoadSummaryAsync();
+        if (_context.GrantedPermissions.Contains("PriceSuggestion.Manage")) await LoadPriceSuggestionMarginsAsync();
     }
 
     private async void CreateSupplier_Click(object sender, RoutedEventArgs e)
@@ -111,9 +119,47 @@ public partial class FinanceWindow : Window
     private async void RefreshPurchases_Click(object sender, RoutedEventArgs e) => await LoadPurchasesAsync();
     private async void RefreshSummary_Click(object sender, RoutedEventArgs e) => await LoadSummaryAsync();
 
+    private async void SavePriceMargins_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryMarginPercent(Price1MarginBox.Text, out var price1) || !TryMarginPercent(Price2MarginBox.Text, out var price2) ||
+            !TryMarginPercent(Price3MarginBox.Text, out var price3))
+        { SetStatus("Escribe porcentajes entre 0 y menos de 100, con hasta dos decimales. Deja vacío el nivel que no tendrá sugerencia.", true); return; }
+        try
+        {
+            SavePriceMarginsButton.IsEnabled = false;
+            await _context.ApiClient.PutModuleAsync(ModuleId, "price-suggestions/margins",
+                new PriceSuggestionMarginRequest(price1, price2, price3));
+            await LoadPriceSuggestionMarginsAsync();
+            SetStatus("Márgenes guardados. Las sugerencias aparecerán para artículos recibidos que tengan costo promedio.");
+        }
+        catch (Exception exception) { SetStatus(UserMessage(exception), true); }
+        finally { SavePriceMarginsButton.IsEnabled = true; }
+    }
+
+    private async Task LoadPriceSuggestionMarginsAsync()
+    {
+        try
+        {
+            var margins = await _context.ApiClient.GetModuleAsync<PriceSuggestionMarginSettings>(ModuleId, "price-suggestions/margins");
+            if (margins is null) return;
+            Price1MarginBox.Text = FormatMarginPercent(margins.Price1MarginPercent);
+            Price2MarginBox.Text = FormatMarginPercent(margins.Price2MarginPercent);
+            Price3MarginBox.Text = FormatMarginPercent(margins.Price3MarginPercent);
+        }
+        catch (Exception exception) { SetStatus(UserMessage(exception), true); }
+    }
+
+    private async void PriceSuggestions_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPurchase is null || _context.ReportApiClient is null) return;
+        var dialog = new PriceSuggestionWindow(_context, _selectedPurchase.Id, _selectedPurchase.DocumentLabel) { Owner = this };
+        dialog.ShowDialog();
+    }
+
     private void NewDraft_Click(object sender, RoutedEventArgs e)
     {
         _editingDraftId = null;
+        DraftHeading.Text = "Nueva factura";
         DraftSupplierPicker.SelectedItem = null;
         DraftDocumentTypePicker.SelectedIndex = 0;
         DraftDocumentNumberBox.Clear(); DraftControlNumberBox.Clear();
@@ -123,16 +169,20 @@ public partial class FinanceWindow : Window
         DraftProductPicker.ItemsSource = null; DraftProductPicker.Text = string.Empty;
         DraftQuantityBox.Text = "1"; DraftUnitPriceBox.Clear(); DraftDiscountBox.Text = "0";
         DraftTaxBox.Text = "0"; DraftTaxRecoverableCheck.IsChecked = true;
-        _draftLines.Clear(); UpdateDraftTotal();
+        _draftLines.Clear(); DraftLinesGrid.SelectedItem = null;
+        SetDraftLineStatus("Todavía no hay artículos. Agrégalos arriba para poder guardar la factura.");
+        UpdateDraftTotal();
         DraftEditor.IsEnabled = true;
+        ShowDraftEditor();
         DraftDocumentNumberBox.Focus();
-        SetStatus("Completa la factura, agrega artículos y guarda el borrador. Aún no afecta inventario ni saldo.");
+        SetStatus("Completa los tres pasos del formulario y guarda el borrador. Aún no afecta inventario ni saldo.");
     }
 
     private async void EditDraft_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedPurchase is not { Status: "Draft" } purchase || _purchaseDetail is null) return;
         _editingDraftId = purchase.Id;
+        DraftHeading.Text = $"Editar borrador · {purchase.DocumentNumber}";
         var header = _purchaseDetail.Header;
         DraftSupplierPicker.SelectedValuePath = nameof(SupplierClientInfo.Id);
         DraftSupplierPicker.SelectedValue = header.SupplierId;
@@ -148,7 +198,9 @@ public partial class FinanceWindow : Window
         _draftLines.Clear();
         foreach (var line in _purchaseDetail.Lines)
             _draftLines.Add(new(line.ProductId, line.Sku, line.Name, line.Quantity, line.UnitPrice, line.Discount, line.Tax, line.TaxRecoverable));
-        UpdateDraftTotal(); DraftEditor.IsEnabled = true;
+        DraftLinesGrid.SelectedItem = null;
+        SetDraftLineStatus($"{_draftLines.Count} artículo(s) en el borrador. Selecciona una línea para quitarla si necesitas corregirla.");
+        UpdateDraftTotal(); DraftEditor.IsEnabled = true; ShowDraftEditor();
         SetStatus("Edita el borrador y guárdalo. Una factura contabilizada no se puede editar.");
         await Task.CompletedTask;
     }
@@ -156,40 +208,70 @@ public partial class FinanceWindow : Window
     private async void SearchProducts_Click(object sender, RoutedEventArgs e)
     {
         var query = DraftProductPicker.Text.Trim();
-        if (query.Length < 2) { SetStatus("Escribe al menos dos letras o el código del artículo para buscar.", true); return; }
+        if (query.Length < 2) { SetDraftLineStatus("Escribe al menos dos letras o un código y pulsa Buscar.", true); SetStatus(DraftLineStatus.Text, true); return; }
         try
         {
             SearchProductsButton.IsEnabled = false;
             var products = await _context.SearchProductsAsync(query, CancellationToken.None);
             DraftProductPicker.ItemsSource = products;
             DraftProductPicker.DisplayMemberPath = nameof(ProductInfo.Name);
-            if (products.Count == 0) SetStatus("No se encontraron artículos activos para esa búsqueda.");
-            else { DraftProductPicker.IsDropDownOpen = true; SetStatus($"Se encontraron {products.Count} artículos. Selecciona uno."); }
+            if (products.Count == 0) { SetDraftLineStatus("No se encontraron artículos activos para esa búsqueda.", true); SetStatus(DraftLineStatus.Text, true); }
+            else { DraftProductPicker.IsDropDownOpen = true; SetDraftLineStatus($"Se encontraron {products.Count} artículos. Selecciona el que aparece en la factura."); SetStatus(DraftLineStatus.Text); }
         }
-        catch (Exception exception) { SetStatus(UserMessage(exception), true); }
+        catch (Exception exception) { SetDraftLineStatus(UserMessage(exception), true); SetStatus(UserMessage(exception), true); }
         finally { SearchProductsButton.IsEnabled = true; }
     }
 
     private void AddDraftLine_Click(object sender, RoutedEventArgs e)
     {
         if (DraftProductPicker.SelectedItem is not ProductInfo product)
-        { SetStatus("Busca y selecciona un artículo antes de agregar la línea.", true); return; }
+        { SetDraftLineStatus("Primero busca y selecciona un artículo de la factura.", true); SetStatus(DraftLineStatus.Text, true); return; }
         if (!TryDecimal(DraftQuantityBox.Text, out var quantity) || quantity <= 0m ||
             !TryDecimal(DraftUnitPriceBox.Text, out var unitPrice) || unitPrice < 0m ||
             !TryDecimal(DraftDiscountBox.Text, out var discount) || discount < 0m ||
             !TryDecimal(DraftTaxBox.Text, out var tax) || tax < 0m)
-        { SetStatus("Revisa cantidad, precio, descuento e impuesto. Usa valores numéricos válidos.", true); return; }
+        { SetDraftLineStatus("Revisa cantidad, precio, descuento e impuesto; deben ser números válidos.", true); SetStatus(DraftLineStatus.Text, true); return; }
         if (_draftLines.Any(line => line.ProductId == product.Id))
-        { SetStatus("Ese artículo ya está en la factura. Modifica su línea antes de agregarlo otra vez.", true); return; }
+        { SetDraftLineStatus("Ese artículo ya está en la factura. Selecciona y quita su línea para volver a agregarlo con otros datos.", true); SetStatus(DraftLineStatus.Text, true); return; }
         if (discount > quantity * unitPrice)
-        { SetStatus("El descuento no puede superar el importe de los artículos de la línea.", true); return; }
+        { SetDraftLineStatus("El descuento no puede superar el importe de los artículos de esta línea.", true); SetStatus(DraftLineStatus.Text, true); return; }
         _draftLines.Add(new(product.Id, product.Sku, product.Name, quantity, unitPrice, discount, tax,
             DraftTaxRecoverableCheck.IsChecked == true));
         DraftProductPicker.SelectedItem = null; DraftProductPicker.Text = string.Empty;
         DraftQuantityBox.Text = "1"; DraftUnitPriceBox.Clear(); DraftDiscountBox.Text = "0"; DraftTaxBox.Text = "0";
         DraftTaxRecoverableCheck.IsChecked = true;
+        DraftLinesGrid.SelectedItem = null;
         UpdateDraftTotal();
-        SetStatus("Artículo agregado al borrador.");
+        SetDraftLineStatus($"Artículo agregado. La factura ahora tiene {_draftLines.Count} línea(s). Revisa el total y guarda el borrador.");
+        SetStatus(DraftLineStatus.Text);
+    }
+
+    private void DraftLinesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        RemoveDraftLineButton.IsEnabled = DraftLinesGrid.SelectedItem is PurchaseDraftLine;
+
+    private void RemoveDraftLine_Click(object sender, RoutedEventArgs e)
+    {
+        if (DraftLinesGrid.SelectedItem is not PurchaseDraftLine selected) return;
+        _draftLines.Remove(selected);
+        DraftLinesGrid.SelectedItem = null;
+        UpdateDraftTotal();
+        SetDraftLineStatus(_draftLines.Count == 0
+            ? "Se quitó la línea. Agrega al menos un artículo antes de guardar el borrador."
+            : $"Línea quitada. La factura tiene {_draftLines.Count} línea(s); puedes volver a agregar el artículo corregido.");
+    }
+
+    private void CancelDraft_Click(object sender, RoutedEventArgs e)
+    {
+        var wasEditing = _editingDraftId.HasValue;
+        _editingDraftId = null;
+        _draftLines.Clear();
+        UpdateDraftTotal();
+        DraftEditor.IsEnabled = false;
+        DraftEditor.Visibility = Visibility.Collapsed;
+        InvoiceWorkspace.Visibility = Visibility.Visible;
+        SetStatus(wasEditing
+            ? "Se descartaron los cambios sin guardar. El borrador original permanece intacto."
+            : "Se descartó la factura sin guardar. No se modificó el inventario ni la cuenta por pagar.");
     }
 
     private async void SaveDraft_Click(object sender, RoutedEventArgs e)
@@ -198,12 +280,17 @@ public partial class FinanceWindow : Window
         try
         {
             SaveDraftButton.IsEnabled = false;
+            var savedPurchaseId = _editingDraftId;
             if (_editingDraftId is Guid id)
                 await _context.ApiClient.PutModuleAsync(ModuleId, $"purchases/{id:D}", request);
             else
-                await _context.ApiClient.PostModuleAsync<PurchaseDraftRequest, PurchaseOperationResult>(ModuleId, "purchases", request);
-            DraftEditor.IsEnabled = false; _editingDraftId = null;
-            await LoadPurchasesAsync();
+            {
+                var created = await _context.ApiClient.PostModuleAsync<PurchaseDraftRequest, PurchaseOperationResult>(ModuleId, "purchases", request);
+                savedPurchaseId = created?.Id;
+            }
+            DraftEditor.IsEnabled = false; DraftEditor.Visibility = Visibility.Collapsed;
+            InvoiceWorkspace.Visibility = Visibility.Visible; _editingDraftId = null;
+            await LoadPurchasesAsync(savedPurchaseId, request);
             SetStatus("Borrador guardado. Todavía no se han modificado inventario ni cuentas por pagar.");
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
@@ -213,6 +300,32 @@ public partial class FinanceWindow : Window
     private async void PostPurchase_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedPurchase is not { Status: "Draft" } purchase) return;
+        if (purchase.PaymentTerm == "Immediate")
+        {
+            if (!_context.GrantedPermissions.Contains("SupplierPayment.Manage"))
+            { SetStatus("Para contabilizar una compra de contado necesitas permiso de compras y de pagos a proveedores.", true); return; }
+            _pendingPaymentRequests.TryGetValue(purchase.Id, out var pending);
+            var dialog = new SupplierPaymentWindow(this, purchase.SupplierName, purchase.DocumentLabel,
+                purchase.Currency, purchase.Total, pending, isImmediateSettlement: true);
+            if (dialog.ShowDialog() != true) return;
+            var payment = FinancePaymentRetryPolicy.CreateOrReuse(purchase.Id, purchase.Id, pending,
+                dialog.Amount, dialog.Currency, dialog.Method, dialog.ReceivingAccount, dialog.Reference);
+            _pendingPaymentRequests[purchase.Id] = payment;
+            try
+            {
+                await _context.ApiClient.PostModuleAsync<ImmediatePurchasePostingRequest, PurchaseOperationResult>(ModuleId,
+                    $"purchases/{purchase.Id:D}/post-and-pay", new(payment));
+                _pendingPaymentRequests.Remove(purchase.Id);
+                await LoadPurchasesAsync();
+                SetStatus("Factura contabilizada y pagada de contado en una sola operación. El inventario espera la recepción.");
+            }
+            catch (Exception exception)
+            {
+                await LoadPurchasesAsync();
+                SetStatus($"{UserMessage(exception)} Si no sabes si se registró, vuelve a intentar con los mismos datos; el POS conservará la misma clave.", true);
+            }
+            return;
+        }
         if (MessageBox.Show(this, "Al contabilizar se registra la cuenta por pagar. El inventario cambia cuando registres la recepción.",
             "Contabilizar factura", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
@@ -264,25 +377,27 @@ public partial class FinanceWindow : Window
     private async void PayPurchase_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedPurchase is not { Status: "Posted" or "Partial" or "Paid" } purchase || purchase.Balance <= 0m) return;
-        var values = TextEntryWindow.Show(this, "Registrar abono al proveedor", [
-            new("Importe", "monto", string.Empty), new("Moneda (USD o VES)", "moneda", purchase.Currency),
-            new("Medio de pago", "medio", "Transferencia"), new("Cuenta receptora", "cuenta", string.Empty),
-            new("Referencia", "referencia", string.Empty)
-        ]);
-        if (values is null) return;
-        if (!TryDecimal(values["monto"], out var amount) || amount <= 0m)
-        { SetStatus("El importe del abono debe ser mayor que cero.", true); return; }
-        var currency = values["moneda"].Trim().ToUpperInvariant();
-        if (currency is not ("USD" or "VES")) { SetStatus("La moneda del pago debe ser USD o VES.", true); return; }
+        _pendingPaymentRequests.TryGetValue(purchase.Id, out var pending);
+        var dialog = new SupplierPaymentWindow(this, purchase.SupplierName, purchase.DocumentLabel,
+            purchase.Currency, purchase.Balance, pending);
+        if (dialog.ShowDialog() != true) return;
+
+        var request = FinancePaymentRetryPolicy.CreateOrReuse(purchase.Id, purchase.Id, pending,
+            dialog.Amount, dialog.Currency, dialog.Method, dialog.ReceivingAccount, dialog.Reference);
+        _pendingPaymentRequests[purchase.Id] = request;
         try
         {
-            var request = new SupplierPaymentRequest(amount, currency, values["medio"].Trim(), values["cuenta"].Trim(),
-                NullIfEmpty(values["referencia"]), Guid.NewGuid().ToString("N"));
             await _context.ApiClient.PostModuleAsync<SupplierPaymentRequest, PurchaseOperationResult>(ModuleId,
                 $"purchases/{purchase.Id:D}/payments", request);
-            await LoadPurchasesAsync(); SetStatus("Abono registrado. La obligación conserva la moneda original y queda guardada la conversión.");
+            _pendingPaymentRequests.Remove(purchase.Id);
+            await LoadPurchasesAsync(); SetStatus("Abono registrado. La deuda conserva su moneda; la conversión quedó guardada en el historial.");
         }
-        catch (Exception exception) { SetStatus(UserMessage(exception), true); }
+        catch (Exception exception)
+        {
+            var message = UserMessage(exception);
+            await LoadPurchasesAsync();
+            SetStatus($"{message} Si no sabes si se registró, vuelve a abrir el mismo abono con los mismos datos para consultar el resultado sin duplicarlo.", true);
+        }
     }
 
     private async void ReverseReceipt_Click(object sender, RoutedEventArgs e)
@@ -333,6 +448,21 @@ public partial class FinanceWindow : Window
         await LoadPurchaseSelectionAsync();
     }
 
+    private void PaymentSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateActionButtons();
+        if (PaymentsGrid.SelectedItem is not SupplierPaymentClientInfo payment)
+        {
+            PaymentDetailLabel.Text = "Selecciona un abono para ver cuenta, referencia, tasa aplicada y diferencia cambiaria.";
+            return;
+        }
+
+        var reference = string.IsNullOrWhiteSpace(payment.Reference) ? "Sin referencia" : $"Referencia: {payment.Reference}";
+        var fxDifference = payment.FxDifference.HasValue ? $"USD {payment.FxDifference.Value:N4}" : "No disponible";
+        var state = payment.ReversedAtUtc.HasValue ? $"Reversado el {payment.ReversedAtUtc.Value.ToLocalTime():g}" : "Vigente";
+        PaymentDetailLabel.Text = $"Cuenta receptora: {payment.ReceivingAccount} · {reference} · Tasa aplicada: {payment.AppliedExchangeRate:N4} · Diferencia cambiaria: {fxDifference} · {state}";
+    }
+
     private async Task LoadSuppliersAsync()
     {
         try
@@ -347,7 +477,7 @@ public partial class FinanceWindow : Window
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
     }
 
-    private async Task LoadPurchasesAsync()
+    private async Task LoadPurchasesAsync(Guid? preferredSelectionId = null, PurchaseDraftRequest? preferredDraft = null)
     {
         try
         {
@@ -355,7 +485,7 @@ public partial class FinanceWindow : Window
             var selectedId = _selectedPurchase?.Id;
             var purchases = await _context.ApiClient.GetModuleAsync<List<PurchaseSummaryClientInfo>>(ModuleId, "purchases") ?? [];
             PurchaseGrid.ItemsSource = purchases;
-            _selectedPurchase = selectedId.HasValue ? purchases.FirstOrDefault(item => item.Id == selectedId.Value) : null;
+            _selectedPurchase = FinancePurchaseSelectionPolicy.Select(purchases, preferredSelectionId, selectedId, preferredDraft);
             PurchaseGrid.SelectedItem = _selectedPurchase;
             _loadingSelection = false;
             await LoadPurchaseSelectionAsync();
@@ -372,7 +502,9 @@ public partial class FinanceWindow : Window
         {
             _purchaseDetail = null; PurchaseDetailsGrid.ItemsSource = null; PaymentsGrid.ItemsSource = null; ReceiptsGrid.ItemsSource = null;
             PurchaseSummaryLabel.Text = "Selecciona una factura para ver su detalle y operaciones.";
-            PaymentHistoryLabel.Text = string.Empty; return;
+            PaymentHistoryLabel.Text = string.Empty;
+            PaymentDetailLabel.Text = "Selecciona una factura y luego un abono para consultar su trazabilidad.";
+            return;
         }
         try
         {
@@ -382,9 +514,11 @@ public partial class FinanceWindow : Window
             PurchaseSummaryLabel.Text = $"Proveedor: {purchase.SupplierName} · {FinanceDisplayText.DocumentType(purchase.DocumentType)} {purchase.DocumentNumber} · Emitida {purchase.IssueDate:dd/MM/yyyy} · vence {due} · Total {purchase.Currency} {purchase.Total:N2} · Pagado {purchase.Currency} {purchase.PaidAmount:N2} · Saldo {purchase.Currency} {purchase.Balance:N2} · Estado: {purchase.StatusLabel}";
             var payments = await _context.ApiClient.GetModuleAsync<List<SupplierPaymentClientInfo>>(ModuleId, $"purchases/{purchase.Id:D}/payments") ?? [];
             PaymentsGrid.ItemsSource = payments;
+            PaymentsGrid.SelectedItem = null;
             var receipts = await _context.ApiClient.GetModuleAsync<List<PurchaseReceiptClientInfo>>(ModuleId, $"purchases/{purchase.Id:D}/receipts") ?? [];
             ReceiptsGrid.ItemsSource = receipts;
-            PaymentHistoryLabel.Text = $"Abonos registrados: {payments.Count}; recepciones: {receipts.Count}.";
+            PaymentHistoryLabel.Text = $"Abonos registrados: {payments.Count}. Selecciona uno para ver sus datos completos. · Recepciones: {receipts.Count}.";
+            PaymentDetailLabel.Text = "Selecciona un abono para ver cuenta, referencia, tasa aplicada y diferencia cambiaria.";
             UpdateActionButtons();
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
@@ -409,7 +543,8 @@ public partial class FinanceWindow : Window
         var managePurchases = _context.GrantedPermissions.Contains("Purchase.Manage");
         var managePayments = _context.GrantedPermissions.Contains("SupplierPayment.Manage");
         EditDraftButton.IsEnabled = managePurchases && _selectedPurchase?.Status == "Draft" && _purchaseDetail is not null;
-        PostSelectedPurchaseButton.IsEnabled = managePurchases && _selectedPurchase?.Status == "Draft";
+        PostSelectedPurchaseButton.IsEnabled = managePurchases && _selectedPurchase?.Status == "Draft" &&
+            (_selectedPurchase.PaymentTerm != "Immediate" || managePayments);
         var canReceive = _selectedPurchase is { Status: "Posted" or "Partial" or "Paid" } &&
             _purchaseDetail?.Lines.Any(line => line.Quantity > line.ReceivedQuantity) == true;
         ReceiveSelectedPurchaseButton.IsEnabled = managePurchases && canReceive;
@@ -417,6 +552,9 @@ public partial class FinanceWindow : Window
         ReversePurchaseButton.IsEnabled = managePurchases && _selectedPurchase is not null && _selectedPurchase.Status != "Reversed";
         ReverseReceiptButton.IsEnabled = managePurchases && ReceiptsGrid.SelectedItem is PurchaseReceiptClientInfo { Header: { CompletedAtUtc: not null, ReversedAtUtc: null } };
         ReversePaymentButton.IsEnabled = managePayments && PaymentsGrid.SelectedItem is SupplierPaymentClientInfo { ReversedAtUtc: null };
+        ViewPriceSuggestionsButton.IsEnabled = _context.GrantedPermissions.Contains("PriceSuggestion.Manage") &&
+            _selectedPurchase is not null && ReceiptsGrid.Items.Cast<object>().OfType<PurchaseReceiptClientInfo>()
+                .Any(receipt => receipt.Header.CompletedAtUtc.HasValue && !receipt.Header.ReversedAtUtc.HasValue);
         ToggleSupplierButton.IsEnabled = SupplierGrid.SelectedItem is SupplierClientInfo;
     }
 
@@ -425,6 +563,8 @@ public partial class FinanceWindow : Window
         request = default!; message = "";
         if (DraftSupplierPicker.SelectedItem is not SupplierClientInfo supplier)
         { message = "Selecciona un proveedor activo."; return false; }
+        if (!FinanceDraftValidation.HasDocumentNumber(DraftDocumentNumberBox.Text))
+        { message = "Indica el número que aparece en la factura del proveedor."; return false; }
         if (DraftLinesGrid.Items.Count == 0)
         { message = "Agrega al menos un artículo a la factura."; return false; }
         if (!TryDecimal(DraftExchangeRateBox.Text, out var rate) || rate <= 0m || !TryDecimal(DraftFreightBox.Text, out var freight) || freight < 0m)
@@ -445,11 +585,25 @@ public partial class FinanceWindow : Window
 
     private void UpdateDraftTotal()
     {
+        DraftLinesEmptyLabel.Visibility = _draftLines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RemoveDraftLineButton.IsEnabled = DraftLinesGrid.SelectedItem is PurchaseDraftLine;
         var subtotal = _draftLines.Sum(line => line.Quantity * line.UnitPrice);
         var discount = _draftLines.Sum(line => line.Discount);
         var tax = _draftLines.Sum(line => line.Tax);
         var freight = TryDecimal(DraftFreightBox.Text, out var parsedFreight) ? parsedFreight : 0m;
-        DraftTotalLabel.Text = $"Total: {DraftCurrency()} {decimal.Round(subtotal - discount + tax + freight, 2, MidpointRounding.AwayFromZero):N2}";
+        DraftTotalLabel.Text = $"Total de la factura: {DraftCurrency()} {decimal.Round(subtotal - discount + tax + freight, 2, MidpointRounding.AwayFromZero):N2}";
+    }
+
+    private void ShowDraftEditor()
+    {
+        InvoiceWorkspace.Visibility = Visibility.Collapsed;
+        DraftEditor.Visibility = Visibility.Visible;
+    }
+
+    private void SetDraftLineStatus(string message, bool isError = false)
+    {
+        DraftLineStatus.Text = message;
+        DraftLineStatus.Foreground = isError ? System.Windows.Media.Brushes.Firebrick : System.Windows.Media.Brushes.SlateGray;
     }
 
     private void SetStatus(string message, bool isError = false)
@@ -466,10 +620,36 @@ public partial class FinanceWindow : Window
             decimal.TryParse(text, styles, CultureInfo.InvariantCulture, out amount);
     }
 
+    private static bool TryMarginPercent(string? text, out decimal? percent)
+        => FinanceMarginInputPolicy.TryParsePercent(text, out percent);
+
+    private static string FormatMarginPercent(decimal? percent) => percent?.ToString("0.##", CultureInfo.CurrentCulture) ?? string.Empty;
+
     private string DraftCurrency() => (DraftCurrencyPicker.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "USD";
     private static string? SelectedTag(ComboBox combo) => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString();
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static string UserMessage(Exception exception) => PosUserMessage.ForException(exception);
+    private static string UserMessage(Exception exception)
+    {
+        if (exception is PosApiException apiException)
+            return apiException.Code switch
+            {
+                "payment_exceeds_supplier_balance" => "El abono, convertido a la moneda de la factura, supera el saldo pendiente. Reduce el importe o revisa la moneda.",
+                "immediate_payment_must_equal_invoice_total" => "El pago de contado debe equivaler al total completo de la factura usando la tasa vigente. Revisa importe y moneda.",
+                "immediate_purchase_requires_payment" => "Esta factura está marcada de contado. Para evitar dejar una deuda, contabilízala junto con el pago.",
+                "immediate_purchase_required" => "Esta factura está marcada a crédito y no puede contabilizarse mediante el flujo de contado.",
+                "stale_price_suggestion" => "El costo o el precio del artículo cambió desde que se calculó la propuesta. Actualiza las sugerencias y revísala de nuevo.",
+                "supplier_payment_idempotency_conflict" => "El servidor detectó que se reutilizó un intento de pago con datos distintos. Revisa el abono antes de volver a registrarlo.",
+                "posted_purchase_required" => "Primero contabiliza la factura. Después podrás registrar un abono o una recepción.",
+                "exchange_rate_unavailable" => "No hay una tasa vigente para convertir este pago. Actualiza la tasa e inténtalo otra vez.",
+                "purchase_warehouse_not_available" => "No hay un almacén disponible para recibir la compra. Revisa la configuración de Almacenes.",
+                "purchase_receipt_exceeds_unreceived_quantity" => "La cantidad indicada supera lo que todavía falta por recibir. Actualiza la factura e inténtalo de nuevo.",
+                "purchase_product_unavailable" => "Uno de los artículos de la factura ya no está disponible. Revisa sus datos antes de continuar.",
+                "purchase_cost_currency_mismatch" => "La moneda del costo no coincide con la moneda configurada para el artículo.",
+                "purchase_product_stock_missing" => "No existe un registro de inventario para uno de los artículos. Revisa el catálogo antes de recibir.",
+                _ => PosUserMessage.ForException(exception)
+            };
+        return PosUserMessage.ForException(exception);
+    }
 
     public sealed record SupplierRequest(string Code, string LegalName, string? TaxId, string? Phone, string? Email, string? Address);
     public sealed record SetSupplierActiveRequest(bool Active);
@@ -480,6 +660,9 @@ public partial class FinanceWindow : Window
     public sealed record PurchaseReceiptLineRequest(Guid InvoiceLineId, decimal Quantity);
     public sealed record PurchaseReceiptRequest(string IdempotencyKey, Guid? WarehouseId, IReadOnlyList<PurchaseReceiptLineRequest> Lines);
     public sealed record SupplierPaymentRequest(decimal Amount, string Currency, string Method, string ReceivingAccount, string? Reference, string IdempotencyKey);
+    public sealed record ImmediatePurchasePostingRequest(SupplierPaymentRequest Payment);
+    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
+    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
     public sealed record ReverseRequest(string Reason);
     public sealed record EmptyRequest;
     public sealed record PurchaseOperationResult(Guid Id, string? Status, bool Replayed = false);
