@@ -11,6 +11,8 @@ namespace Pos.Modules.Finance.Desktop;
 public partial class FinanceWindow : Window
 {
     private const string ModuleId = "finance";
+    private const string WeightedAverageCostBasis = "WeightedAverage";
+    private const string LastReceivedCostBasis = "LastReceivedCost";
     private readonly PosDesktopModuleContext _context;
     private readonly ObservableCollection<PurchaseDraftLine> _draftLines = [];
     private readonly Dictionary<Guid, SupplierPaymentRequest> _pendingPaymentRequests = [];
@@ -124,13 +126,17 @@ public partial class FinanceWindow : Window
         if (!TryMarginPercent(Price1MarginBox.Text, out var price1) || !TryMarginPercent(Price2MarginBox.Text, out var price2) ||
             !TryMarginPercent(Price3MarginBox.Text, out var price3))
         { SetStatus("Escribe porcentajes entre 0 y menos de 100, con hasta dos decimales. Deja vacío el nivel que no tendrá sugerencia.", true); return; }
+        if (CostBasisPicker.SelectedValue is not string costBasis || costBasis is not (WeightedAverageCostBasis or LastReceivedCostBasis))
+        { SetStatus("Selecciona el costo base que usarán los precios sugeridos.", true); return; }
         try
         {
             SavePriceMarginsButton.IsEnabled = false;
             await _context.ApiClient.PutModuleAsync(ModuleId, "price-suggestions/margins",
-                new PriceSuggestionMarginRequest(price1, price2, price3));
+                new PriceSuggestionMarginRequest(price1, price2, price3, costBasis));
             await LoadPriceSuggestionMarginsAsync();
-            SetStatus("Márgenes guardados. Las sugerencias aparecerán para artículos recibidos que tengan costo promedio.");
+            SetStatus(costBasis == LastReceivedCostBasis
+                ? "Márgenes y costo base guardados. Las sugerencias usarán la recepción válida más reciente de cada artículo."
+                : "Márgenes y costo base guardados. Las sugerencias usarán el costo promedio ponderado del inventario.");
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
         finally { SavePriceMarginsButton.IsEnabled = true; }
@@ -145,6 +151,8 @@ public partial class FinanceWindow : Window
             Price1MarginBox.Text = FormatMarginPercent(margins.Price1MarginPercent);
             Price2MarginBox.Text = FormatMarginPercent(margins.Price2MarginPercent);
             Price3MarginBox.Text = FormatMarginPercent(margins.Price3MarginPercent);
+            CostBasisPicker.SelectedValue = margins.CostBasis == LastReceivedCostBasis
+                ? LastReceivedCostBasis : WeightedAverageCostBasis;
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
     }
@@ -661,8 +669,10 @@ public partial class FinanceWindow : Window
     public sealed record PurchaseReceiptRequest(string IdempotencyKey, Guid? WarehouseId, IReadOnlyList<PurchaseReceiptLineRequest> Lines);
     public sealed record SupplierPaymentRequest(decimal Amount, string Currency, string Method, string ReceivingAccount, string? Reference, string IdempotencyKey);
     public sealed record ImmediatePurchasePostingRequest(SupplierPaymentRequest Payment);
-    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
-    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
+    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent,
+        decimal? Price3MarginPercent, string CostBasis);
+    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent,
+        decimal? Price3MarginPercent, string? CostBasis);
     public sealed record ReverseRequest(string Reason);
     public sealed record EmptyRequest;
     public sealed record PurchaseOperationResult(Guid Id, string? Status, bool Replayed = false);

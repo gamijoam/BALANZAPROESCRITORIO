@@ -29,7 +29,7 @@ public sealed class FinanceModule : IPosServerModule
         new("PUT", "purchases/{id:guid}", UpdatePurchaseDraftAsync, "Purchase.Manage"),
         new("POST", "purchases/{id:guid}/post", PostPurchaseAsync, "Purchase.Manage"),
         new("POST", "purchases/{id:guid}/post-and-pay", PostImmediatePurchaseAsync, "Purchase.Manage", "SupplierPayment.Manage"),
-        new("GET", "purchases/{id:guid}/price-suggestions", GetPriceSuggestionsAsync, "Purchase.View"),
+        new("GET", "purchases/{id:guid}/price-suggestions", GetPriceSuggestionsAsync, "Purchase.View", "PriceSuggestion.Manage"),
         new("GET", "price-suggestions/margins", GetPriceSuggestionMarginsAsync, "PriceSuggestion.Manage"),
         new("PUT", "price-suggestions/margins", SetPriceSuggestionMarginsAsync, "PriceSuggestion.Manage"),
         new("GET", "purchases/{id:guid}/receipts", ListReceiptsAsync, "Purchase.View"),
@@ -718,10 +718,11 @@ public sealed class FinanceModule : IPosServerModule
     {
         await using var connection = await OpenAsync(context, context.RequestAborted);
         var margins = await ReadPriceSuggestionMarginsAsync(connection, null, context.RequestAborted);
+        var costBasis = await ReadPriceSuggestionCostBasisAsync(connection, null, context.RequestAborted);
         return Results.Ok(new PriceSuggestionMarginSettings(
             GetMarginPercent(margins, "Price1"),
             GetMarginPercent(margins, "Price2"),
-            GetMarginPercent(margins, "Price3")));
+            GetMarginPercent(margins, "Price3"), costBasis));
     }
 
     private static async Task<IResult> SetPriceSuggestionMarginsAsync(HttpContext context)
@@ -730,6 +731,8 @@ public sealed class FinanceModule : IPosServerModule
         if (request is null || !ValidMarginPercent(request.Price1MarginPercent) || !ValidMarginPercent(request.Price2MarginPercent) ||
             !ValidMarginPercent(request.Price3MarginPercent))
             return ValidationError("margins", "Cada margen debe ser un porcentaje entre 0 y menos de 100, con hasta dos decimales. Deja vacío un nivel para desactivar su sugerencia.");
+        if (request.CostBasis is not null && !FinancePriceSuggestionCostPolicy.IsSupported(request.CostBasis))
+            return ValidationError("costBasis", "Selecciona Promedio ponderado o Último costo recibido.");
 
         var configured = new (string Tier, decimal? Percent)[]
         {
@@ -738,6 +741,17 @@ public sealed class FinanceModule : IPosServerModule
         var now = DateTime.UtcNow;
         await using var connection = await OpenAsync(context, context.RequestAborted);
         await using var transaction = await connection.BeginTransactionAsync(context.RequestAborted);
+        await using (var settingLock = new NpgsqlCommand("SELECT pg_advisory_xact_lock(842017, 3)", connection, transaction))
+            await settingLock.ExecuteScalarAsync(context.RequestAborted);
+        var storedBasis = await ReadPriceSuggestionCostBasisAsync(connection, transaction, context.RequestAborted);
+        var costBasis = FinancePriceSuggestionCostPolicy.ResolveBasis(request.CostBasis, storedBasis);
+        await using (var saveBasis = new NpgsqlCommand($"INSERT INTO {Table("price_suggestion_settings")} (setting_key,cost_basis,updated_by,updated_at_utc) VALUES ('default',@basis,@actor,@now) ON CONFLICT (setting_key) DO UPDATE SET cost_basis=EXCLUDED.cost_basis,updated_by=EXCLUDED.updated_by,updated_at_utc=EXCLUDED.updated_at_utc", connection, transaction))
+        {
+            saveBasis.Parameters.AddWithValue("basis", costBasis);
+            saveBasis.Parameters.AddWithValue("actor", GetActorId(context));
+            saveBasis.Parameters.AddWithValue("now", now);
+            await saveBasis.ExecuteNonQueryAsync(context.RequestAborted);
+        }
         foreach (var (tier, percent) in configured)
         {
             if (percent is null)
@@ -752,9 +766,10 @@ public sealed class FinanceModule : IPosServerModule
             await upsert.ExecuteNonQueryAsync(context.RequestAborted);
         }
         await WriteEventAsync(connection, transaction, context, "price_suggestion.margins_updated",
-            new { request.Price1MarginPercent, request.Price2MarginPercent, request.Price3MarginPercent }, now);
+            new { request.Price1MarginPercent, request.Price2MarginPercent, request.Price3MarginPercent, costBasis }, now);
         await transaction.CommitAsync(context.RequestAborted);
-        return Results.Ok(new PriceSuggestionMarginSettings(request.Price1MarginPercent, request.Price2MarginPercent, request.Price3MarginPercent));
+        return Results.Ok(new PriceSuggestionMarginSettings(request.Price1MarginPercent, request.Price2MarginPercent,
+            request.Price3MarginPercent, costBasis));
     }
 
     private static async Task<IResult> GetPriceSuggestionsAsync(HttpContext context)
@@ -769,6 +784,7 @@ public sealed class FinanceModule : IPosServerModule
         }
         if (documentNumber is null) return Results.NotFound(new { error = "purchase_not_found" });
 
+        var costBasis = await ReadPriceSuggestionCostBasisAsync(connection, null, context.RequestAborted);
         var productIds = new List<Guid>();
         await using (var received = new NpgsqlCommand($"SELECT DISTINCT l.product_id FROM {Table("purchase_receipts")} r JOIN {Table("purchase_receipt_lines")} l ON l.receipt_id=r.id WHERE r.invoice_id=@invoice AND r.completed_at_utc IS NOT NULL AND r.reversed_at_utc IS NULL ORDER BY l.product_id", connection))
         {
@@ -779,10 +795,14 @@ public sealed class FinanceModule : IPosServerModule
         var marginRates = await ReadPriceSuggestionMarginsAsync(connection, null, context.RequestAborted);
         var missingMargins = new[] { "Price1", "Price2", "Price3" }.Where(tier => !marginRates.ContainsKey(tier)).ToArray();
         if (productIds.Count == 0)
-            return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, [], missingMargins, [], false));
+            return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, [], missingMargins, [], false));
 
         var catalog = await context.RequestServices.GetRequiredService<IPosProductPricingReadService>()
             .GetSnapshotsAsync(productIds, context.RequestAborted);
+        var latestCosts = costBasis == FinancePriceSuggestionCostPolicy.LastReceivedCost
+            ? await ReadLatestReceiptCostsAsync(connection, productIds,
+                catalog.ToDictionary(product => product.ProductId, product => product.Currency), context.RequestAborted)
+            : new Dictionary<Guid, ReceivedCostSource>();
         var suggestions = new List<PriceSuggestionInfo>();
         var unavailable = new List<PriceSuggestionUnavailableInfo>();
         foreach (var product in catalog)
@@ -792,9 +812,17 @@ public sealed class FinanceModule : IPosServerModule
                 unavailable.Add(new(product.ProductId, product.Sku, product.Name, "El artículo está inactivo."));
                 continue;
             }
+            var selectedCost = FinancePriceSuggestionCostPolicy.Choose(costBasis, product.UnitCost,
+                latestCosts.GetValueOrDefault(product.ProductId));
+            if (selectedCost.UnitCost is null)
+            {
+                unavailable.Add(new(product.ProductId, product.Sku, product.Name, selectedCost.UnavailableReason!));
+                continue;
+            }
             if (product.UnitCost is null)
             {
-                unavailable.Add(new(product.ProductId, product.Sku, product.Name, "No hay costo promedio disponible."));
+                unavailable.Add(new(product.ProductId, product.Sku, product.Name,
+                    "El producto no tiene un costo de inventario inicializado para validar de forma segura el cambio de precio."));
                 continue;
             }
             AddSuggestion("Price1", product.Price1);
@@ -804,13 +832,42 @@ public sealed class FinanceModule : IPosServerModule
             void AddSuggestion(string tier, decimal? currentPrice)
             {
                 if (!marginRates.TryGetValue(tier, out var margin)) return;
-                var suggested = FinancePurchasePolicy.CalculateSuggestedPrice(product.UnitCost, margin);
+                var suggested = FinancePurchasePolicy.CalculateSuggestedPrice(selectedCost.UnitCost, margin);
                 if (suggested.HasValue)
-                    suggestions.Add(new(product.ProductId, product.Sku, product.Name, product.Currency, product.UnitCost.Value,
-                        tier, margin * 100m, currentPrice, suggested.Value, invoiceId, documentNumber));
+                    suggestions.Add(new(product.ProductId, product.Sku, product.Name, product.Currency, selectedCost.UnitCost.Value,
+                        tier, margin * 100m, currentPrice, suggested.Value, invoiceId, documentNumber, product.UnitCost,
+                        selectedCost.Basis, selectedCost.ReceiptSource?.DocumentNumber, selectedCost.ReceiptSource?.ReceivedAtUtc));
             }
         }
-        return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, suggestions, missingMargins, unavailable, true));
+        return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, suggestions, missingMargins, unavailable, true));
+    }
+
+    private static async Task<string> ReadPriceSuggestionCostBasisAsync(NpgsqlConnection connection,
+        NpgsqlTransaction? transaction, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand($"SELECT cost_basis FROM {Table("price_suggestion_settings")} WHERE setting_key='default'", connection, transaction);
+        var basis = await command.ExecuteScalarAsync(cancellationToken) as string;
+        return FinancePriceSuggestionCostPolicy.ResolveBasis(null, basis);
+    }
+
+    private static async Task<Dictionary<Guid, ReceivedCostSource>> ReadLatestReceiptCostsAsync(
+        NpgsqlConnection connection, IReadOnlyCollection<Guid> productIds,
+        IReadOnlyDictionary<Guid, string> productCurrencies, CancellationToken cancellationToken)
+    {
+        var sql = FinancePriceSuggestionCostPolicy.LatestReceiptCostsSql
+            .Replace("{purchase_receipts}", Table("purchase_receipts"), StringComparison.Ordinal)
+            .Replace("{purchase_receipt_lines}", Table("purchase_receipt_lines"), StringComparison.Ordinal)
+            .Replace("{purchase_invoices}", Table("purchase_invoices"), StringComparison.Ordinal);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("productIds", productIds.ToArray());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var lines = new List<ReceivedCostLine>();
+        while (await reader.ReadAsync(cancellationToken))
+            lines.Add(new ReceivedCostLine(reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2),
+                reader.GetDateTime(3), reader.GetDecimal(4), reader.GetDecimal(5), reader.GetString(6),
+                reader.GetDecimal(7)));
+        return FinancePriceSuggestionCostPolicy.AggregateLatestReceiptLines(lines, productCurrencies)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     private static async Task<Dictionary<string, decimal>> ReadPriceSuggestionMarginsAsync(NpgsqlConnection connection,
@@ -1022,12 +1079,16 @@ public sealed class FinanceModule : IPosServerModule
     public sealed record SupplierPaymentRequest(decimal Amount, string Currency, string Method, string ReceivingAccount,
         string? Reference, string IdempotencyKey);
     public sealed record ImmediatePurchasePostingRequest(SupplierPaymentRequest? Payment);
-    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
-    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent, decimal? Price3MarginPercent);
-    public sealed record PriceSuggestionResult(Guid InvoiceId, string DocumentNumber, IReadOnlyList<PriceSuggestionInfo> Suggestions,
+    public sealed record PriceSuggestionMarginRequest(decimal? Price1MarginPercent, decimal? Price2MarginPercent,
+        decimal? Price3MarginPercent, string? CostBasis = null);
+    public sealed record PriceSuggestionMarginSettings(decimal? Price1MarginPercent, decimal? Price2MarginPercent,
+        decimal? Price3MarginPercent, string CostBasis);
+    public sealed record PriceSuggestionResult(Guid InvoiceId, string DocumentNumber, string CostBasis,
+        IReadOnlyList<PriceSuggestionInfo> Suggestions,
         IReadOnlyList<string> MissingMarginTiers, IReadOnlyList<PriceSuggestionUnavailableInfo> UnavailableProducts, bool HasReceivedItems);
     public sealed record PriceSuggestionInfo(Guid ProductId, string Sku, string Name, string Currency, decimal UnitCost,
-        string PriceTier, decimal MarginPercent, decimal? CurrentPrice, decimal SuggestedPrice, Guid InvoiceId, string DocumentNumber);
+        string PriceTier, decimal MarginPercent, decimal? CurrentPrice, decimal SuggestedPrice, Guid InvoiceId, string DocumentNumber,
+        decimal? ProductCostSnapshot, string CostBasis, string? CostSourceDocumentNumber, DateTime? CostReceivedAtUtc);
     public sealed record PriceSuggestionUnavailableInfo(Guid ProductId, string Sku, string Name, string Reason);
     public sealed record SupplierInfo(Guid Id, string Code, string LegalName, string? TaxId, string? Phone, string? Email,
         string? Address, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);

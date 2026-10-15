@@ -23,7 +23,10 @@
             <TextBlock x:Name="InvoiceLabel" Text="Factura" Foreground="#61758D" Margin="0,4,0,0"/>
         </StackPanel>
         <Border Grid.Row="1" Background="#E2ECF8" BorderBrush="#CAD9EB" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,10">
-            <TextBlock x:Name="SuggestionStatus" Text="Calculando propuestas…" TextWrapping="Wrap" Foreground="#425B77"/>
+            <StackPanel>
+                <TextBlock x:Name="CostBasisSummary" Text="Costo base: promedio ponderado" FontWeight="SemiBold" Foreground="#17395F" TextWrapping="Wrap"/>
+                <TextBlock x:Name="SuggestionStatus" Text="Calculando propuestas…" TextWrapping="Wrap" Foreground="#425B77" Margin="0,4,0,0"/>
+            </StackPanel>
         </Border>
         <Grid Grid.Row="2">
             <DataGrid x:Name="SuggestionsGrid" SelectionMode="Single" SelectionUnit="FullRow" SelectionChanged="SuggestionsGrid_SelectionChanged" AutomationProperties.Name="Propuestas de precio por producto y nivel">
@@ -31,7 +34,8 @@
                     <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="110"/>
                     <DataGridTextColumn Header="Artículo" Binding="{Binding Name}" Width="2*"/>
                     <DataGridTextColumn Header="Nivel" Binding="{Binding PriceTierLabel}" Width="95"/>
-                    <DataGridTextColumn Header="Costo promedio" Binding="{Binding CostLabel}" Width="135"/>
+                    <DataGridTextColumn Header="Costo utilizado" Binding="{Binding CostLabel}" Width="135"/>
+                    <DataGridTextColumn Header="Origen del costo" Binding="{Binding CostSourceLabel}" Width="200"/>
                     <DataGridTextColumn Header="Margen" Binding="{Binding MarginLabel}" Width="90"/>
                     <DataGridTextColumn Header="Precio actual" Binding="{Binding CurrentPriceLabel}" Width="140"/>
                     <DataGridTextColumn Header="Precio sugerido" Binding="{Binding SuggestedPriceLabel}" Width="150"/>
@@ -41,7 +45,7 @@
         </Grid>
         <Grid Grid.Row="3" Margin="0,12,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBlock Text="Selecciona una propuesta y confirma. El servicio comprobará que costo y precio no hayan cambiado." TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#61758D" Margin="3,0,8,0"/>
+            <TextBlock Text="Selecciona una propuesta y confirma. El servicio comprobará que el costo de inventario y el precio actual no hayan cambiado." TextWrapping="Wrap" VerticalAlignment="Center" Foreground="#61758D" Margin="3,0,8,0"/>
             <Button x:Name="CloseButton" Grid.Column="1" Content="Cerrar" IsCancel="True"/>
             <Button x:Name="ApplySuggestionButton" Grid.Column="2" Content="Confirmar precio seleccionado" IsEnabled="False" Click="ApplySuggestion_Click" Background="#2E64B7" Foreground="White"/>
         </Grid>

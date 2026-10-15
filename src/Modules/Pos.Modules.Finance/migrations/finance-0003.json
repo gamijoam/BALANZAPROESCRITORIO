@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "operations": [
+    {
+      "type": "createTable",
+      "table": "price_suggestion_settings",
+      "columns": [
+        { "name": "setting_key", "dataType": "text", "nullable": false, "primaryKey": true },
+        { "name": "cost_basis", "dataType": "text", "nullable": false, "primaryKey": false },
+        { "name": "updated_by", "dataType": "uuid", "nullable": false, "primaryKey": false },
+        { "name": "updated_at_utc", "dataType": "timestamptz", "nullable": false, "primaryKey": false }
+      ]
+    }
+  ]
+}
