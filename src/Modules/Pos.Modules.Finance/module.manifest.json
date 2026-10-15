@@ -1,6 +1,6 @@
 {
   "id": "finance",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "hostApi": { "min": 1, "max": 1 },
   "clientApi": { "min": "1.0.0", "maxExclusive": "2.0.0" },
   "entryAssembly": "Pos.Modules.Finance.dll",
@@ -11,5 +11,5 @@
   "dependencies": [],
   "permissions": ["Supplier.View", "Supplier.Manage", "Purchase.View", "Purchase.Manage", "SupplierPayment.Manage", "PriceSuggestion.Manage", "Finance.Reports"],
   "entitlement": null,
-  "migrations": ["finance:0001", "finance:0002"]
+  "migrations": ["finance:0001", "finance:0002", "finance:0003"]
 }

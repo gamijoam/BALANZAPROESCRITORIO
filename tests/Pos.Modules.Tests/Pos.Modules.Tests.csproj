@@ -26,6 +26,7 @@
     <None Include="../../src/Modules/Pos.Modules.Finance/module.manifest.json" Link="finance/module.manifest.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Finance/migrations/finance-0001.json" Link="finance/finance-0001.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Finance/migrations/finance-0002.json" Link="finance/finance-0002.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../src/Modules/Pos.Modules.Finance/migrations/finance-0003.json" Link="finance/finance-0003.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceWindow.xaml" Link="finance/FinanceWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceDesktopModule.cs" Link="finance/FinanceDesktopModule.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../src/Modules/Pos.Modules.Finance.Desktop/FinanceWindow.xaml.cs" Link="finance/FinanceWindow.xaml.cs" CopyToOutputDirectory="PreserveNewest" />

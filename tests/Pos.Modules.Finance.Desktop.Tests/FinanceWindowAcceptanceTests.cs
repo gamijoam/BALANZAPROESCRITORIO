@@ -105,18 +105,33 @@ public sealed class FinanceWindowAcceptanceTests
     public void Price_suggestions_require_configured_margins_and_an_explicit_review_action()
     {
         var windowDocument = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "FinanceWindow.xaml"));
+        AssertLabel(windowDocument, "CostBasisLabel", "Costo base para precios sugeridos");
+        var costBasisPicker = FindNamedElement(windowDocument, "CostBasisPicker");
+        var costBasisOptions = costBasisPicker.Descendants()
+            .Select(element => (string?)element.Attribute("Content"))
+            .Where(value => value is not null)
+            .ToArray();
+        Assert.Contains("Promedio ponderado", costBasisOptions);
+        Assert.Contains("Último costo recibido", costBasisOptions);
         AssertLabel(windowDocument, "Price1MarginLabel", "Precio 1 (%)");
         AssertLabel(windowDocument, "Price2MarginLabel", "Precio 2 (%)");
         AssertLabel(windowDocument, "Price3MarginLabel", "Precio 3 (%)");
-        AssertLabel(windowDocument, "SavePriceMarginsButton", "Guardar márgenes");
+        AssertLabel(windowDocument, "SavePriceMarginsButton", "Guardar márgenes y costo base");
         AssertLabel(windowDocument, "ViewPriceSuggestionsButton", "Revisar precios sugeridos");
 
         var suggestionPath = Path.Combine(AppContext.BaseDirectory, "PriceSuggestionWindow.xaml");
         var suggestionDocument = XDocument.Load(suggestionPath);
         Assert.Equal("Propuestas de precio por producto y nivel",
             (string?)FindNamedElement(suggestionDocument, "SuggestionsGrid").Attribute("AutomationProperties.Name"));
+        Assert.NotNull(FindNamedElement(suggestionDocument, "CostBasisSummary"));
+        var suggestionHeaders = FindNamedElement(suggestionDocument, "SuggestionsGrid").Descendants()
+            .Select(element => (string?)element.Attribute("Header"))
+            .Where(value => value is not null)
+            .ToArray();
+        Assert.Contains("Costo utilizado", suggestionHeaders);
+        Assert.Contains("Origen del costo", suggestionHeaders);
         AssertLabel(suggestionDocument, "ApplySuggestionButton", "Confirmar precio seleccionado");
-        Assert.Contains("El servicio comprobará que costo y precio no hayan cambiado", suggestionDocument.ToString(), StringComparison.Ordinal);
+        Assert.Contains("El servicio comprobará que el costo de inventario y el precio actual no hayan cambiado", suggestionDocument.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

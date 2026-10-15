@@ -86,7 +86,7 @@ public sealed class FinanceModuleContractTests
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
 
         Assert.Equal("finance", manifest.Id);
-        Assert.Equal("1.0.6", manifest.Version.ToString(3));
+        Assert.Equal("1.0.7", manifest.Version.ToString(3));
         Assert.NotNull(manifest.EntryAssembly);
         Assert.NotNull(manifest.DesktopEntryAssembly);
         Assert.Contains("Supplier.View", manifest.Permissions);
@@ -142,7 +142,9 @@ public sealed class FinanceModuleContractTests
         Assert.All(permissions, permission => Assert.Contains(permission, manifest.Permissions));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/post", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/post-and-pay", StringComparison.Ordinal));
-        Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "GET" && endpoint.Route.Contains("price-suggestions", StringComparison.Ordinal));
+        var priceSuggestionQuery = Assert.Single(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "GET" && endpoint.Route.EndsWith("/price-suggestions", StringComparison.Ordinal));
+        Assert.Contains("Purchase.View", priceSuggestionQuery.RequiredPermissions);
+        Assert.Contains("PriceSuggestion.Manage", priceSuggestionQuery.RequiredPermissions);
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/receipts", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.EndsWith("/payments", StringComparison.Ordinal));
         Assert.Contains(new FinanceModule().GetEndpoints(), endpoint => endpoint.Method == "POST" && endpoint.Route.Contains("receipts/{receiptId:guid}/reverse", StringComparison.Ordinal));
@@ -164,7 +166,129 @@ public sealed class FinanceModuleContractTests
 
         Assert.Contains("PriceSuggestion.Manage", manifest.Permissions);
         Assert.Contains("finance:0002", manifest.Migrations);
-        Assert.Equal("1.0.6", manifest.Version.ToString(3));
+        Assert.Contains("finance:0003", manifest.Migrations);
+        Assert.Equal("1.0.7", manifest.Version.ToString(3));
+
+        var settingsMigrationPath = Path.Combine(AppContext.BaseDirectory, "finance", "finance-0003.json");
+        var settingsMigration = ModuleMigrationReader.Parse(File.ReadAllText(settingsMigrationPath));
+        var settingsTable = Assert.Single(settingsMigration.Operations.OfType<CreateModuleTable>());
+        Assert.Equal("price_suggestion_settings", settingsTable.Table);
+        Assert.Contains(settingsTable.Columns, column => column.Name == "cost_basis" && !column.Nullable);
+    }
+
+    [Fact]
+    public void Cost_basis_defaults_to_weighted_average_and_an_older_request_preserves_the_saved_choice()
+    {
+        var policy = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.FinancePriceSuggestionCostPolicy");
+        Assert.NotNull(policy);
+        var resolveBasis = policy!.GetMethod("ResolveBasis", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(resolveBasis);
+
+        Assert.Equal("WeightedAverage", resolveBasis!.Invoke(null, [null, null]));
+        Assert.Equal("WeightedAverage", resolveBasis.Invoke(null, ["WeightedAverage", "LastReceivedCost"]));
+        Assert.Equal("LastReceivedCost", resolveBasis.Invoke(null, [null, "LastReceivedCost"]));
+    }
+
+    [Fact]
+    public void Selected_cost_basis_never_falls_back_when_its_own_cost_is_unavailable()
+    {
+        var policy = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.FinancePriceSuggestionCostPolicy");
+        Assert.NotNull(policy);
+        var chooseCost = policy!.GetMethod("Choose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(chooseCost);
+
+        var unavailableLastCost = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, null]);
+        Assert.NotNull(unavailableLastCost);
+        Assert.Null(unavailableLastCost!.GetType().GetProperty("UnitCost")!.GetValue(unavailableLastCost));
+        Assert.NotNull(unavailableLastCost.GetType().GetProperty("UnavailableReason")!.GetValue(unavailableLastCost));
+
+        var weightedAverageWithoutCost = chooseCost.Invoke(null, ["WeightedAverage", null, null]);
+        Assert.NotNull(weightedAverageWithoutCost);
+        Assert.Null(weightedAverageWithoutCost!.GetType().GetProperty("UnitCost")!.GetValue(weightedAverageWithoutCost));
+    }
+
+    [Fact]
+    public void Margin_contract_includes_an_optional_cost_basis_for_older_clients()
+    {
+        var request = typeof(FinanceModule).GetNestedType("PriceSuggestionMarginRequest");
+        var settings = typeof(FinanceModule).GetNestedType("PriceSuggestionMarginSettings");
+
+        Assert.NotNull(request);
+        Assert.NotNull(settings);
+        Assert.Equal(typeof(string), request!.GetProperty("CostBasis")?.PropertyType);
+        Assert.Equal(typeof(string), settings!.GetProperty("CostBasis")?.PropertyType);
+
+        var oldRequest = System.Text.Json.JsonSerializer.Deserialize<FinanceModule.PriceSuggestionMarginRequest>(
+            "{\"price1MarginPercent\":25,\"price2MarginPercent\":35,\"price3MarginPercent\":45}");
+        Assert.Null(oldRequest?.CostBasis);
+    }
+
+    [Fact]
+    public void Suggestion_contract_keeps_the_inventory_cost_snapshot_separate_from_the_selected_basis()
+    {
+        var suggestion = typeof(FinanceModule).GetNestedType("PriceSuggestionInfo");
+        Assert.NotNull(suggestion);
+        Assert.Equal(typeof(decimal), suggestion!.GetProperty("UnitCost")?.PropertyType);
+        Assert.Equal(typeof(decimal?), suggestion.GetProperty("ProductCostSnapshot")?.PropertyType);
+        Assert.Equal(typeof(string), suggestion.GetProperty("CostBasis")?.PropertyType);
+        Assert.Equal(typeof(string), suggestion.GetProperty("CostSourceDocumentNumber")?.PropertyType);
+        Assert.Equal(typeof(DateTime?), suggestion.GetProperty("CostReceivedAtUtc")?.PropertyType);
+    }
+
+    [Fact]
+    public void Latest_received_cost_is_used_with_its_receipt_document_and_timestamp()
+    {
+        var policy = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.FinancePriceSuggestionCostPolicy");
+        Assert.NotNull(policy);
+        var sourceType = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.ReceivedCostSource");
+        Assert.NotNull(sourceType);
+        var source = Activator.CreateInstance(sourceType!, [2m, Guid.NewGuid(), "F-2026-008", new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc)]);
+        var chooseCost = policy!.GetMethod("Choose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+        var selected = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, source]);
+
+        Assert.Equal(2m, selected!.GetType().GetProperty("UnitCost")!.GetValue(selected));
+        var receiptSource = selected.GetType().GetProperty("ReceiptSource")!.GetValue(selected);
+        Assert.Equal("F-2026-008", receiptSource!.GetType().GetProperty("DocumentNumber")!.GetValue(receiptSource));
+        Assert.Equal("LastReceivedCost", selected.GetType().GetProperty("Basis")!.GetValue(selected));
+    }
+
+    [Fact]
+    public void Latest_receipt_cost_query_excludes_incomplete_or_reversed_receipts_and_returns_latest_receipt_lines()
+    {
+        var policy = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.FinancePriceSuggestionCostPolicy");
+        Assert.NotNull(policy);
+        var sql = (string?)policy!.GetField("LatestReceiptCostsSql", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)?.GetRawConstantValue();
+        Assert.NotNull(sql);
+        Assert.Contains("line.quantity, line.unit_cost", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("line.cost_currency", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("completed_at_utc IS NOT NULL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reversed_at_utc IS NULL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PARTITION BY l.product_id", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Last_cost_averages_lines_in_the_latest_receipt_after_converting_to_the_product_currency()
+    {
+        var productId = Guid.NewGuid();
+        var olderReceiptId = Guid.NewGuid();
+        var latestReceiptId = Guid.NewGuid();
+        var latestAt = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
+        var lines = new[]
+        {
+            new ReceivedCostLine(productId, olderReceiptId, "F-OLD", latestAt.AddDays(-2), 5m, 100m, "VES", 40m),
+            new ReceivedCostLine(productId, latestReceiptId, "F-LATEST", latestAt, 2m, 1m, "USD", 40m),
+            new ReceivedCostLine(productId, latestReceiptId, "F-LATEST", latestAt, 3m, 2m, "USD", 40m)
+        };
+
+        var result = FinancePriceSuggestionCostPolicy.AggregateLatestReceiptLines(lines,
+            new Dictionary<Guid, string> { [productId] = "VES" });
+
+        var source = Assert.Single(result).Value;
+        Assert.Equal(64m, source.UnitCost);
+        Assert.Equal("F-LATEST", source.DocumentNumber);
+        Assert.Equal(latestReceiptId, source.ReceiptId);
+        Assert.Equal(latestAt, source.ReceivedAtUtc);
     }
 
     [Fact]
