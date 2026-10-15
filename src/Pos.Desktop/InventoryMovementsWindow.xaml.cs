@@ -22,6 +22,7 @@ public partial class InventoryMovementsWindow : Window
         PosDesktopModuleContext? moduleContext = null, IPosInventoryHistoryExtension? historyExtension = null)
     {
         InitializeComponent();
+        FitToWorkArea();
         _viewModel = viewModel;
         _product = product;
         _moduleContext = moduleContext;
@@ -29,6 +30,15 @@ public partial class InventoryMovementsWindow : Window
         ProductLabel.Text = $"{product.Name} · SKU {product.Sku}";
         TransfersTab.Visibility = historyExtension is null || moduleContext is null ? Visibility.Collapsed : Visibility.Visible;
         Loaded += async (_, _) => await LoadPageAsync();
+    }
+
+    private void FitToWorkArea()
+    {
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(Width, workArea.Width - 32);
+        Height = Math.Min(Height, workArea.Height - 48);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
     }
 
     private async Task LoadPageAsync()

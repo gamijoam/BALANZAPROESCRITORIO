@@ -17,6 +17,7 @@ using Pos.Modules.Packaging;
 using Pos.Infrastructure.Modules;
 using Pos.Modules.Abstractions;
 using Pos.Modules.Server.Abstractions;
+using Pos.Shared.Contracts;
 
 var windowsServiceMode = args.Contains("--windows-service", StringComparer.Ordinal);
 PosWindowsServiceConfiguration.ApplyFromEnvironment();
@@ -48,6 +49,7 @@ builder.Services.AddDbContext<PosDbContext>(options => options.UseNpgsql(connect
     npgsql => npgsql.MigrationsAssembly(typeof(PosDbContext).Assembly.FullName)));
 builder.Services.AddScoped<AuthenticationService>();
 builder.Services.AddScoped<SalesService>();
+builder.Services.AddScoped<CartWorkspaceService>();
 builder.Services.AddScoped<SaleReturnService>();
 builder.Services.AddScoped<IPosInventoryReceiptService, PosInventoryReceiptService>();
 builder.Services.AddScoped<IPosProductPricingReadService, PosProductPricingReadService>();
@@ -809,6 +811,81 @@ app.MapPost("/api/v1/cash-sessions/{cashSessionId:guid}/movements", async (Guid 
     await transaction.CommitAsync(cancellationToken);
     return Results.Created($"/api/v1/cash-sessions/{cashSessionId}/movements/{movement.Id}", new { movement.Id, movement.Amount, movement.Direction, movement.Reason, movement.OccurredAtUtc });
 });
+app.MapGet("/api/v1/cart-workspaces/active", async (HttpContext context, AuthenticationService auth, CartWorkspaceService workspaces, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspaces.GetActiveAsync(access.TerminalId, access.OperatorId, cancellationToken)); }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+app.MapPut("/api/v1/cart-workspaces/active", async (HttpContext context, AuthenticationService auth, CartWorkspaceService workspaces,
+    CartWorkspaceSaveRequest request, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspaces.SaveActiveAsync(access.TerminalId, access.OperatorId, request, cancellationToken)); }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+app.MapPost("/api/v1/cart-workspaces/active/pause", async (HttpContext context, AuthenticationService auth, CartWorkspaceService workspaces,
+    CartWorkspacePauseRequest request, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspaces.PauseActiveAsync(access.TerminalId, access.OperatorId, request, cancellationToken)); }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+app.MapGet("/api/v1/cart-workspaces/paused", async (HttpContext context, AuthenticationService auth, CartWorkspaceService workspaces,
+    CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    return Results.Ok(await workspaces.GetPausedAsync(access.TerminalId, cancellationToken));
+});
+app.MapGet("/api/v1/cart-workspaces/paused/{workspaceId:guid}", async (Guid workspaceId, HttpContext context,
+    AuthenticationService auth, CartWorkspaceService workspaces, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspaces.GetPausedAsync(access.TerminalId, workspaceId, cancellationToken)); }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+app.MapPost("/api/v1/cart-workspaces/paused/{workspaceId:guid}/resume", async (Guid workspaceId, HttpContext context,
+    AuthenticationService auth, CartWorkspaceService workspaces, CartWorkspaceTransitionRequest request, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    try { return Results.Ok(await workspaces.ResumeAsync(access.TerminalId, access.OperatorId, workspaceId, request, cancellationToken)); }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+app.MapPost("/api/v1/cart-workspaces/paused/{workspaceId:guid}/discard", async (Guid workspaceId, HttpContext context,
+    AuthenticationService auth, CartWorkspaceService workspaces, CartWorkspaceTransitionRequest request, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    var role = await auth.GetRoleAsync(access.OperatorId, cancellationToken);
+    try
+    {
+        await workspaces.DiscardAsync(access.TerminalId, access.OperatorId,
+            role is OperatorRole.Supervisor or OperatorRole.Administrator, workspaceId, request, cancellationToken);
+        return Results.NoContent();
+    }
+    catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
+});
+
 app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService auth, SupervisorAuthorizationStore approvals, SalesService sales, ConfirmSaleRequest request, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
@@ -830,7 +907,8 @@ app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService a
     var key = context.Request.Headers["Idempotency-Key"].ToString();
     try
     {
-        var result = await sales.ConfirmAsync(access.OperatorId, access.TerminalId, request.CashSessionId, key, request.Checkout, cancellationToken);
+        var result = await sales.ConfirmAsync(access.OperatorId, access.TerminalId, request.CashSessionId, key, request.Checkout,
+            cancellationToken, request.WorkspaceId);
         if (result.Error == "idempotency_conflict") return Results.Conflict(new { error = result.Error });
         return result.Replayed
             ? Results.Ok(new { saleId = result.SaleId, replayed = true })
@@ -838,7 +916,7 @@ app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService a
     }
     catch (CheckoutRejectedException exception)
     {
-        return exception.Code == "insufficient_stock"
+        return exception.Code is "insufficient_stock" or "workspace_cart_mismatch" or "active_workspace_required" or "workspace_id_required"
             ? Results.Conflict(new { error = exception.Code })
             : Results.UnprocessableEntity(new { error = exception.Code });
     }
@@ -929,7 +1007,7 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
     var inventoryQuery = from product in productsQuery
                            join stock in db.Stocks.AsNoTracking() on product.Id equals stock.ProductId into stockRows
                            from stockRow in stockRows.DefaultIfEmpty()
-                           select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3,
+                           select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3, product.UnitCost,
                                product.TaxTreatment, product.Currency, Quantity = stockRow == null ? 0m : stockRow.Quantity,
                                hasImage = product.ImageFileName != null, product.Active };
     if (stockFilter == "available") inventoryQuery = inventoryQuery.Where(x => x.Quantity > 0m);
@@ -1187,6 +1265,9 @@ static IResult PermissionFailure(HttpContext context)
         ? Results.Json(challenge, statusCode: StatusCodes.Status428PreconditionRequired)
         : Results.StatusCode(context.Response.StatusCode == StatusCodes.Status200OK ? StatusCodes.Status403Forbidden : context.Response.StatusCode);
 
+static IResult CartWorkspaceFailure(CartWorkspaceException exception)
+    => Results.Json(new { error = exception.Code }, statusCode: (int)exception.StatusCode);
+
 static bool IsCreditMethod(string method) => string.Equals(method, "credit", StringComparison.OrdinalIgnoreCase) ||
     string.Equals(method, "fiado", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "credito", StringComparison.OrdinalIgnoreCase) ||
     string.Equals(method, "crédito", StringComparison.OrdinalIgnoreCase);
@@ -1229,4 +1310,4 @@ public sealed record OpenCashSessionRequest(decimal? OpeningBalance = null, stri
 public sealed record CloseCashSessionRequest(decimal? CountedClosingBalance = null, decimal? CountedClosingUsd = null, decimal? CountedClosingVes = null);
 public sealed record CashMovementRequest(decimal Amount, string? Direction, string? Reason, string? Currency = null);
 public sealed record InventoryAdjustmentRequest(decimal QuantityDelta, string? Reason);
-public sealed record ConfirmSaleRequest(Guid CashSessionId, CheckoutRequest? Checkout);
+public sealed record ConfirmSaleRequest(Guid CashSessionId, CheckoutRequest? Checkout, Guid? WorkspaceId = null);

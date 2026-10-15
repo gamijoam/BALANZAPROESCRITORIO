@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private readonly Func<CancellationToken, Task>? _restartLocalServiceAsync;
     private readonly bool _stopsLocalServerOnExit;
     private bool _exitConfirmed;
+    private bool _exitSaveInProgress;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -44,8 +45,82 @@ public partial class MainWindow : Window
 
     private void ExitButton_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void Window_Closing(object? sender, CancelEventArgs e)
+    private async void PauseSale_Click(object sender, RoutedEventArgs e)
     {
+        if (!_viewModel.CanPauseSale)
+        {
+            MessageBox.Show(this, "Agrega artículos y resuelve cualquier operación pendiente antes de pausar la venta.",
+                "No se puede pausar ahora", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (_viewModel.RequiresCartPriceConfirmation)
+        {
+            MessageBox.Show(this, "Confirma primero los valores actuales del carrito. Después podrás pausarlo o cobrarlo.",
+                "Revisar valores", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new PauseSaleWindow(_viewModel.ItemCount, _viewModel.Total, _viewModel.Currency) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            await _viewModel.PauseCurrentSaleAsync(dialog.Note);
+            SearchBox.Focus();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"La venta sigue en pantalla y no se marcó como pausada.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                "No se pudo pausar la venta", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void PausedSales_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanViewPausedSales)
+        {
+            MessageBox.Show(this, "Espera a que termine la operación actual antes de abrir las ventas pausadas.",
+                "Ventas pausadas", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (_viewModel.RequiresCartPriceConfirmation)
+        {
+            MessageBox.Show(this, "Confirma primero los valores actuales del carrito antes de cambiar a otra venta.",
+                "Revisar valores", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (_viewModel.CartLines.Count > 0)
+        {
+            var answer = MessageBox.Show(this,
+                "Hay artículos en la venta actual. ¿Quieres guardarla como pausada y abrir la lista?",
+                "Pausar la venta actual", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (answer != MessageBoxResult.Yes) return;
+            try { await _viewModel.PauseCurrentSaleAsync(null); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"La venta actual permanece en pantalla.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                    "No se pudo pausar la venta", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
+        var dialog = new PausedSalesWindow(_viewModel) { Owner = this };
+        dialog.ShowDialog();
+        SearchBox.Focus();
+    }
+
+    private async void AcceptCartValues_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.AcceptCurrentCartValues();
+        try { await _viewModel.FlushWorkspaceSyncAsync(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"No se guardaron los valores confirmados. El carrito sigue en pantalla y no se puede cobrar hasta reintentar.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                "No se pudo actualizar el carrito", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_exitSaveInProgress) { e.Cancel = true; return; }
         if (_exitConfirmed || !_viewModel.IsAuthenticated) return;
         if (_viewModel.HasPendingCheckout)
         {
@@ -57,7 +132,7 @@ public partial class MainWindow : Window
         }
 
         var message = _viewModel.CartLines.Count > 0
-            ? "El carrito actual se perderá al cerrar el POS. ¿Deseas salir?"
+            ? "El carrito está guardado en esta terminal y se recuperará cuando abras el POS otra vez. No se ha cobrado ni se apartó inventario. ¿Deseas salir?"
             : "¿Deseas cerrar BalanzaPro?";
         if (_viewModel.CashSession is not null)
             message += Environment.NewLine + Environment.NewLine + "El turno de caja quedará abierto.";
@@ -71,6 +146,28 @@ public partial class MainWindow : Window
             e.Cancel = true;
             return;
         }
+        if (_viewModel.IsWorkspaceSyncPending)
+        {
+            e.Cancel = true;
+            _exitSaveInProgress = true;
+            IsEnabled = false;
+            try
+            {
+                await _viewModel.FlushWorkspaceSyncAsync();
+                _exitConfirmed = true;
+                _exitSaveInProgress = false;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                IsEnabled = true;
+                MessageBox.Show(this,
+                    $"No se cerró el POS porque el carrito todavía no se confirmó en el servidor. La venta sigue en pantalla.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                    "No se pudo guardar el carrito", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally { _exitSaveInProgress = false; }
+            return;
+        }
         _exitConfirmed = true;
     }
 
@@ -82,6 +179,16 @@ public partial class MainWindow : Window
             ProductSummaryPrice.Text = _viewModel.CurrentProduct is null ? string.Empty : _viewModel.CurrentPriceLabel;
             return;
         }
+        if (e.PropertyName == nameof(PosViewModel.RequiresCartPriceConfirmation))
+        {
+            AcceptCartValuesButton.Visibility = _viewModel.RequiresCartPriceConfirmation ? Visibility.Visible : Visibility.Collapsed;
+            return;
+        }
+        if (e.PropertyName == nameof(PosViewModel.CartWorkspaceStatus))
+        {
+            CartWorkspaceStatusLabel.ToolTip = _viewModel.CartWorkspaceStatus;
+            return;
+        }
         if (e.PropertyName != nameof(PosViewModel.CurrentProduct)) return;
         var product = _viewModel.CurrentProduct;
         ProductPreviewName.Text = product?.Name ?? "Sin producto seleccionado";
@@ -90,7 +197,8 @@ public partial class MainWindow : Window
         ProductSummaryCode.Text = product?.Sku ?? string.Empty;
         ProductSummaryName.Text = product?.Name ?? string.Empty;
         ProductSummaryPrice.Text = product is null ? string.Empty : _viewModel.CurrentPriceLabel;
-        CurrentProductSummary.Visibility = product is null ? Visibility.Collapsed : Visibility.Visible;
+        ProductSummaryDetails.Visibility = product is null ? Visibility.Collapsed : Visibility.Visible;
+        CartWorkspaceStatusLabel.Visibility = product is null ? Visibility.Visible : Visibility.Collapsed;
         if (product is not null)
         {
             var selectedLine = _viewModel.CartLines.LastOrDefault(x => x.Product.Id == product.Id);
@@ -230,6 +338,15 @@ public partial class MainWindow : Window
         _viewModel.RemoveProduct(line);
     }
 
+    private void EditCartLine_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanEditCart || (sender as FrameworkElement)?.DataContext is not CartLineViewModel line) return;
+        var dialog = new CartLineEditWindow(line) { Owner = this };
+        if (dialog.ShowDialog() == true)
+            _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+        RefocusScanner();
+    }
+
     private void ModulesButton_Click(object sender, RoutedEventArgs e)
     {
         ModulesPopup.PlacementTarget = ModulesButton;
@@ -267,6 +384,14 @@ public partial class MainWindow : Window
             case Key.F4:
                 e.Handled = true;
                 if (_viewModel.ChargeCommand.CanExecute(null)) _viewModel.ChargeCommand.Execute(null);
+                break;
+            case Key.F6:
+                e.Handled = true;
+                PauseSale_Click(this, new RoutedEventArgs());
+                break;
+            case Key.F7:
+                e.Handled = true;
+                PausedSales_Click(this, new RoutedEventArgs());
                 break;
             case Key.F8:
                 e.Handled = true;

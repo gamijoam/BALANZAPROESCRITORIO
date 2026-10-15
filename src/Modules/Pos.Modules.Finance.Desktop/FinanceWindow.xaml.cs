@@ -736,7 +736,12 @@ internal sealed class ReceiptQuantityWindow : Window
     public ReceiptQuantityWindow(IReadOnlyList<ReceiptLineDraft> lines)
     {
         _lines = lines;
-        Title = "Registrar recepción parcial"; Width = 940; Height = 600; MinWidth = 720; MinHeight = 440;
+        Title = "Registrar recepción parcial"; Width = 1160; Height = 760; MinWidth = 720; MinHeight = 440;
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(Width, workArea.Width - 32);
+        Height = Math.Min(Height, workArea.Height - 48);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
         WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = System.Windows.Media.Brushes.White;
         Language = System.Windows.Markup.XmlLanguage.GetLanguage("es-VE");
         var layout = new Grid { Margin = new Thickness(16) };

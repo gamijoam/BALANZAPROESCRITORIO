@@ -105,6 +105,24 @@ public sealed class PosApiClientInventoryTests
     }
 
     [Fact]
+    public async Task Initial_inventory_cost_is_sent_as_an_audited_service_command()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler(async (request, ct) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal($"/api/v1/products/{id}/initial-cost", request.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.Equal(12.3456m, body.RootElement.GetProperty("unitCost").GetDecimal());
+            Assert.Equal("Costo de apertura verificado", body.RootElement.GetProperty("reason").GetString());
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        using var client = await CreateClientAsync(handler);
+
+        await client.InitializeProductCostAsync(id, 12.3456m, "Costo de apertura verificado");
+    }
+
+    [Fact]
     public async Task Inventory_query_sends_filters_and_maps_active_state()
     {
         var id = Guid.NewGuid();

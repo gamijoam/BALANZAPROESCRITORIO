@@ -40,8 +40,10 @@ public partial class PriceSuggestionWindow : Window
                 details.Add("Sin margen configurado: " + string.Join(", ", result.MissingMarginTiers.Select(FinanceDisplayText.PriceTier)) + ".");
             if (result?.UnavailableProducts.Count > 0)
                 details.Add("Artículos sin propuesta: " + string.Join("; ", result.UnavailableProducts.Select(item => $"{item.Sku} ({item.Reason})")) + ".");
+            if (result?.UnavailableProducts.Any(item => item.Reason.Contains("costo promedio", StringComparison.OrdinalIgnoreCase)) == true)
+                details.Add("Para artículos con existencias previas sin costo, asigna el costo inicial desde Inventario.");
             details.Add(_suggestions.Count == 0
-                ? "No se cambió ningún precio. Configura márgenes y verifica que los artículos tengan costo promedio."
+                ? "No se cambió ningún precio. Revisa los requisitos indicados arriba y vuelve a abrir las sugerencias."
                 : $"{_suggestions.Count} propuesta(s). Ninguna modifica el catálogo hasta que confirmes una.");
             SuggestionStatus.Text = string.Join(" ", details);
         }

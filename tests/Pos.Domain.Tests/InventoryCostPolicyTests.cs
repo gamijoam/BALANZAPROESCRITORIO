@@ -25,6 +25,20 @@ public sealed class InventoryCostPolicyTests
     public void Receipt_does_not_guess_the_cost_of_existing_unvalued_stock()
         => Assert.Null(InventoryCostPolicy.WeightedAverageUnitCost(4m, null, 2m, 15m));
 
+    [Fact]
+    public void Administrator_can_initialize_a_missing_cost_without_overwriting_a_known_cost()
+        => Assert.Equal(15.1234m, InventoryCostPolicy.InitializeMissingCost(null, 15.1234m));
+
+    [Fact]
+    public void Initial_cost_cannot_be_applied_when_a_cost_is_already_known()
+        => Assert.Throws<InvalidOperationException>(() => InventoryCostPolicy.InitializeMissingCost(12m, 15m));
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1.23456)]
+    public void Initial_cost_rejects_negative_values_and_more_than_four_decimals(decimal cost)
+        => Assert.Throws<ArgumentOutOfRangeException>(() => InventoryCostPolicy.InitializeMissingCost(null, cost));
+
     [Theory]
     [MemberData(nameof(InvalidCostCases))]
     public void Receipt_cost_rejects_invalid_quantity_or_amount(decimal currentQuantity, decimal currentCost,

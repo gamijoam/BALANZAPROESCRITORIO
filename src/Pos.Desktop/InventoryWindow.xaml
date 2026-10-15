@@ -1,5 +1,5 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.InventoryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inventario" Width="1260" Height="700" MinWidth="1060" MinHeight="620" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
+        Title="Inventario" Width="1500" Height="850" MinWidth="1060" MinHeight="620" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
     <Grid Margin="14">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,9">
@@ -36,13 +36,15 @@
                     <DataGridTextColumn Header="Estado" Binding="{Binding ActiveStatusLabel}" Width="82"/>
                 </DataGrid.Columns>
             </DataGrid>
-            <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="12" Margin="10,0,0,0">
+            <ScrollViewer x:Name="ProductDetailsScrollViewer" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+            <Border Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="12" Margin="10,0,0,0">
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="100"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="100"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock Text="PRODUCTO SELECCIONADO" Foreground="#173F78" FontSize="15" FontWeight="Bold"/>
                     <StackPanel Grid.Row="1" Margin="0,4,0,7">
                         <TextBlock x:Name="SelectedProductName" Text="Selecciona un producto" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="SelectedProductSku" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="SelectedProductCost" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
                     </StackPanel>
                     <Border Grid.Row="2" Background="#F2F5F9" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="5">
                         <Grid>
@@ -61,12 +63,15 @@
                         <Button x:Name="EditProductButton" Content="Editar SKU/nombre" Height="32" Margin="0,0,4,0" Click="EditProduct_Click" IsEnabled="False"/>
                         <Button x:Name="ChangePriceButton" Grid.Column="1" Content="Cambiar precio" Height="32" Margin="4,0,0,0" Click="ChangePrice_Click" IsEnabled="False"/>
                     </Grid>
-                    <Button x:Name="ToggleProductActiveButton" Grid.Row="6" Content="Desactivar producto" Height="32" Click="ToggleProductActive_Click" IsEnabled="False"/>
-                    <TextBlock x:Name="TaxTreatmentStatusLabel" Grid.Row="7" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,4"/>
-                    <Button x:Name="ChangeTaxTreatmentButton" Grid.Row="8" Content="Asignar impuesto" Height="32" Margin="0,3,0,0" Click="ChangeTaxTreatment_Click" IsEnabled="False" AutomationProperties.Name="Asignar tratamiento de impuesto al producto"/>
-                    <Button Grid.Row="9" Content="Historial de movimientos" Height="32" Margin="0,7,0,0" Click="History_Click" AutomationProperties.Name="Ver historial de movimientos"/>
+                    <Button x:Name="InitializeCostButton" Grid.Row="6" Content="Asignar costo inicial" Height="32" Margin="0,2,0,4" Click="InitializeCost_Click" IsEnabled="False" AutomationProperties.Name="Asignar costo inicial del inventario"
+                            ToolTip="Solo para existencias que todavía no tienen costo promedio."/>
+                    <Button x:Name="ToggleProductActiveButton" Grid.Row="7" Content="Desactivar producto" Height="32" Click="ToggleProductActive_Click" IsEnabled="False"/>
+                    <TextBlock x:Name="TaxTreatmentStatusLabel" Grid.Row="8" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,4"/>
+                    <Button x:Name="ChangeTaxTreatmentButton" Grid.Row="9" Content="Asignar impuesto" Height="32" Margin="0,3,0,0" Click="ChangeTaxTreatment_Click" IsEnabled="False" AutomationProperties.Name="Asignar tratamiento de impuesto al producto"/>
+                    <Button Grid.Row="10" Content="Historial de movimientos" Height="32" Margin="0,7,0,0" Click="History_Click" AutomationProperties.Name="Ver historial de movimientos"/>
                 </Grid>
             </Border>
+            </ScrollViewer>
         </Grid>
         <Border Grid.Row="4" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="0,8,0,0">
             <Grid>

@@ -201,13 +201,29 @@
                          BorderBrush="#8BA6C9" BorderThickness="2" ToolTip="Escanea un código o escribe el nombre y presiona Enter"/>
                 <Button Grid.Column="1" Content="Buscar" Margin="8,0,0,0" FontSize="17" FontWeight="Bold" Background="#2E64B7" Foreground="White" BorderThickness="0" Click="Search_Click"/>
             </Grid>
-            <Border x:Name="CurrentProductSummary" Grid.Row="2" Margin="0,0,0,8" Padding="12,7" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6" Visibility="Collapsed">
+            <Border x:Name="CurrentProductSummary" Grid.Row="2" Margin="0,0,0,8" Padding="10,6" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6">
                 <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="PRODUCTO AGREGADO" Foreground="#63758B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                    <TextBlock x:Name="ProductSummaryCode" Grid.Column="1" Foreground="#2858A2" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="ProductSummaryName" Grid.Column="2" Foreground="#172B45" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="ProductSummaryPrice" Grid.Column="3" Foreground="#173F78" FontSize="17" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Grid>
+                        <Grid x:Name="ProductSummaryDetails" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="PRODUCTO AGREGADO" Foreground="#63758B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <TextBlock x:Name="ProductSummaryCode" Grid.Column="1" Foreground="#2858A2" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="ProductSummaryName" Grid.Column="2" Foreground="#172B45" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="ProductSummaryPrice" Grid.Column="3" Foreground="#173F78" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock x:Name="CartWorkspaceStatusLabel" Text="{Binding CartWorkspaceStatus}" Foreground="#52667E" FontSize="12"
+                                   VerticalAlignment="Center" ToolTip="Estado del guardado del carrito en el servidor"/>
+                    </Grid>
+                    <Button Grid.Column="1" Content="Pausar venta · F6" IsEnabled="{Binding CanPauseSale}" Click="PauseSale_Click"
+                            Padding="12,7" Margin="8,0,0,0" Background="#EAF1FB" Foreground="#214B8A" BorderBrush="#C7D7ED"
+                            FontWeight="SemiBold" ToolTip="Guardar esta venta y comenzar otra (F6)" AutomationProperties.Name="Pausar venta, tecla F6"/>
+                    <Button Grid.Column="2" Content="Ventas pausadas · F7" IsEnabled="{Binding CanViewPausedSales}" Click="PausedSales_Click"
+                            Padding="12,7" Margin="8,0,0,0" Background="#214B8A" Foreground="White" BorderThickness="0"
+                            FontWeight="SemiBold" ToolTip="Ver, retomar o descartar ventas de esta terminal (F7)" AutomationProperties.Name="Ver ventas pausadas, tecla F7"/>
+                    <Button x:Name="AcceptCartValuesButton" Grid.Column="3" Content="Aceptar valores actuales" Visibility="Collapsed" Click="AcceptCartValues_Click"
+                            Padding="12,7" Margin="8,0,0,0" Background="#FFF4D6" Foreground="#714C00" BorderBrush="#E8C66B"
+                            FontWeight="SemiBold" ToolTip="Confirma los precios, impuestos y moneda actuales antes de continuar"/>
                 </Grid>
             </Border>
             <DataGrid x:Name="CartGrid" Grid.Row="3" Margin="0,0,0,0" ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
@@ -216,7 +232,7 @@
                       PreviewKeyDown="CartGrid_PreviewKeyDown" LoadingRow="CartGrid_LoadingRow" AutomationProperties.Name="Artículos de la venta"
                       ToolTip="F8 va a la cantidad; flechas arriba/abajo cambian de artículo; Supr elimina la fila.">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Código" Binding="{Binding Product.Sku}" Width="135" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Código" Binding="{Binding Product.Sku}" Width="105" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Descripción" Binding="{Binding Product.Name}" Width="*" IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -228,8 +244,8 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="155" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Cantidad" Width="95">
+                    <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="115" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Cantidad" Width="75">
                         <DataGridTextColumn.Binding>
                             <Binding Path="Quantity" UpdateSourceTrigger="LostFocus" StringFormat="{}{0:0.###}" ValidatesOnExceptions="True" NotifyOnValidationError="True">
                                 <Binding.ValidationRules>
@@ -238,12 +254,17 @@
                             </Binding>
                         </DataGridTextColumn.Binding>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="125" IsReadOnly="True"/>
-                    <DataGridTemplateColumn Header="Acciones" Width="95" IsReadOnly="True">
+                    <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="95" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Nivel" Binding="{Binding PriceTierLabel}" Width="95" IsReadOnly="True"/>
+                    <DataGridTemplateColumn Header="Acciones" Width="120" IsReadOnly="True">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="Quitar" MinWidth="76" Height="30" Padding="6,2" Background="#A52F3B" Foreground="White"
+                                    <Button Content="Precio" MinWidth="50" Height="30" Padding="3,2" Margin="0,0,3,0" Background="#2858A2" Foreground="White"
+                                            IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            Click="EditCartLine_Click" AutomationProperties.Name="Elegir Precio 1, Precio 2 o Precio 3 para esta línea"
+                                            ToolTip="Cambiar el nivel de precio de este artículo."/>
+                                    <Button Content="Quitar" MinWidth="56" Height="30" Padding="3,2" Background="#A52F3B" Foreground="White"
                                             IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                             Click="RemoveCartLine_Click" AutomationProperties.Name="Eliminar artículo de esta fila"
                                             ToolTip="Quitar este artículo del carrito."/>

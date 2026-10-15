@@ -19,6 +19,11 @@ public partial class InventoryWindow : Window
     internal InventoryWindow(PosViewModel viewModel, IReadOnlyList<LoadedDesktopModule>? modules = null)
     {
         InitializeComponent();
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(Width, workArea.Width - 32);
+        Height = Math.Min(Height, workArea.Height - 48);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
         _viewModel = viewModel;
         _modules = modules ?? [];
         Loaded += async (_, _) =>
@@ -97,6 +102,7 @@ public partial class InventoryWindow : Window
         var item = InventoryGrid.SelectedItem as InventoryItemInfo;
         SelectedProductName.Text = item?.Name ?? "Selecciona un producto";
         SelectedProductSku.Text = item is null ? string.Empty : $"Código: {item.Sku}";
+        SelectedProductCost.Text = item is null ? string.Empty : $"Costo promedio: {item.UnitCostLabel}";
         ProductImagePreview.Source = null;
         ProductImagePreview.Visibility = Visibility.Collapsed;
         ProductImagePlaceholder.Visibility = Visibility.Visible;
@@ -106,6 +112,7 @@ public partial class InventoryWindow : Window
         ToggleProductActiveButton.IsEnabled = item is not null;
         ToggleProductActiveButton.Content = item?.Active == true ? "Desactivar producto" : "Reactivar producto";
         ChangePriceButton.IsEnabled = item?.Active == true;
+        InitializeCostButton.IsEnabled = item?.Active == true && item.Quantity > 0m && !item.UnitCost.HasValue;
         ChangeTaxTreatmentButton.IsEnabled = item is not null;
         TaxTreatmentStatusLabel.Text = item is null ? string.Empty : $"Impuesto: {item.TaxTreatmentLabel}";
         ChangeTaxTreatmentButton.Content = item?.TaxTreatment == "Unclassified" ? "Asignar impuesto" : "Cambiar impuesto";
@@ -216,8 +223,10 @@ public partial class InventoryWindow : Window
         EditProductButton.IsEnabled = false;
         ToggleProductActiveButton.IsEnabled = false;
         ChangePriceButton.IsEnabled = false;
+        InitializeCostButton.IsEnabled = false;
         ChangeTaxTreatmentButton.IsEnabled = false;
         TaxTreatmentStatusLabel.Text = string.Empty;
+        SelectedProductCost.Text = string.Empty;
         AdjustButton.IsEnabled = false;
     }
 
@@ -227,6 +236,21 @@ public partial class InventoryWindow : Window
         if (!item.Active) { StatusLabel.Text = "Reactiva el producto antes de cambiar su precio."; return; }
         if (new ProductPriceWindow(_viewModel, item) { Owner = this }.ShowDialog() == true)
         { StatusLabel.Text = "Precio actualizado."; await LoadAsync(); }
+    }
+
+    private async void InitializeCost_Click(object sender, RoutedEventArgs e)
+    {
+        if (InventoryGrid.SelectedItem is not InventoryItemInfo item) { StatusLabel.Text = "Selecciona un producto."; return; }
+        if (item.Quantity <= 0m || item.UnitCost.HasValue)
+        {
+            StatusLabel.Text = "Solo puedes asignar el costo inicial a un producto con existencias y sin costo conocido.";
+            return;
+        }
+        if (new ProductPriceWindow(_viewModel, item, initialCostMode: true) { Owner = this }.ShowDialog() == true)
+        {
+            await LoadAsync(item.Id);
+            StatusLabel.Text = "Costo inicial guardado y registrado en auditoría. Ya puedes volver a revisar las sugerencias de la factura.";
+        }
     }
 
     private async void ChangeTaxTreatment_Click(object sender, RoutedEventArgs e)

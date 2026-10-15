@@ -29,7 +29,8 @@ public enum Permission
     ViewPurchases,
     ManagePurchases,
     ManageSupplierPayments,
-    ViewFinancialReports
+    ViewFinancialReports,
+    InitializeInventoryCost
 }
 
 public enum PermissionOverrideMode { Inherit, Allow, RequireAdminPin, Deny }
@@ -51,7 +52,7 @@ public static class OperatorPermissionPolicy
             PermissionOverrideMode.Deny => PermissionAccessMode.Deny,
             _ => RolePermissionPolicy.For(role).Can(permission)
                 ? PermissionAccessMode.Allow
-                : permission is Permission.OverrideSalePrice or Permission.ManageSupplierPayments
+                : permission is Permission.OverrideSalePrice or Permission.ManageSupplierPayments or Permission.InitializeInventoryCost
                     ? PermissionAccessMode.RequireAdminPin
                     : PermissionAccessMode.Deny
         };

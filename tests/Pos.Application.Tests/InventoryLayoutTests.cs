@@ -23,7 +23,11 @@ public sealed class InventoryLayoutTests
         var document = LoadInventoryView();
         var button = Assert.Single(document.Descendants(Presentation + "Button"),
             x => (string?)x.Attribute(Xaml + "Name") == "ChangePriceButton");
-        Assert.Contains(button.Ancestors(Presentation + "Border"), x => (string?)x.Attribute("Grid.Column") == "1");
+        var productDetails = Assert.Single(document.Descendants(Presentation + "ScrollViewer"),
+            x => (string?)x.Attribute(Xaml + "Name") == "ProductDetailsScrollViewer");
+        Assert.Equal("1", (string?)productDetails.Attribute("Grid.Column"));
+        Assert.Contains(productDetails.Descendants(Presentation + "Border"), border =>
+            border.Descendants(Presentation + "Button").Contains(button));
     }
 
     [Fact]
@@ -74,10 +78,27 @@ public sealed class InventoryLayoutTests
             (string?)x.Attribute("Grid.Row") == "4" && x.Descendants(Presentation + "TextBox").Any());
         Assert.Contains(adjustmentBar.Descendants(Presentation + "Button"), x =>
             (string?)x.Attribute(Xaml + "Name") == "AdjustButton");
-        var productPanel = Assert.Single(document.Descendants(Presentation + "Border"), x =>
-            (string?)x.Attribute("Grid.Column") == "1");
+        var productPanel = Assert.Single(document.Descendants(Presentation + "ScrollViewer"), x =>
+            (string?)x.Attribute(Xaml + "Name") == "ProductDetailsScrollViewer");
+        Assert.Equal("1", (string?)productPanel.Attribute("Grid.Column"));
         Assert.DoesNotContain(productPanel.Descendants(Presentation + "TextBox"), x =>
             (string?)x.Attribute(Xaml + "Name") is "DeltaBox" or "ReasonBox");
+    }
+
+    [Fact]
+    public void Inventory_history_window_uses_available_screen_space()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Prompt_Maestro_POS_Escritorio_TDD.md")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var form = XDocument.Load(Path.Combine(directory!.FullName, "src", "Pos.Desktop", "InventoryMovementsWindow.xaml"));
+        var window = Assert.IsType<XElement>(form.Root);
+        Assert.True(double.Parse((string)window.Attribute("Width")!, System.Globalization.CultureInfo.InvariantCulture) >= 1250);
+        Assert.True(double.Parse((string)window.Attribute("Height")!, System.Globalization.CultureInfo.InvariantCulture) >= 740);
+
+        var code = File.ReadAllText(Path.Combine(directory.FullName, "src", "Pos.Desktop", "InventoryMovementsWindow.xaml.cs"));
+        Assert.Contains("SystemParameters.WorkArea", code);
     }
 
     [Fact]

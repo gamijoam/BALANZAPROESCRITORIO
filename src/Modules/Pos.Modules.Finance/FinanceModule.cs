@@ -535,11 +535,7 @@ public sealed class FinanceModule : IPosServerModule
 
     private static async Task<List<InvoiceReceiptCostLine>> LoadInvoiceReceiptCostsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid invoiceId, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand($"""
-            SELECT l.id,l.product_id,l.quantity,l.received_quantity,l.unit_price,l.discount,l.tax,l.tax_recoverable,p.\"Currency\"
-            FROM {Table("purchase_invoice_lines")} l JOIN products p ON p.\"Id\"=l.product_id
-            WHERE l.invoice_id=@invoice ORDER BY l.id FOR UPDATE OF l
-            """, connection, transaction);
+        await using var command = new NpgsqlCommand(FinanceSql.LoadInvoiceReceiptCosts(Table("purchase_invoice_lines")), connection, transaction);
         command.Parameters.AddWithValue("invoice", invoiceId); await using var reader = await command.ExecuteReaderAsync(ct);
         var rows = new List<InvoiceReceiptCostLine>(); while (await reader.ReadAsync(ct))
             rows.Add(new(reader.GetGuid(0), reader.GetGuid(1), reader.GetDecimal(2), reader.GetDecimal(3), reader.GetDecimal(4), reader.GetDecimal(5), reader.GetDecimal(6), reader.GetBoolean(7), reader.GetString(8)));
@@ -953,7 +949,7 @@ public sealed class FinanceModule : IPosServerModule
 
     private static async Task<decimal?> ReadCurrentUsdToVesRateAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
     {
-        await using var command = new NpgsqlCommand("SELECT rate FROM exchange_rates WHERE \"FromCurrency\"='USD' AND \"ToCurrency\"='VES' AND \"EffectiveAtUtc\"<=@now ORDER BY \"EffectiveAtUtc\" DESC LIMIT 1", connection, transaction);
+        await using var command = new NpgsqlCommand(FinanceSql.ReadCurrentUsdToVesRate, connection, transaction);
         command.Parameters.AddWithValue("now", DateTime.UtcNow); var value = await command.ExecuteScalarAsync(ct);
         return value is null or DBNull ? null : Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture);
     }

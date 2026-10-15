@@ -4,7 +4,7 @@ using Pos.Shared.Contracts;
 namespace Pos.Desktop.Presentation;
 
 public sealed record ProductInfo(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage = false, decimal? StockQuantity = null,
-    decimal? Price2 = null, decimal? Price3 = null, string TaxTreatment = "Unclassified")
+    decimal? Price2 = null, decimal? Price3 = null, string TaxTreatment = "Unclassified", bool Active = true)
 {
     public string PriceLabel => $"{Currency} {UnitPrice:N2}";
     public bool IsTaxClassified => TaxTreatment is "Taxable16" or "Taxable8" or "Taxable0" or "Exempt";
@@ -82,6 +82,8 @@ public sealed record InventoryItemInfo(Guid Id, string Sku, string Name, decimal
     public string ActiveStatusLabel => Active ? "Activo" : "Inactivo";
     public decimal? Price2 { get; init; }
     public decimal? Price3 { get; init; }
+    public decimal? UnitCost { get; init; }
+    public string UnitCostLabel => UnitCost.HasValue ? $"{Currency} {UnitCost.Value:N4}" : "Sin costo inicial";
     public string TaxTreatment { get; init; } = "Unclassified";
     public string TaxTreatmentLabel => TaxTreatment switch
     {
@@ -332,6 +334,23 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
     Task<StockMovementPageInfo> GetStockMovementsAsync(Guid productId, int offset = 0, int limit = 100, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ProductInfo>> SearchProductsAsync(string query, CancellationToken cancellationToken = default);
     Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId = null, CancellationToken cancellationToken = default);
+    Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId,
+        string idempotencyKey, Guid? exchangeRateId, Guid? cartWorkspaceId, CancellationToken cancellationToken = default)
+        => CheckoutAsync(cashSessionId, lines, payments, customerId, idempotencyKey, exchangeRateId, cancellationToken);
+    Task<CartWorkspaceSnapshot> GetActiveCartWorkspaceAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no recupera el carrito activo del servidor.");
+    Task<CartWorkspaceSnapshot> SaveActiveCartWorkspaceAsync(CartWorkspaceSaveRequest request, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no sincroniza el carrito activo.");
+    Task<CartWorkspaceSnapshot> PauseActiveCartWorkspaceAsync(CartWorkspacePauseRequest request, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no pausa ventas.");
+    Task<IReadOnlyList<CartWorkspaceSnapshot>> GetPausedCartWorkspacesAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta ventas pausadas.");
+    Task<CartWorkspaceSnapshot> GetPausedCartWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta una venta pausada.");
+    Task<CartWorkspaceSnapshot> ResumeCartWorkspaceAsync(Guid workspaceId, CartWorkspaceTransitionRequest request, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no retoma ventas pausadas.");
+    Task DiscardCartWorkspaceAsync(Guid workspaceId, CartWorkspaceTransitionRequest request, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no descarta ventas pausadas.");
     Task<IReadOnlyList<CustomerInfo>> GetCustomersAsync(string? query, CancellationToken cancellationToken = default);
     Task<CustomerInfo> CreateCustomerAsync(string name, string? documentNumber, string? phone, string currency, decimal creditLimit, CancellationToken cancellationToken = default);
     Task<CustomerInfo> UpdateCustomerAsync(Guid customerId, string name, string? documentNumber, string? phone, decimal creditLimit, CancellationToken cancellationToken = default)
@@ -341,6 +360,8 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
     Task ChangePriceAsync(Guid productId, decimal newPrice, string reason, CancellationToken cancellationToken = default);
     Task ChangePriceAsync(Guid productId, string priceTier, decimal newPrice, string reason, CancellationToken cancellationToken = default)
         => ChangePriceAsync(productId, newPrice, reason, cancellationToken);
+    Task InitializeProductCostAsync(Guid productId, decimal unitCost, string reason, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no permite inicializar el costo del inventario.");
     Task ApplySuggestedPriceAsync(Guid productId, string priceTier, decimal newPrice, decimal? expectedCurrentPrice,
         decimal expectedUnitCost, string reason, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite aplicar una sugerencia de precio con verificación de costo.");
