@@ -46,7 +46,23 @@ public sealed class FinancialCatalogLayoutAcceptanceTests
         Assert.Contains("InitializeProductCostAsync", priceWindowCode);
 
         var suggestions = File.ReadAllText(Path.Combine(root.FullName, "src", "Modules", "Pos.Modules.Finance.Desktop", "PriceSuggestionWindow.xaml.cs"));
-        Assert.Contains("asigna el costo inicial desde Inventario", suggestions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("asígnalo desde Inventario", suggestions, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Creating_a_product_with_initial_cost_requires_the_existing_cost_permission_and_writes_audit()
+    {
+        var createForm = Load("ProductCreateWindow.xaml");
+        Assert.Contains("InitialCostBox", createForm.ToString(), StringComparison.Ordinal);
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot().FullName, "src", "Pos.Server", "Hito4Endpoints.cs"));
+
+        Assert.Contains("request.InitialCost.HasValue", source, StringComparison.Ordinal);
+        Assert.Contains("Permission.InitializeInventoryCost", source, StringComparison.Ordinal);
+        Assert.Contains("inventory.initial_cost_set", source, StringComparison.Ordinal);
+        Assert.Contains("request.InitialCost", source, StringComparison.Ordinal);
+        Assert.True(source.IndexOf("AuthorizedAsync(context, auth, Permission.InitializeInventoryCost", StringComparison.Ordinal) <
+                    source.IndexOf("db.Products.Add(new ProductRecord", StringComparison.Ordinal),
+            "The existing cost permission must be checked before the product or initial stock is created.");
     }
 
     [Fact]

@@ -44,7 +44,7 @@ public static class FinancePurchasePolicy
         if (unitCost is null || targetGrossMargin is null) return null;
         if (unitCost < 0m || targetGrossMargin < 0m || targetGrossMargin >= 1m)
             throw new ArgumentOutOfRangeException(nameof(targetGrossMargin), "El costo debe ser no negativo y el margen debe estar entre 0 % y menos de 100 %.");
-        return Round(unitCost.Value / (1m - targetGrossMargin.Value));
+        return decimal.Round(unitCost.Value / (1m - targetGrossMargin.Value), 2, MidpointRounding.AwayFromZero);
     }
 
     public static ImmediateSettlement CalculateImmediateSettlement(decimal invoiceTotal, string invoiceCurrency,

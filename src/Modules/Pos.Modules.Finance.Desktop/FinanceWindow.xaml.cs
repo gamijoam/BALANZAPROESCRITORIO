@@ -135,8 +135,8 @@ public partial class FinanceWindow : Window
                 new PriceSuggestionMarginRequest(price1, price2, price3, costBasis));
             await LoadPriceSuggestionMarginsAsync();
             SetStatus(costBasis == LastReceivedCostBasis
-                ? "Márgenes y costo base guardados. Las sugerencias usarán la recepción válida más reciente de cada artículo."
-                : "Márgenes y costo base guardados. Las sugerencias usarán el costo promedio ponderado del inventario.");
+                ? "Márgenes y costo base guardados. Se usará la recepción válida más reciente; antes de la primera recepción, el costo inicial del producto."
+                : "Márgenes y costo base guardados. Se usará el costo promedio ponderado; antes de la primera recepción, el costo inicial del producto.");
         }
         catch (Exception exception) { SetStatus(UserMessage(exception), true); }
         finally { SavePriceMarginsButton.IsEnabled = true; }
@@ -561,8 +561,7 @@ public partial class FinanceWindow : Window
         ReverseReceiptButton.IsEnabled = managePurchases && ReceiptsGrid.SelectedItem is PurchaseReceiptClientInfo { Header: { CompletedAtUtc: not null, ReversedAtUtc: null } };
         ReversePaymentButton.IsEnabled = managePayments && PaymentsGrid.SelectedItem is SupplierPaymentClientInfo { ReversedAtUtc: null };
         ViewPriceSuggestionsButton.IsEnabled = _context.GrantedPermissions.Contains("PriceSuggestion.Manage") &&
-            _selectedPurchase is not null && ReceiptsGrid.Items.Cast<object>().OfType<PurchaseReceiptClientInfo>()
-                .Any(receipt => receipt.Header.CompletedAtUtc.HasValue && !receipt.Header.ReversedAtUtc.HasValue);
+            _selectedPurchase is not null;
         ToggleSupplierButton.IsEnabled = SupplierGrid.SelectedItem is SupplierClientInfo;
     }
 

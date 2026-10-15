@@ -38,16 +38,17 @@ public partial class PriceSuggestionWindow : Window
             SuggestionsEmptyLabel.Visibility = _suggestions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             var costBasis = result?.CostBasis == LastReceivedCostBasis ? LastReceivedCostBasis : WeightedAverageCostBasis;
             CostBasisSummary.Text = costBasis == LastReceivedCostBasis
-                ? "Base seleccionada: último costo recibido. Se usa la recepción completada y vigente más reciente; no incluye flete ni impuestos."
-                : "Base seleccionada: promedio ponderado registrado en el inventario.";
+                ? "Base seleccionada: último costo recibido. Antes de la primera recepción se usa el costo inicial del producto; no incluye flete ni impuestos."
+                : "Base seleccionada: promedio ponderado registrado en el inventario. Antes de la primera recepción se usa el costo inicial del producto.";
             var details = new List<string>();
-            if (result?.HasReceivedItems != true) details.Add("La factura todavía no tiene artículos recibidos.");
+            if (result?.HasReceivedItems != true) details.Add("La factura todavía no tiene artículos recibidos; las propuestas pueden usar el costo inicial del producto si no hay recepciones anteriores.");
             if (result?.MissingMarginTiers.Count > 0)
                 details.Add("Sin margen configurado: " + string.Join(", ", result.MissingMarginTiers.Select(FinanceDisplayText.PriceTier)) + ".");
             if (result?.UnavailableProducts.Count > 0)
                 details.Add("Artículos sin propuesta: " + string.Join("; ", result.UnavailableProducts.Select(item => $"{item.Sku} ({item.Reason})")) + ".");
-            if (result?.UnavailableProducts.Any(item => item.Reason.Contains("costo promedio", StringComparison.OrdinalIgnoreCase)) == true)
-                details.Add("Para artículos con existencias previas sin costo, asigna el costo inicial desde Inventario.");
+            if (result?.UnavailableProducts.Any(item => item.Reason.Contains("costo promedio", StringComparison.OrdinalIgnoreCase) ||
+                    item.Reason.Contains("costo inicial", StringComparison.OrdinalIgnoreCase)) == true)
+                details.Add("Registra el costo inicial al crear el artículo o asígnalo desde Inventario.");
             if (result?.UnavailableProducts.Any(item => item.Reason.Contains("costo de inventario inicializado", StringComparison.OrdinalIgnoreCase)) == true)
                 details.Add("Para confirmar una sugerencia de último costo, el artículo también necesita un costo de inventario inicializado para la validación de seguridad.");
             details.Add(_suggestions.Count == 0
@@ -74,11 +75,9 @@ public partial class PriceSuggestionWindow : Window
             SuggestionStatus.Foreground = System.Windows.Media.Brushes.Firebrick;
             return;
         }
-        var source = suggestion.CostBasis == LastReceivedCostBasis
-            ? $"\nRecepción de origen: {suggestion.CostSourceDocumentNumber} ({suggestion.CostReceivedAtUtc?.ToLocalTime():dd/MM/yyyy HH:mm})."
-            : "";
+        var suggestedPrice = decimal.Round(suggestion.SuggestedPrice, 2, MidpointRounding.AwayFromZero);
         var confirm = MessageBox.Show(this,
-            $"¿Confirmas cambiar {suggestion.PriceTierLabel} de {suggestion.Name} a {suggestion.Currency} {suggestion.SuggestedPrice:N4}?\n\nBase: {suggestion.CostBasisLabel}\nCosto utilizado: {suggestion.Currency} {suggestion.UnitCost:N4}{source}\nMargen bruto: {suggestion.MarginPercent:N2} %\nFactura revisada: {suggestion.DocumentNumber}",
+            $"¿Confirmas cambiar {suggestion.PriceTierLabel} de {suggestion.Name} a {FormatMoney(suggestion.Currency, suggestedPrice)}?\n\nBase: {suggestion.CostBasisLabel}\nOrigen del costo: {suggestion.CostSourceLabel}\nCosto utilizado: {FormatMoney(suggestion.Currency, suggestion.UnitCost)}\nMargen bruto: {suggestion.MarginPercent:N2} %\nFactura revisada: {suggestion.DocumentNumber}",
             "Confirmar cambio de precio", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
         try
@@ -86,7 +85,7 @@ public partial class PriceSuggestionWindow : Window
             ApplySuggestionButton.IsEnabled = false;
             var api = _context.ReportApiClient ?? throw new InvalidOperationException("El cliente del servicio no está disponible.");
             var reason = $"Sugerencia financiera ({suggestion.CostBasisLabel}) por margen {suggestion.MarginPercent.ToString("0.##", CultureInfo.InvariantCulture)} %; costo {suggestion.Currency} {suggestion.UnitCost.ToString("0.####", CultureInfo.InvariantCulture)}; factura {suggestion.DocumentNumber}.";
-            await api.ApplySuggestedPriceAsync(suggestion.ProductId, suggestion.PriceTier, suggestion.SuggestedPrice,
+            await api.ApplySuggestedPriceAsync(suggestion.ProductId, suggestion.PriceTier, suggestedPrice,
                 suggestion.CurrentPrice, suggestion.ProductCostSnapshot.Value, reason);
             SuggestionStatus.Foreground = System.Windows.Media.Brushes.DarkGreen;
             SuggestionStatus.Text = $"Se actualizó {suggestion.PriceTierLabel} de {suggestion.Sku}; el historial de precios conserva el usuario, la fecha y la factura de origen.";
@@ -107,17 +106,23 @@ public partial class PriceSuggestionWindow : Window
         IReadOnlyList<PriceSuggestionUnavailableClientInfo> UnavailableProducts, bool HasReceivedItems);
     public sealed record PriceSuggestionClientInfo(Guid ProductId, string Sku, string Name, string Currency, decimal UnitCost,
         string PriceTier, decimal MarginPercent, decimal? CurrentPrice, decimal SuggestedPrice, Guid InvoiceId, string DocumentNumber,
-        decimal? ProductCostSnapshot, string? CostBasis, string? CostSourceDocumentNumber, DateTime? CostReceivedAtUtc)
+        decimal? ProductCostSnapshot, string? CostBasis, string? CostSourceKind, string? CostSourceDocumentNumber, DateTime? CostReceivedAtUtc)
     {
         public string PriceTierLabel => FinanceDisplayText.PriceTier(PriceTier);
         public string CostBasisLabel => CostBasis == LastReceivedCostBasis ? "Último costo recibido" : "Promedio ponderado";
-        public string CostLabel => $"{Currency} {UnitCost:N4}";
-        public string CostSourceLabel => CostBasis == LastReceivedCostBasis
-            ? $"{CostSourceDocumentNumber ?? "Recepción"} · {CostReceivedAtUtc?.ToLocalTime():dd/MM/yyyy HH:mm}"
-            : "Costo actual de inventario";
+        public string CostLabel => FormatMoney(Currency, UnitCost);
+        public string CostSourceLabel => CostSourceKind switch
+        {
+            "InitialCost" => "Costo inicial",
+            "Receipt" => $"{CostSourceDocumentNumber ?? "Recepción"} · {CostReceivedAtUtc?.ToLocalTime():dd/MM/yyyy HH:mm}",
+            _ => "Promedio ponderado del inventario"
+        };
         public string MarginLabel => $"{MarginPercent:N2} %";
-        public string CurrentPriceLabel => CurrentPrice.HasValue ? $"{Currency} {CurrentPrice.Value:N4}" : "Sin configurar";
-        public string SuggestedPriceLabel => $"{Currency} {SuggestedPrice:N4}";
+        public string CurrentPriceLabel => CurrentPrice.HasValue ? FormatMoney(Currency, CurrentPrice.Value) : "Sin configurar";
+        public string SuggestedPriceLabel => FormatMoney(Currency, decimal.Round(SuggestedPrice, 2, MidpointRounding.AwayFromZero));
     }
     public sealed record PriceSuggestionUnavailableClientInfo(Guid ProductId, string Sku, string Name, string Reason);
+
+    private static string FormatMoney(string currency, decimal value)
+        => $"{currency} {value.ToString("N2", CultureInfo.GetCultureInfo("es-VE"))}";
 }

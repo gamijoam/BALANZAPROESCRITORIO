@@ -79,23 +79,29 @@ public static class FinancePriceSuggestionCostPolicy
     }
 
     public static SelectedPriceSuggestionCost Choose(string basis, decimal? weightedAverageCost,
-        ReceivedCostSource? latestReceivedCost)
+        ReceivedCostSource? latestReceivedCost, bool hasReceiptHistory = true)
     {
         if (basis == WeightedAverage)
         {
             return weightedAverageCost is >= 0m
-                ? new(basis, weightedAverageCost, null, null)
-                : new(basis, null, null, "No hay un costo promedio válido para este artículo.");
+                ? new(basis, weightedAverageCost, null, null, hasReceiptHistory ? "WeightedAverage" : "InitialCost")
+                : new(basis, null, null, hasReceiptHistory
+                    ? "No hay un costo promedio válido para este artículo."
+                    : "No hay un costo inicial registrado para este artículo.", null);
         }
 
         if (basis == LastReceivedCost)
         {
             return latestReceivedCost is { UnitCost: >= 0m }
-                ? new(basis, latestReceivedCost.UnitCost, latestReceivedCost, null)
-                : new(basis, null, null, "No hay una recepción completada y vigente con un costo válido para este artículo.");
+                ? new(basis, latestReceivedCost.UnitCost, latestReceivedCost, null, "Receipt")
+                : !hasReceiptHistory && weightedAverageCost is >= 0m
+                    ? new(basis, weightedAverageCost, null, null, "InitialCost")
+                    : new(basis, null, null, hasReceiptHistory
+                        ? "No hay una recepción completada y vigente con un costo válido para este artículo."
+                        : "No hay un costo inicial registrado para este artículo.", null);
         }
 
-        return new(basis, null, null, "El método de costo configurado no es válido.");
+        return new(basis, null, null, "El método de costo configurado no es válido.", null);
     }
 }
 
@@ -105,4 +111,4 @@ public sealed record ReceivedCostLine(Guid ProductId, Guid ReceiptId, string Doc
     decimal Quantity, decimal UnitCost, string CostCurrency, decimal UsdToVesRate);
 
 public sealed record SelectedPriceSuggestionCost(string Basis, decimal? UnitCost,
-    ReceivedCostSource? ReceiptSource, string? UnavailableReason);
+    ReceivedCostSource? ReceiptSource, string? UnavailableReason, string? SourceKind);

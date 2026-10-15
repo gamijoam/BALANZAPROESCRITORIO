@@ -180,15 +180,19 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
 
     public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
         string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
+        => await CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, null, cancellationToken);
+
+    public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
+        string taxTreatment, string currency, decimal initialStock, decimal? initialCost, CancellationToken cancellationToken = default)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/products");
-        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, initialCost }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<ProductCreateResponse>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("The service returned an empty product response.");
         return new InventoryItemInfo(result.Id, result.Sku, result.Name, result.UnitPrice, result.Currency, result.InitialStock, result.HasImage)
-        { Price2 = result.Price2, Price3 = result.Price3, TaxTreatment = result.TaxTreatment };
+        { Price2 = result.Price2, Price3 = result.Price3, UnitCost = result.UnitCost, TaxTreatment = result.TaxTreatment };
     }
 
     public async Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
@@ -1006,6 +1010,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     private sealed record StockAdjustmentResponse(Guid Id, Guid ProductId, decimal QuantityDelta, decimal Quantity, string? Reason, DateTime OccurredAtUtc);
     private sealed record ProductCreateResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, decimal InitialStock, bool HasImage = false)
     {
+        public decimal? UnitCost { get; init; }
         public decimal? Price2 { get; init; }
         public decimal? Price3 { get; init; }
         public string TaxTreatment { get; init; } = "Unclassified";

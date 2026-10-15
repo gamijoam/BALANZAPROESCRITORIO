@@ -7,7 +7,13 @@ public static class InventoryCostPolicy
     {
         if (currentUnitCost.HasValue)
             throw new InvalidOperationException("inventory_cost_already_initialized");
-        if (initialUnitCost < 0m || decimal.Round(initialUnitCost, 4) != initialUnitCost)
+        ValidateOptionalInitialCost(initialUnitCost);
+        return initialUnitCost;
+    }
+
+    public static decimal? ValidateOptionalInitialCost(decimal? initialUnitCost)
+    {
+        if (initialUnitCost.HasValue && (initialUnitCost.Value < 0m || decimal.Round(initialUnitCost.Value, 4) != initialUnitCost.Value))
             throw new ArgumentOutOfRangeException(nameof(initialUnitCost), "El costo inicial debe ser no negativo y tener hasta cuatro decimales.");
         return initialUnitCost;
     }

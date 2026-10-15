@@ -58,6 +58,30 @@ public sealed class PosApiClientInventoryTests
     }
 
     [Fact]
+    public async Task Product_create_sends_and_maps_the_optional_initial_cost()
+    {
+        var id = Guid.NewGuid();
+        using var handler = new InventoryHandler(async (request, ct) =>
+        {
+            Assert.Equal(HttpMethod.Post, request.Method);
+            Assert.Equal("/api/v1/products", request.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            Assert.Equal(1.2345m, body.RootElement.GetProperty("initialCost").GetDecimal());
+            return new HttpResponseMessage(HttpStatusCode.Created)
+            {
+                Content = JsonContent.Create(new { id, sku = "PAN-2", name = "Harina", unitPrice = 4m, price2 = (decimal?)null,
+                    price3 = (decimal?)null, taxTreatment = "Exempt", currency = "USD", initialStock = 8m,
+                    unitCost = 1.2345m, hasImage = false })
+            };
+        });
+        using var client = await CreateClientAsync(handler);
+
+        var result = await client.CreateProductAsync("PAN-2", "Harina", 4m, null, null, "Exempt", "USD", 8m, 1.2345m);
+
+        Assert.Equal(1.2345m, result.UnitCost);
+    }
+
+    [Fact]
     public async Task Product_tax_and_selected_price_tier_use_their_service_endpoints()
     {
         var id = Guid.NewGuid();

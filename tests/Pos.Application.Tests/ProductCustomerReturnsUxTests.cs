@@ -18,6 +18,20 @@ public sealed class ProductCustomerReturnsUxTests
     }
 
     [Fact]
+    public void New_product_form_exposes_an_optional_initial_cost_in_the_selected_product_currency()
+    {
+        var document = LoadView("ProductCreateWindow.xaml");
+        var cost = Assert.Single(document.Descendants(Presentation + "TextBox"),
+            x => (string?)x.Attribute(Xaml + "Name") == "InitialCostBox");
+        Assert.True(string.IsNullOrEmpty((string?)cost.Attribute("Text")));
+        Assert.Contains("Costo inicial", document.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        var source = LoadSource("ProductCreateWindow.xaml.cs");
+        Assert.Contains("CreateProductAsync", source);
+        Assert.Contains("InitialCostBox.Text", source);
+    }
+
+    [Fact]
     public void Successful_customer_creation_does_not_leave_a_bottom_success_legend()
     {
         var source = LoadSource("CustomersWindow.xaml.cs");

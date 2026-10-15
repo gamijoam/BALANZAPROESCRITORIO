@@ -52,8 +52,9 @@ public sealed class FinanceModuleContractTests
         => Assert.Equal(40m, FinancePurchasePolicy.CalculateInvoiceTotal(40m, 5m, 3m, 2m));
 
     [Theory]
-    [InlineData(10, 0.25, 13.3333)]
+    [InlineData(10, 0.25, 13.33)]
     [InlineData(12.5, 0, 12.5)]
+    [InlineData(1.005, 0, 1.01)]
     public void Suggested_price_uses_the_configured_gross_margin_and_decimal_rounding(
         decimal cost, decimal targetMargin, decimal expectedPrice)
         => Assert.Equal(expectedPrice, FinancePurchasePolicy.CalculateSuggestedPrice(cost, targetMargin));
@@ -86,7 +87,7 @@ public sealed class FinanceModuleContractTests
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
 
         Assert.Equal("finance", manifest.Id);
-        Assert.Equal("1.0.7", manifest.Version.ToString(3));
+        Assert.Equal("1.0.8", manifest.Version.ToString(3));
         Assert.NotNull(manifest.EntryAssembly);
         Assert.NotNull(manifest.DesktopEntryAssembly);
         Assert.Contains("Supplier.View", manifest.Permissions);
@@ -167,7 +168,7 @@ public sealed class FinanceModuleContractTests
         Assert.Contains("PriceSuggestion.Manage", manifest.Permissions);
         Assert.Contains("finance:0002", manifest.Migrations);
         Assert.Contains("finance:0003", manifest.Migrations);
-        Assert.Equal("1.0.7", manifest.Version.ToString(3));
+        Assert.Equal("1.0.8", manifest.Version.ToString(3));
 
         var settingsMigrationPath = Path.Combine(AppContext.BaseDirectory, "finance", "finance-0003.json");
         var settingsMigration = ModuleMigrationReader.Parse(File.ReadAllText(settingsMigrationPath));
@@ -197,14 +198,52 @@ public sealed class FinanceModuleContractTests
         var chooseCost = policy!.GetMethod("Choose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
         Assert.NotNull(chooseCost);
 
-        var unavailableLastCost = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, null]);
+        var unavailableLastCost = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, null, true]);
         Assert.NotNull(unavailableLastCost);
         Assert.Null(unavailableLastCost!.GetType().GetProperty("UnitCost")!.GetValue(unavailableLastCost));
         Assert.NotNull(unavailableLastCost.GetType().GetProperty("UnavailableReason")!.GetValue(unavailableLastCost));
 
-        var weightedAverageWithoutCost = chooseCost.Invoke(null, ["WeightedAverage", null, null]);
+        var weightedAverageWithoutCost = chooseCost.Invoke(null, ["WeightedAverage", null, null, true]);
         Assert.NotNull(weightedAverageWithoutCost);
         Assert.Null(weightedAverageWithoutCost!.GetType().GetProperty("UnitCost")!.GetValue(weightedAverageWithoutCost));
+    }
+
+    [Fact]
+    public void Explicit_initial_cost_is_used_and_identified_until_a_purchase_receipt_exists()
+    {
+        var policy = typeof(FinancePurchasePolicy).Assembly.GetType("Pos.Modules.Finance.FinancePriceSuggestionCostPolicy");
+        Assert.NotNull(policy);
+        var chooseCost = policy!.GetMethod("Choose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(chooseCost);
+
+        var initialCost = chooseCost!.Invoke(null, ["LastReceivedCost", 1.2345m, null, false]);
+        Assert.Equal(1.2345m, initialCost!.GetType().GetProperty("UnitCost")!.GetValue(initialCost));
+        Assert.Equal("InitialCost", initialCost.GetType().GetProperty("SourceKind")!.GetValue(initialCost)?.ToString());
+
+        var weightedInitialCost = chooseCost.Invoke(null, ["WeightedAverage", 1.2345m, null, false]);
+        Assert.Equal("InitialCost", weightedInitialCost!.GetType().GetProperty("SourceKind")!.GetValue(weightedInitialCost)?.ToString());
+        var weightedCostAfterReceipt = chooseCost.Invoke(null, ["WeightedAverage", 1.2345m, null, true]);
+        Assert.Equal("WeightedAverage", weightedCostAfterReceipt!.GetType().GetProperty("SourceKind")!.GetValue(weightedCostAfterReceipt)?.ToString());
+
+        var reversedHistoryOnly = chooseCost.Invoke(null, ["LastReceivedCost", 1.2345m, null, true]);
+        Assert.Null(reversedHistoryOnly!.GetType().GetProperty("UnitCost")!.GetValue(reversedHistoryOnly));
+        Assert.Contains("recepción completada", (string)reversedHistoryOnly.GetType().GetProperty("UnavailableReason")!.GetValue(reversedHistoryOnly)!, StringComparison.OrdinalIgnoreCase);
+
+        var noInitialCost = chooseCost.Invoke(null, ["LastReceivedCost", null, null, false]);
+        Assert.Contains("costo inicial", (string)noInitialCost!.GetType().GetProperty("UnavailableReason")!.GetValue(noInitialCost)!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Suggestion_endpoint_includes_draft_invoice_lines_and_distinguishes_initial_cost_from_receipts()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot().FullName, "src", "Modules", "Pos.Modules.Finance", "FinanceModule.cs"));
+
+        Assert.Contains("purchase_invoice_lines", source, StringComparison.Ordinal);
+        Assert.Contains("ReadReceiptHistoryProductIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("selectedCost.SourceKind", source, StringComparison.Ordinal);
+        var suggestion = typeof(FinanceModule).GetNestedType("PriceSuggestionInfo");
+        Assert.NotNull(suggestion);
+        Assert.Equal(typeof(string), suggestion!.GetProperty("CostSourceKind")?.PropertyType);
     }
 
     [Fact]
@@ -233,6 +272,7 @@ public sealed class FinanceModuleContractTests
         Assert.Equal(typeof(string), suggestion.GetProperty("CostBasis")?.PropertyType);
         Assert.Equal(typeof(string), suggestion.GetProperty("CostSourceDocumentNumber")?.PropertyType);
         Assert.Equal(typeof(DateTime?), suggestion.GetProperty("CostReceivedAtUtc")?.PropertyType);
+        Assert.Equal(typeof(string), suggestion.GetProperty("CostSourceKind")?.PropertyType);
     }
 
     [Fact]
@@ -245,7 +285,7 @@ public sealed class FinanceModuleContractTests
         var source = Activator.CreateInstance(sourceType!, [2m, Guid.NewGuid(), "F-2026-008", new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc)]);
         var chooseCost = policy!.GetMethod("Choose", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
 
-        var selected = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, source]);
+        var selected = chooseCost!.Invoke(null, ["LastReceivedCost", 1.25m, source, true]);
 
         Assert.Equal(2m, selected!.GetType().GetProperty("UnitCost")!.GetValue(selected));
         var receiptSource = selected.GetType().GetProperty("ReceiptSource")!.GetValue(selected);
@@ -318,5 +358,13 @@ public sealed class FinanceModuleContractTests
         Assert.Contains("GetModuleAsync", windowSource);
         Assert.Contains("PostModuleAsync", windowSource);
         Assert.NotNull(document.Root);
+    }
+
+    private static DirectoryInfo FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Prompt_Maestro_POS_Escritorio_TDD.md")))
+            directory = directory.Parent;
+        return directory ?? throw new DirectoryNotFoundException("No se encontró la raíz del proyecto POS.");
     }
 }

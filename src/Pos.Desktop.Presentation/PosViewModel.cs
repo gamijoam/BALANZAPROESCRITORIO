@@ -662,6 +662,9 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
         string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken);
+    public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
+        string taxTreatment, string currency, decimal initialStock, decimal? initialCost, CancellationToken cancellationToken = default)
+        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, initialCost, cancellationToken);
     public Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => _api.SetProductTaxTreatmentAsync(productId, taxTreatment, cancellationToken);
     public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)

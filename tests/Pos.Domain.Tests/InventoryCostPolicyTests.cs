@@ -4,6 +4,11 @@ namespace Pos.Domain.Tests;
 
 public sealed class InventoryCostPolicyTests
 {
+    public static TheoryData<decimal?, decimal?> OptionalInitialCostCases => new()
+    {
+        { null, null }, { 0m, 0m }, { 1.2345m, 1.2345m }
+    };
+
     public static TheoryData<decimal, decimal?, decimal, decimal, decimal?> KnownCostCases => new()
     {
         { 0m, null, 5m, 12m, 12m },
@@ -32,6 +37,17 @@ public sealed class InventoryCostPolicyTests
     [Fact]
     public void Initial_cost_cannot_be_applied_when_a_cost_is_already_known()
         => Assert.Throws<InvalidOperationException>(() => InventoryCostPolicy.InitializeMissingCost(12m, 15m));
+
+    [Theory]
+    [MemberData(nameof(OptionalInitialCostCases))]
+    public void Optional_initial_cost_accepts_empty_or_valid_values(decimal? input, decimal? expected)
+        => Assert.Equal(expected, InventoryCostPolicy.ValidateOptionalInitialCost(input));
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1.23456)]
+    public void Optional_initial_cost_rejects_invalid_values(decimal input)
+        => Assert.Throws<ArgumentOutOfRangeException>(() => InventoryCostPolicy.ValidateOptionalInitialCost(input));
 
     [Theory]
     [InlineData(-1)]

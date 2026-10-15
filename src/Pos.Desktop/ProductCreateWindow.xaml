@@ -22,7 +22,8 @@
                     <ComboBoxItem Content="Gravado 0 %" Tag="Taxable0"/><ComboBoxItem Content="Exento" Tag="Exempt"/>
                 </ComboBox><TextBlock Text="“Gravado 0 %” y “Exento” se guardan por separado. La tasa se calcula al vender." Foreground="#63758B" FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
                 <StackPanel Grid.Row="4" Margin="0,0,10,12"><TextBlock Text="Existencia inicial (unidades)" FontWeight="SemiBold"/><TextBox x:Name="StockBox" Text="0" Height="38" Padding="8" Margin="0,4,0,0" AutomationProperties.Name="Unidades iniciales de existencia"/><TextBlock Text="Ingresa 0 si todavía no tienes unidades." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
-                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,0,0,12" VerticalAlignment="Bottom">
+                <StackPanel Grid.Row="4" Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="Costo inicial (opcional)" FontWeight="SemiBold"/><TextBox x:Name="InitialCostBox" Height="38" Padding="8" Margin="0,4,0,0" AutomationProperties.Name="Costo inicial del producto"/><TextBlock Text="En la moneda seleccionada. Déjalo vacío si aún no conoces el costo." Foreground="#63758B" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel>
+                <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,0,0,12" VerticalAlignment="Bottom">
                     <DockPanel><Button Content="Seleccionar foto" Padding="10,7" Click="SelectImage_Click"/><TextBlock x:Name="ImageNameLabel" Text="Sin foto" Foreground="#63758B" VerticalAlignment="Center" Margin="9,0,0,0" TextTrimming="CharacterEllipsis"/></DockPanel>
                     <Image x:Name="ProductImagePreview" Height="92" Margin="0,7,0,0" Stretch="Uniform" Visibility="Collapsed"/>
                 </StackPanel>

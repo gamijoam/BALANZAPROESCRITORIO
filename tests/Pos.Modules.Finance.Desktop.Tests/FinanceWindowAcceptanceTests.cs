@@ -135,6 +135,40 @@ public sealed class FinanceWindowAcceptanceTests
     }
 
     [Fact]
+    public void Price_suggestions_show_two_decimals_and_confirm_the_same_rounded_price()
+    {
+        var suggestion = new PriceSuggestionWindow.PriceSuggestionClientInfo(Guid.NewGuid(), "SKU-1", "Producto", "USD",
+            6m, "Price1", 50m, 3m, 12m, Guid.NewGuid(), "F-1", 6m, "LastReceivedCost", "Receipt", "F-1", DateTime.UtcNow);
+
+        Assert.Equal("USD 6,00", suggestion.CostLabel);
+        Assert.Equal("USD 3,00", suggestion.CurrentPriceLabel);
+        Assert.Equal("USD 12,00", suggestion.SuggestedPriceLabel);
+
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root.FullName, "src", "Modules", "Pos.Modules.Finance.Desktop", "PriceSuggestionWindow.xaml.cs"));
+        Assert.Contains("value.ToString(\"N2\"", source, StringComparison.Ordinal);
+        Assert.Contains("decimal.Round(suggestion.SuggestedPrice, 2", source, StringComparison.Ordinal);
+        var initialCost = new PriceSuggestionWindow.PriceSuggestionClientInfo(Guid.NewGuid(), "SKU-1", "Producto", "USD",
+            1.2345m, "Price1", 50m, null, 2m, Guid.NewGuid(), "F-1", 1.2345m, "LastReceivedCost", "InitialCost", null, null);
+        Assert.Equal("Costo inicial", initialCost.CostSourceLabel);
+    }
+
+    [Fact]
+    public void Price_suggestions_can_be_opened_from_a_saved_invoice_before_its_first_receipt()
+    {
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(root.FullName, "src", "Modules", "Pos.Modules.Finance.Desktop", "FinanceWindow.xaml.cs"));
+        var start = source.IndexOf("ViewPriceSuggestionsButton.IsEnabled =", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var end = source.IndexOf("ToggleSupplierButton.IsEnabled", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+        var rule = source[start..end];
+
+        Assert.Contains("_selectedPurchase is not null", rule, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReceiptsGrid.Items", rule, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Retrying_the_same_supplier_payment_reuses_its_idempotency_key_but_changed_data_gets_a_new_key()
     {
         var assembly = typeof(FinanceWindow).Assembly;
@@ -258,4 +292,12 @@ public sealed class FinanceWindowAcceptanceTests
     private static XElement FindNamedElement(XDocument document, string name)
         => Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(XamlNamespace + "Name") == name);
+
+    private static DirectoryInfo FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Prompt_Maestro_POS_Escritorio_TDD.md")))
+            directory = directory.Parent;
+        return directory ?? throw new DirectoryNotFoundException("No se encontró la raíz del proyecto POS.");
+    }
 }

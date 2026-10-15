@@ -22,6 +22,13 @@ internal static class Hito4Endpoints
         {
             var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
             if (access is null) return PermissionFailure(context);
+            if (request.InitialCost.HasValue)
+            {
+                try { InventoryCostPolicy.ValidateOptionalInitialCost(request.InitialCost); }
+                catch (ArgumentOutOfRangeException)
+                { return Results.ValidationProblem(new Dictionary<string, string[]> { ["initialCost"] = ["El costo inicial debe ser no negativo y tener hasta cuatro decimales."] }); }
+                if (await AuthorizedAsync(context, auth, Permission.InitializeInventoryCost, ct) is null) return PermissionFailure(context);
+            }
             var sku = (request.Sku ?? string.Empty).Trim(); var name = (request.Name ?? string.Empty).Trim();
             var currency = ParseCurrency(request.Currency);
             Pos.Domain.Catalog.TaxTreatment taxTreatment;
@@ -36,18 +43,23 @@ internal static class Hito4Endpoints
             var id = Guid.NewGuid(); var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             db.Products.Add(new ProductRecord { Id = id, Sku = sku, Name = name, UnitPrice = request.UnitPrice,
-                Price2 = request.Price2, Price3 = request.Price3, TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
+                Price2 = request.Price2, Price3 = request.Price3, UnitCost = request.InitialCost,
+                TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
             db.Stocks.Add(new StockRecord { ProductId = id, Quantity = request.InitialStock });
             if (request.InitialStock > 0m)
                 db.StockMovements.Add(new StockMovementRecord { Id = Guid.NewGuid(), ProductId = id, QuantityDelta = request.InitialStock, Reason = "Existencia inicial", ActorId = access.OperatorId, TerminalId = access.TerminalId, OccurredAtUtc = now });
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.created", new { id, sku, name, request.UnitPrice,
-                request.Price2, request.Price3, taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
+                request.Price2, request.Price3, taxTreatment = taxTreatment.Code, currency, request.InitialStock, request.InitialCost }, now));
+            if (request.InitialCost.HasValue)
+                db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "inventory.initial_cost_set",
+                    new { productId = id, sku, unitCost = request.InitialCost, currency, stockQuantity = request.InitialStock,
+                        reason = "Costo inicial registrado durante la creación del producto" }, now));
             try { await db.SaveChangesAsync(ct); await WarehouseStockBridge.AddProductToWarehousesAsync(db, id, ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
             await tx.CommitAsync(ct);
             return Results.Created($"/api/v1/products/{id}", new { id, sku, name, request.UnitPrice, request.Price2, request.Price3,
-                taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
+                unitCost = request.InitialCost, taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
         });
 
         app.MapPatch("/api/v1/products/{productId:guid}/tax-treatment", async (Guid productId, HttpContext context, PosDbContext db,
@@ -876,7 +888,7 @@ internal static class Hito4Endpoints
 }
 
 public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock,
-    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null);
+    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null, decimal? InitialCost = null);
 public sealed record UpdateProductRequest(string? Sku, string? Name);
 public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1",
     decimal? ExpectedCurrentPrice = null, decimal? ExpectedUnitCost = null, bool ValidateSnapshot = false);

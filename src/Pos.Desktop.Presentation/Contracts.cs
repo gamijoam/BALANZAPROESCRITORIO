@@ -318,6 +318,11 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
     Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3, string taxTreatment,
         string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
+    Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3, string taxTreatment,
+        string currency, decimal initialStock, decimal? initialCost, CancellationToken cancellationToken = default)
+        => initialCost is null
+            ? CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken)
+            : throw new NotSupportedException("El cliente no admite registrar el costo inicial durante la creación del producto.");
     Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite clasificar el impuesto del producto.");
     Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)

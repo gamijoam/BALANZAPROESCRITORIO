@@ -786,16 +786,17 @@ public sealed class FinanceModule : IPosServerModule
 
         var costBasis = await ReadPriceSuggestionCostBasisAsync(connection, null, context.RequestAborted);
         var productIds = new List<Guid>();
-        await using (var received = new NpgsqlCommand($"SELECT DISTINCT l.product_id FROM {Table("purchase_receipts")} r JOIN {Table("purchase_receipt_lines")} l ON l.receipt_id=r.id WHERE r.invoice_id=@invoice AND r.completed_at_utc IS NOT NULL AND r.reversed_at_utc IS NULL ORDER BY l.product_id", connection))
+        await using (var invoiceLines = new NpgsqlCommand($"SELECT DISTINCT product_id FROM {Table("purchase_invoice_lines")} WHERE invoice_id=@invoice ORDER BY product_id", connection))
         {
-            received.Parameters.AddWithValue("invoice", invoiceId);
-            await using var reader = await received.ExecuteReaderAsync(context.RequestAborted);
+            invoiceLines.Parameters.AddWithValue("invoice", invoiceId);
+            await using var reader = await invoiceLines.ExecuteReaderAsync(context.RequestAborted);
             while (await reader.ReadAsync(context.RequestAborted)) productIds.Add(reader.GetGuid(0));
         }
+        var hasReceivedItems = await HasCompletedInvoiceReceiptsAsync(connection, invoiceId, context.RequestAborted);
         var marginRates = await ReadPriceSuggestionMarginsAsync(connection, null, context.RequestAborted);
         var missingMargins = new[] { "Price1", "Price2", "Price3" }.Where(tier => !marginRates.ContainsKey(tier)).ToArray();
         if (productIds.Count == 0)
-            return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, [], missingMargins, [], false));
+            return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, [], missingMargins, [], hasReceivedItems));
 
         var catalog = await context.RequestServices.GetRequiredService<IPosProductPricingReadService>()
             .GetSnapshotsAsync(productIds, context.RequestAborted);
@@ -803,6 +804,7 @@ public sealed class FinanceModule : IPosServerModule
             ? await ReadLatestReceiptCostsAsync(connection, productIds,
                 catalog.ToDictionary(product => product.ProductId, product => product.Currency), context.RequestAborted)
             : new Dictionary<Guid, ReceivedCostSource>();
+        var receiptHistoryProductIds = await ReadReceiptHistoryProductIdsAsync(connection, productIds, context.RequestAborted);
         var suggestions = new List<PriceSuggestionInfo>();
         var unavailable = new List<PriceSuggestionUnavailableInfo>();
         foreach (var product in catalog)
@@ -813,7 +815,7 @@ public sealed class FinanceModule : IPosServerModule
                 continue;
             }
             var selectedCost = FinancePriceSuggestionCostPolicy.Choose(costBasis, product.UnitCost,
-                latestCosts.GetValueOrDefault(product.ProductId));
+                latestCosts.GetValueOrDefault(product.ProductId), receiptHistoryProductIds.Contains(product.ProductId));
             if (selectedCost.UnitCost is null)
             {
                 unavailable.Add(new(product.ProductId, product.Sku, product.Name, selectedCost.UnavailableReason!));
@@ -836,10 +838,30 @@ public sealed class FinanceModule : IPosServerModule
                 if (suggested.HasValue)
                     suggestions.Add(new(product.ProductId, product.Sku, product.Name, product.Currency, selectedCost.UnitCost.Value,
                         tier, margin * 100m, currentPrice, suggested.Value, invoiceId, documentNumber, product.UnitCost,
-                        selectedCost.Basis, selectedCost.ReceiptSource?.DocumentNumber, selectedCost.ReceiptSource?.ReceivedAtUtc));
+                        selectedCost.Basis, selectedCost.SourceKind, selectedCost.ReceiptSource?.DocumentNumber, selectedCost.ReceiptSource?.ReceivedAtUtc));
             }
         }
-        return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, suggestions, missingMargins, unavailable, true));
+        return Results.Ok(new PriceSuggestionResult(invoiceId, documentNumber, costBasis, suggestions, missingMargins, unavailable, hasReceivedItems));
+    }
+
+    private static async Task<bool> HasCompletedInvoiceReceiptsAsync(NpgsqlConnection connection, Guid invoiceId,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand($"SELECT EXISTS (SELECT 1 FROM {Table("purchase_receipts")} r JOIN {Table("purchase_receipt_lines")} l ON l.receipt_id=r.id WHERE r.invoice_id=@invoice AND r.completed_at_utc IS NOT NULL AND r.reversed_at_utc IS NULL AND l.quantity>0)", connection);
+        command.Parameters.AddWithValue("invoice", invoiceId);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
+    }
+
+    private static async Task<HashSet<Guid>> ReadReceiptHistoryProductIdsAsync(NpgsqlConnection connection,
+        IReadOnlyCollection<Guid> productIds, CancellationToken cancellationToken)
+    {
+        if (productIds.Count == 0) return [];
+        await using var command = new NpgsqlCommand($"SELECT DISTINCT l.product_id FROM {Table("purchase_receipts")} r JOIN {Table("purchase_receipt_lines")} l ON l.receipt_id=r.id WHERE l.product_id=ANY(@productIds)", connection);
+        command.Parameters.AddWithValue("productIds", productIds.ToArray());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new HashSet<Guid>();
+        while (await reader.ReadAsync(cancellationToken)) result.Add(reader.GetGuid(0));
+        return result;
     }
 
     private static async Task<string> ReadPriceSuggestionCostBasisAsync(NpgsqlConnection connection,
@@ -1088,7 +1110,7 @@ public sealed class FinanceModule : IPosServerModule
         IReadOnlyList<string> MissingMarginTiers, IReadOnlyList<PriceSuggestionUnavailableInfo> UnavailableProducts, bool HasReceivedItems);
     public sealed record PriceSuggestionInfo(Guid ProductId, string Sku, string Name, string Currency, decimal UnitCost,
         string PriceTier, decimal MarginPercent, decimal? CurrentPrice, decimal SuggestedPrice, Guid InvoiceId, string DocumentNumber,
-        decimal? ProductCostSnapshot, string CostBasis, string? CostSourceDocumentNumber, DateTime? CostReceivedAtUtc);
+        decimal? ProductCostSnapshot, string CostBasis, string? CostSourceKind, string? CostSourceDocumentNumber, DateTime? CostReceivedAtUtc);
     public sealed record PriceSuggestionUnavailableInfo(Guid ProductId, string Sku, string Name, string Reason);
     public sealed record SupplierInfo(Guid Id, string Code, string LegalName, string? TaxId, string? Phone, string? Email,
         string? Address, bool IsActive, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);

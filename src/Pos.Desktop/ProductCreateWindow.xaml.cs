@@ -22,12 +22,13 @@ public partial class ProductCreateWindow : Window
         { ErrorLabel.Text = "Selecciona cómo se calcula el impuesto de este producto."; TaxTreatmentBox.Focus(); return; }
         if (!PosNumberFormat.TryParseAmount(PriceBox.Text, out var price) || price < 0m || decimal.Round(price, 4) != price ||
             !TryOptionalPrice(Price2Box.Text, out var price2) || !TryOptionalPrice(Price3Box.Text, out var price3) ||
-            !PosNumberFormat.TryParseAmount(StockBox.Text, out var stock) || stock < 0m || decimal.Round(stock, 3) != stock)
-        { ErrorLabel.Text = "Revisa los precios (hasta 4 decimales) y la existencia inicial."; return; }
+            !PosNumberFormat.TryParseAmount(StockBox.Text, out var stock) || stock < 0m || decimal.Round(stock, 3) != stock ||
+            !TryOptionalCost(InitialCostBox.Text, out var initialCost))
+        { ErrorLabel.Text = "Revisa los precios (hasta 4 decimales), el costo inicial (opcional, hasta 4 decimales) y la existencia inicial."; return; }
         var currency = (CurrencyBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "VES";
         try
         {
-            var product = await _viewModel.CreateProductAsync(SkuBox.Text.Trim(), NameBox.Text.Trim(), price, price2, price3, taxTreatment, currency, stock);
+            var product = await _viewModel.CreateProductAsync(SkuBox.Text.Trim(), NameBox.Text.Trim(), price, price2, price3, taxTreatment, currency, stock, initialCost);
             CreatedProductId = product.Id;
             if (_imagePath is not null)
             {
@@ -54,6 +55,14 @@ public partial class ProductCreateWindow : Window
         if (string.IsNullOrWhiteSpace(text)) return true;
         if (!PosNumberFormat.TryParseAmount(text, out var parsed) || parsed < 0m || decimal.Round(parsed, 4) != parsed) return false;
         price = parsed;
+        return true;
+    }
+    private static bool TryOptionalCost(string text, out decimal? cost)
+    {
+        cost = null;
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        if (!PosNumberFormat.TryParseAmount(text, out var parsed) || parsed < 0m || decimal.Round(parsed, 4) != parsed) return false;
+        cost = parsed;
         return true;
     }
     private void SelectImage_Click(object sender, RoutedEventArgs e)
