@@ -30,6 +30,7 @@ public partial class AdminPinApprovalWindow : Window
     {
         "ApplyDiscount" => "aplicar un descuento",
         "ChangePrice" => "cambiar un precio",
+        "InitializeInventoryCost" => "asignar el costo inicial del inventario",
         "OverrideSalePrice" => "autorizar un precio especial para esta venta",
         "AdjustStock" => "ajustar inventario",
         "ViewInventory" => "consultar inventario y movimientos",

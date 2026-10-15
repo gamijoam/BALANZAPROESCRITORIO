@@ -5,7 +5,7 @@ namespace Pos.Application.Tests;
 public sealed class CartMouseActionsUxTests
 {
     [Fact]
-    public void Cart_edits_quantity_inline_and_does_not_open_a_line_editor()
+    public void Cart_keeps_inline_quantity_and_exposes_price_tier_editor_per_line()
     {
         var root = FindRepositoryRoot();
         var path = Path.Combine(root, "src", "Pos.Desktop", "MainWindow.xaml");
@@ -15,10 +15,15 @@ public sealed class CartMouseActionsUxTests
         Assert.Equal("False", (string?)cart.Attribute("IsReadOnly"));
         var quantity = cart.Descendants().Single(element => element.Name.LocalName == "DataGridTextColumn" && (string?)element.Attribute("Header") == "Cantidad");
         Assert.Contains("Path=\"Quantity\"", quantity.ToString());
-        Assert.DoesNotContain(cart.Descendants().Where(element => element.Name.LocalName == "Button"), element => ((string?)element.Attribute("Content"))?.Contains("Editar", StringComparison.OrdinalIgnoreCase) == true);
+        var priceTier = cart.Descendants().Single(element => element.Name.LocalName == "DataGridTextColumn" && (string?)element.Attribute("Header") == "Nivel");
+        Assert.Contains("PriceTierLabel", priceTier.ToString());
+        Assert.Contains(cart.Descendants().Where(element => element.Name.LocalName == "Button"), element =>
+            (string?)element.Attribute("Click") == "EditCartLine_Click" &&
+            ((string?)element.Attribute("Content"))?.Contains("Precio", StringComparison.OrdinalIgnoreCase) == true);
 
         var code = File.ReadAllText(Path.Combine(root, "src", "Pos.Desktop", "MainWindow.xaml.cs"));
-        Assert.DoesNotContain("new CartLineEditWindow", code);
+        Assert.Contains("new CartLineEditWindow(line)", code);
+        Assert.Contains("_viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason)", code);
     }
 
     [Fact]

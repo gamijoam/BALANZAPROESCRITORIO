@@ -11,11 +11,19 @@ public interface IPosServerModule
 
 public sealed record PosModuleEndpoint
 {
-    public PosModuleEndpoint(string method, string route, RequestDelegate handler, string? requiredPermission = null,
+    // Keep the original four-parameter constructors so modules compiled before
+    // multiple endpoint permissions can still resolve their constructor calls.
+    public PosModuleEndpoint(string method, string route, RequestDelegate handler, string? requiredPermission = null)
+        : this(method, route, handler, requiredPermission, []) { }
+
+    public PosModuleEndpoint(string method, string route, RequestDelegate handler, string? requiredPermission,
         params string[] additionalRequiredPermissions)
     { Method = method; Route = route; Handler = handler; RequiredPermissions = BuildPermissions(requiredPermission, additionalRequiredPermissions); }
 
-    public PosModuleEndpoint(string method, string route, Func<HttpContext, Task<IResult>> handler, string? requiredPermission = null,
+    public PosModuleEndpoint(string method, string route, Func<HttpContext, Task<IResult>> handler, string? requiredPermission = null)
+        : this(method, route, handler, requiredPermission, []) { }
+
+    public PosModuleEndpoint(string method, string route, Func<HttpContext, Task<IResult>> handler, string? requiredPermission,
         params string[] additionalRequiredPermissions)
     { Method = method; Route = route; Handler = handler; RequiredPermissions = BuildPermissions(requiredPermission, additionalRequiredPermissions); }
 

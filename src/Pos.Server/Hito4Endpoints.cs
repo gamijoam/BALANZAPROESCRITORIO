@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using Pos.Domain.Finance;
+using Pos.Domain.Inventory;
 using Pos.Domain.Identity;
 using Pos.Application.Reporting;
 using Pos.Infrastructure.Identity;
@@ -168,6 +169,37 @@ internal static class Hito4Endpoints
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.price_changed", new { productId, priceTier, oldPrice, newPrice = request.NewPrice, product.Currency, reason }, now));
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
             return Results.Ok(new { productId, oldPrice, newPrice = request.NewPrice, priceTier, product.Currency, reason, history.ChangedAtUtc });
+        });
+        app.MapPost("/api/v1/products/{productId:guid}/initial-cost", async (Guid productId, HttpContext context, PosDbContext db,
+            AuthenticationService auth, SetInitialInventoryCostRequest request, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.InitializeInventoryCost, ct);
+            if (access is null) return PermissionFailure(context);
+            var reason = (request.Reason ?? string.Empty).Trim();
+            if (request.UnitCost < 0m || decimal.Round(request.UnitCost, 4) != request.UnitCost || reason.Length is < 3 or > 250)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["initialCost"] = ["Indica un costo no negativo con hasta cuatro decimales y un motivo de 3 a 250 caracteres."] });
+
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+            var product = await db.Products.FromSqlInterpolated($"SELECT * FROM products WHERE \"Id\" = {productId} FOR UPDATE")
+                .SingleOrDefaultAsync(ct);
+            if (product is null || !product.Active) return Results.NotFound();
+            if (product.UnitCost.HasValue) return Results.Conflict(new { error = "initial_inventory_cost_already_set" });
+            var stock = await db.Stocks.FromSqlInterpolated($"SELECT * FROM stocks WHERE \"ProductId\" = {productId} FOR UPDATE")
+                .SingleOrDefaultAsync(ct);
+            if (stock is null || stock.Quantity <= 0m)
+                return Results.Conflict(new { error = "initial_inventory_cost_requires_existing_stock" });
+
+            try { product.UnitCost = InventoryCostPolicy.InitializeMissingCost(product.UnitCost, request.UnitCost); }
+            catch (ArgumentOutOfRangeException)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["initialCost"] = ["El costo inicial no es válido."] });
+            }
+            var now = DateTime.UtcNow;
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "inventory.initial_cost_set",
+                new { productId, product.Sku, unitCost = product.UnitCost, product.Currency, stock.Quantity, reason }, now));
+            await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            return Results.Ok(new { productId, unitCost = product.UnitCost, product.Currency });
         });
         app.MapPatch("/api/v1/products/{productId:guid}/active", async (Guid productId, HttpContext context, PosDbContext db, AuthenticationService auth, SetActiveRequest request, CancellationToken ct) =>
         {
@@ -848,6 +880,7 @@ public sealed record CreateProductRequest(string? Sku, string? Name, decimal Uni
 public sealed record UpdateProductRequest(string? Sku, string? Name);
 public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1",
     decimal? ExpectedCurrentPrice = null, decimal? ExpectedUnitCost = null, bool ValidateSnapshot = false);
+public sealed record SetInitialInventoryCostRequest(decimal UnitCost, string? Reason);
 public sealed record ChangeProductTaxTreatmentRequest(string? TaxTreatment);
 public sealed record SetExchangeRateRequest(string? FromCurrency, string? ToCurrency, decimal Rate, DateTimeOffset EffectiveAtUtc, string? Source);
 public sealed record CreateCustomerRequest(string? Name, string? DocumentNumber, string? Phone, string? Currency, decimal CreditLimit);

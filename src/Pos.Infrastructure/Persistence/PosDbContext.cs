@@ -30,6 +30,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
     public DbSet<OperatorReportViewRecord> OperatorReportViews => Set<OperatorReportViewRecord>();
     public DbSet<PurchaseReceiptEffectRecord> PurchaseReceiptEffects => Set<PurchaseReceiptEffectRecord>();
     public DbSet<PurchaseReceiptEffectLineRecord> PurchaseReceiptEffectLines => Set<PurchaseReceiptEffectLineRecord>();
+    public DbSet<CartWorkspaceRecord> CartWorkspaces => Set<CartWorkspaceRecord>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -217,6 +218,21 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.Property(x => x.MovementId).HasColumnName("movement_id");
             e.HasOne<PurchaseReceiptEffectRecord>().WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
         });
+        model.Entity<CartWorkspaceRecord>(e => {
+            e.ToTable("cart_workspaces"); e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Note).HasMaxLength(250);
+            e.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            e.Property(x => x.LinesJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.TotalAtPause).HasPrecision(18, 4);
+            e.Property(x => x.LastMutationId).HasMaxLength(64);
+            e.Property(x => x.LastMutationHash).HasMaxLength(64);
+            e.HasIndex(x => x.TerminalId).IsUnique().HasFilter("\"Status\" = 'Active'");
+            e.HasIndex(x => new { x.TerminalId, x.Status, x.UpdatedAtUtc });
+            e.HasOne<CustomerRecord>().WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<OperatorUserRecord>().WithMany().HasForeignKey(x => x.OperatorId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<SaleRecord>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }
 
@@ -246,3 +262,21 @@ public sealed class TerminalClientVersionRecord { public Guid TerminalId { get; 
 public sealed class OperatorReportViewRecord { public Guid Id { get; set; } public Guid OperatorId { get; set; } public string ReportId { get; set; } = ""; public string Name { get; set; } = ""; public string ColumnsJson { get; set; } = "[]"; public string FiltersJson { get; set; } = "{}"; public DateTime UpdatedAtUtc { get; set; } }
 public sealed class PurchaseReceiptEffectRecord { public Guid ReceiptId { get; set; } public string PayloadHash { get; set; } = ""; public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime AppliedAtUtc { get; set; } public DateTime? ReversedAtUtc { get; set; } public Guid? ReversedByActorId { get; set; } public Guid? ReversedByTerminalId { get; set; } }
 public sealed class PurchaseReceiptEffectLineRecord { public Guid ReceiptId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal PriorStockQuantity { get; set; } public decimal? PriorUnitCost { get; set; } public decimal? UnitCostAfter { get; set; } public decimal QuantityAfterReceipt { get; set; } public Guid? WarehouseId { get; set; } public Guid MovementId { get; set; } }
+public sealed class CartWorkspaceRecord
+{
+    public Guid Id { get; set; }
+    public Guid TerminalId { get; set; }
+    public Guid OperatorId { get; set; }
+    public Guid? CustomerId { get; set; }
+    public Guid? SaleId { get; set; }
+    public string Status { get; set; } = "Active";
+    public long Version { get; set; } = 1;
+    public string? Note { get; set; }
+    public string Currency { get; set; } = "VES";
+    public string LinesJson { get; set; } = "[]";
+    public decimal TotalAtPause { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public string? LastMutationId { get; set; }
+    public string? LastMutationHash { get; set; }
+}

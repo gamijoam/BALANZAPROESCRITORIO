@@ -315,6 +315,14 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task InitializeProductCostAsync(Guid productId, decimal unitCost, string reason, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"api/v1/products/{productId}/initial-cost");
+        request.Content = JsonContent.Create(new { unitCost, reason }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     public async Task ApplySuggestedPriceAsync(Guid productId, string priceTier, decimal newPrice, decimal? expectedCurrentPrice,
         decimal expectedUnitCost, string reason, CancellationToken cancellationToken = default)
     {
@@ -786,12 +794,18 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
 
     public async Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines,
         IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId = null, CancellationToken cancellationToken = default)
+        => await CheckoutAsync(cashSessionId, lines, payments, customerId, idempotencyKey, exchangeRateId, null, cancellationToken);
+
+    public async Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines,
+        IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId,
+        Guid? cartWorkspaceId, CancellationToken cancellationToken = default)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/sales");
         request.Headers.Add("Idempotency-Key", idempotencyKey);
         request.Content = JsonContent.Create(new
         {
             cashSessionId,
+            workspaceId = cartWorkspaceId,
             checkout = new { lines, payments, customerId, exchangeRateId }
         }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
@@ -799,6 +813,70 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         var result = await response.Content.ReadFromJsonAsync<SaleResponse>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("The service returned an empty sale response.");
         return result.SaleId;
+    }
+
+    public async Task<CartWorkspaceSnapshot> GetActiveCartWorkspaceAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/cart-workspaces/active");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CartWorkspaceSnapshot>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio respondió sin el carrito activo.");
+    }
+
+    public async Task<CartWorkspaceSnapshot> SaveActiveCartWorkspaceAsync(CartWorkspaceSaveRequest save, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Put, "api/v1/cart-workspaces/active");
+        request.Content = JsonContent.Create(save, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CartWorkspaceSnapshot>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio respondió sin confirmar el guardado del carrito.");
+    }
+
+    public async Task<CartWorkspaceSnapshot> PauseActiveCartWorkspaceAsync(CartWorkspacePauseRequest pause, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/cart-workspaces/active/pause");
+        request.Content = JsonContent.Create(pause, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CartWorkspaceSnapshot>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio no confirmó la pausa de la venta.");
+    }
+
+    public async Task<IReadOnlyList<CartWorkspaceSnapshot>> GetPausedCartWorkspacesAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/cart-workspaces/paused");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<List<CartWorkspaceSnapshot>>(JsonOptions, cancellationToken) ?? [];
+    }
+
+    public async Task<CartWorkspaceSnapshot> GetPausedCartWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, $"api/v1/cart-workspaces/paused/{workspaceId}");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CartWorkspaceSnapshot>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio respondió sin el detalle de la venta pausada.");
+    }
+
+    public async Task<CartWorkspaceSnapshot> ResumeCartWorkspaceAsync(Guid workspaceId, CartWorkspaceTransitionRequest transition, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"api/v1/cart-workspaces/paused/{workspaceId}/resume");
+        request.Content = JsonContent.Create(transition, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CartWorkspaceSnapshot>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio no confirmó la reanudación de la venta.");
+    }
+
+    public async Task DiscardCartWorkspaceAsync(Guid workspaceId, CartWorkspaceTransitionRequest transition, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, $"api/v1/cart-workspaces/paused/{workspaceId}/discard");
+        request.Content = JsonContent.Create(transition, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)

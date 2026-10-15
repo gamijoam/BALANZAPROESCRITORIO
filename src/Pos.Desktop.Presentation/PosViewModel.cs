@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Pos.Domain.Finance;
 using Pos.Domain.Sales;
+using Pos.Shared.Contracts;
 
 namespace Pos.Desktop.Presentation;
 
@@ -32,6 +33,17 @@ public sealed class PosViewModel : INotifyPropertyChanged
     private string _pendingCurrency = "VES";
     private Guid? _pendingExchangeRateId;
     private ExchangeRateInfo? _usdToVesRate;
+    private CartWorkspaceSnapshot? _activeCartWorkspace;
+    private CancellationTokenSource? _workspaceSaveDelay;
+    private readonly SemaphoreSlim _workspaceSaveLock = new(1, 1);
+    private long _workspaceRevision;
+    private long _workspaceSyncedRevision;
+    private CartWorkspaceSaveRequest? _pendingWorkspaceSaveRequest;
+    private long _pendingWorkspaceSaveRevision;
+    private CartWorkspacePauseRequest? _pendingWorkspacePauseRequest;
+    private bool _isRestoringCart;
+    private bool _workspaceSyncFailed;
+    private bool _requiresCartPriceConfirmation;
 
     public PosViewModel(IPosApiClient api)
     {
@@ -90,10 +102,17 @@ public sealed class PosViewModel : INotifyPropertyChanged
             if (Set(ref _selectedCartLine, value)) OnPropertyChanged(nameof(CanEditSelectedLine));
         }
     }
-    public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) { OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(CanEditSelectedLine)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); } } }
+    public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) { OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanPauseSale)); OnPropertyChanged(nameof(CanViewPausedSales)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(CanEditSelectedLine)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); } } }
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(_api.AccessToken);
     public Uri ApiBaseAddress => _api.BaseAddress;
-    public bool CanCharge => IsAuthenticated && CashSession is { IsActiveForCurrentOperator: true } && ItemCount > 0 && !IsBusy;
+    public bool CanCharge => IsAuthenticated && CashSession is { IsActiveForCurrentOperator: true } && ItemCount > 0 && !IsBusy &&
+        !IsWorkspaceSyncPending && !RequiresCartPriceConfirmation && CartLines.All(x => string.IsNullOrWhiteSpace(x.ResumeIssue));
+    public bool CanPauseSale => IsAuthenticated && CartLines.Count > 0 && !IsBusy && !HasPendingCheckout && !RequiresCartPriceConfirmation;
+    public bool CanViewPausedSales => IsAuthenticated && !IsBusy && !HasPendingCheckout;
+    public bool IsWorkspaceSyncPending => _workspaceSyncFailed || _pendingWorkspacePauseRequest is not null || _workspaceRevision != _workspaceSyncedRevision;
+    public bool RequiresCartPriceConfirmation { get => _requiresCartPriceConfirmation; private set { if (Set(ref _requiresCartPriceConfirmation, value)) { OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanPauseSale)); OnPropertyChanged(nameof(CartWorkspaceStatus)); NotifyChargeCommand(); } } }
+    public string CartWorkspaceStatus => RequiresCartPriceConfirmation ? "Confirma los valores actuales antes de continuar" : _workspaceSyncFailed ? "Pendiente de guardar · no se puede cobrar" :
+        IsWorkspaceSyncPending ? "Guardando carrito…" : "Carrito guardado";
     public string OperatorSessionActionLabel => CashSession is not null ? "Cambiar operador" : "Cerrar sesión";
     public bool CanUseSessionAction => IsAuthenticated && !IsBusy && CartLines.Count == 0 && !HasPendingCheckout;
     public string OperatorSessionActionToolTip => IsBusy
@@ -107,7 +126,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
                 : CashSession.IsActiveForCurrentOperator
                     ? "Cambia de operador manteniendo abierto el turno; quedará disponible para el siguiente usuario."
                     : $"Cierra esta sesión. El turno seguirá asignado a {CashSession.ActiveOperatorName ?? "otro operador"}.";
-    public bool CanEditCart => _pendingIdempotencyKey is null;
+    public bool CanEditCart => _pendingIdempotencyKey is null && _pendingWorkspacePauseRequest is null;
     public bool CanEditSelectedLine => CanEditCart && !IsBusy && SelectedCartLine is not null;
     public bool HasPendingCheckout => _pendingIdempotencyKey is not null;
     public IReadOnlyList<SalePaymentInput>? PendingPayments => _pendingPayments?.ToArray();
@@ -121,7 +140,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public string CurrentPriceLabel => $"{Currency} {CurrentUnitPrice:N2}";
     public string ReferenceCurrentPriceLabel => FormatReference(CurrentUnitPrice);
     public string ReferenceTotalLabel => $"REF {FormatReference(Total)}";
-    public string Currency => CashSession?.Currency ?? CartLines.FirstOrDefault()?.SettlementCurrency ?? "VES";
+    public string Currency => CashSession?.Currency ?? _activeCartWorkspace?.CurrentSettlementCurrency ??
+        _activeCartWorkspace?.Currency ?? CartLines.FirstOrDefault()?.SettlementCurrency ?? "VES";
 
     public void SetBaseAddress(Uri address) => _api.BaseAddress = address;
 
@@ -220,12 +240,21 @@ public sealed class PosViewModel : INotifyPropertyChanged
                 catch (PosApiException ex) when (ex.Code == "cash_session_in_use")
                 { CashSession = await _api.GetCurrentCashSessionAsync(cancellationToken); }
             }
+            _activeCartWorkspace = await _api.GetActiveCartWorkspaceAsync(cancellationToken);
+            ApplyWorkspacePricingContext(_activeCartWorkspace);
+            _pendingWorkspaceSaveRequest = null;
+            _pendingWorkspaceSaveRevision = 0;
+            _pendingWorkspacePauseRequest = null;
+            _workspaceRevision = 0;
+            _workspaceSyncedRevision = 0;
+            _workspaceSyncFailed = false;
+            RestoreCartWorkspace(_activeCartWorkspace);
             StatusMessage = CashSession is null
                 ? "Sesión iniciada. Abre la caja para comenzar."
                 : CashSession.IsActiveForCurrentOperator
                     ? "Sesión iniciada. La caja está lista para continuar."
                     : $"Hay un turno abierto en esta terminal, reservado para {CashSession.ActiveOperatorName ?? "otro operador"}. Ese operador debe liberar el turno antes de que otro pueda usar la caja.";
-            OnPropertyChanged(nameof(IsAuthenticated)); OnPropertyChanged(nameof(CanCharge));
+            OnPropertyChanged(nameof(IsAuthenticated)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CartWorkspaceStatus));
         }
         catch (PosApiException ex)
         {
@@ -245,6 +274,340 @@ public sealed class PosViewModel : INotifyPropertyChanged
             throw;
         }
         finally { IsBusy = false; }
+    }
+
+    public async Task PauseCurrentSaleAsync(string? note, CancellationToken cancellationToken = default)
+    {
+        if (!IsAuthenticated) throw new InvalidOperationException("Inicia sesión antes de pausar una venta.");
+        if (HasPendingCheckout) throw new InvalidOperationException("Resuelve la venta pendiente antes de pausarla.");
+        if (CartLines.Count == 0) throw new InvalidOperationException("Agrega artículos antes de pausar la venta.");
+        if (_pendingWorkspacePauseRequest is null)
+        {
+            await FlushWorkspaceSyncAsync(cancellationToken);
+            if (IsWorkspaceSyncPending) throw new InvalidOperationException("El carrito todavía no se confirmó en el servidor.");
+            var workspace = _activeCartWorkspace ?? throw new InvalidOperationException("No se pudo identificar el carrito activo de esta terminal.");
+            _pendingWorkspacePauseRequest = new CartWorkspacePauseRequest(workspace.Version,
+                Guid.NewGuid().ToString("N"), NormalizeWorkspaceNote(note));
+            OnPropertyChanged(nameof(CanEditCart));
+            OnWorkspaceSyncStateChanged();
+            NotifyCartCommands();
+        }
+        IsBusy = true;
+        try
+        {
+            var pausedActiveWorkspace = await _api.PauseActiveCartWorkspaceAsync(
+                _pendingWorkspacePauseRequest, cancellationToken);
+            _activeCartWorkspace = pausedActiveWorkspace;
+            _pendingWorkspaceSaveRequest = null;
+            _pendingWorkspaceSaveRevision = 0;
+            _pendingWorkspacePauseRequest = null;
+            _workspaceRevision = 0;
+            _workspaceSyncedRevision = 0;
+            _workspaceSyncFailed = false;
+            OnPropertyChanged(nameof(CanEditCart));
+            NotifyCartCommands();
+            OnWorkspaceSyncStateChanged();
+            _isRestoringCart = true;
+            try
+            {
+                CartLines.Clear();
+                SelectedCartLine = null;
+                CurrentProduct = null;
+                SelectedCustomer = null;
+            }
+            finally { _isRestoringCart = false; }
+            RequiresCartPriceConfirmation = false;
+            StatusMessage = "Venta pausada en esta terminal. El inventario y la caja no cambiaron.";
+            RefreshTotals();
+        }
+        catch (Exception)
+        {
+            _workspaceSyncFailed = true;
+            OnWorkspaceSyncStateChanged();
+            StatusMessage = "No se pudo confirmar el guardado; la venta sigue en pantalla sin pausar.";
+            throw;
+        }
+        finally { IsBusy = false; }
+    }
+
+    public Task<IReadOnlyList<CartWorkspaceSnapshot>> GetPausedSalesAsync(CancellationToken cancellationToken = default)
+        => _api.GetPausedCartWorkspacesAsync(cancellationToken);
+
+    public Task<CartWorkspaceSnapshot> GetPausedSaleAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+        => _api.GetPausedCartWorkspaceAsync(workspaceId, cancellationToken);
+
+    public string BuildPausedSaleReview(CartWorkspaceSnapshot workspace)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        var currency = workspace.CurrentSettlementCurrency;
+        var usdToVesRate = NormalizeWorkspaceExchangeRate(workspace.CurrentExchangeRate);
+        var issues = new List<string>();
+        decimal currentTotal = 0m;
+        foreach (var saved in workspace.Lines)
+        {
+            if (!saved.ProductActive)
+            {
+                issues.Add($"{saved.Name}: el producto está inactivo o ya no existe; retíralo o pide que lo reactiven.");
+                continue;
+            }
+            if (saved.CurrentStock < saved.Quantity)
+                issues.Add($"{saved.Name}: hay {saved.CurrentStock:0.###} disponibles y la venta necesita {saved.Quantity:0.###}.");
+            if (saved.CurrentTaxTreatment == "Unclassified")
+                issues.Add($"{saved.Name}: falta asignar la regla de impuesto.");
+
+            var listedPrice = saved.PriceTier switch
+            {
+                "Price1" => (decimal?)saved.CurrentPrice1,
+                "Price2" => saved.CurrentPrice2,
+                "Price3" => saved.CurrentPrice3,
+                _ => null
+            };
+            if (!saved.UnitPriceOverride.HasValue && !listedPrice.HasValue)
+            {
+                issues.Add($"{saved.Name}: el {saved.PriceTier} guardado ya no está configurado.");
+                continue;
+            }
+
+            if (saved.CurrentCurrency != currency && usdToVesRate is null && !saved.UnitPriceOverride.HasValue)
+            {
+                issues.Add($"{saved.Name}: falta la tasa para convertir de {saved.CurrentCurrency} a {currency}.");
+                continue;
+            }
+            var unitPrice = saved.UnitPriceOverride ?? ConvertPrice(listedPrice!.Value, saved.CurrentCurrency, currency, usdToVesRate);
+            var taxRate = saved.CurrentTaxTreatment switch { "Taxable16" => 0.16m, "Taxable8" => 0.08m, _ => 0m };
+            var subtotal = decimal.Round(unitPrice * saved.Quantity, 2, MidpointRounding.AwayFromZero);
+            currentTotal += subtotal + decimal.Round(subtotal * taxRate, 2, MidpointRounding.AwayFromZero);
+            if (unitPrice != saved.SavedUnitPrice || taxRate != saved.SavedTaxRate || saved.SavedCurrency != currency)
+                issues.Add($"{saved.Name}: precio, impuesto o moneda cambió desde que se pausó.");
+        }
+
+        var totalLine = $"Total al pausar: {workspace.Currency} {workspace.TotalAtPause:N2}. Total con los valores actuales: {currency} {currentTotal:N2}.";
+        return issues.Count == 0
+            ? $"{totalLine}{Environment.NewLine}No se detectaron cambios en precios, impuestos, tasa o existencias."
+            : $"{totalLine}{Environment.NewLine}{Environment.NewLine}Revisa antes de retomar:{Environment.NewLine}• " + string.Join(Environment.NewLine + "• ", issues.Distinct());
+    }
+
+    public async Task ResumePausedSaleAsync(CartWorkspaceSnapshot preview, bool acceptCurrentValues, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        if (!acceptCurrentValues) return;
+        if (!IsAuthenticated || HasPendingCheckout) throw new InvalidOperationException("No se puede retomar la venta en este momento.");
+        if (CartLines.Count > 0) throw new InvalidOperationException("Pausa la venta actual antes de retomar otra.");
+        IsBusy = true;
+        try
+        {
+            CashSession = await _api.GetCurrentCashSessionAsync(cancellationToken);
+            var active = await _api.ResumeCartWorkspaceAsync(preview.Id,
+                new CartWorkspaceTransitionRequest(preview.Version, Guid.NewGuid().ToString("N"), preview.PricingFingerprint), cancellationToken);
+            _activeCartWorkspace = active;
+            ApplyWorkspacePricingContext(active);
+            _pendingWorkspaceSaveRequest = null;
+            _pendingWorkspaceSaveRevision = 0;
+            _pendingWorkspacePauseRequest = null;
+            _workspaceRevision = 0;
+            _workspaceSyncedRevision = 0;
+            _workspaceSyncFailed = false;
+            RestoreCartWorkspace(active);
+            RequiresCartPriceConfirmation = false;
+            QueueWorkspaceSync();
+            await FlushWorkspaceSyncAsync(cancellationToken);
+            StatusMessage = "Venta retomada. Revisa existencias y valores antes de cobrar.";
+        }
+        finally { IsBusy = false; }
+    }
+
+    public async Task DiscardPausedSaleAsync(Guid workspaceId, long expectedVersion, CancellationToken cancellationToken = default)
+    {
+        await _api.DiscardCartWorkspaceAsync(workspaceId,
+            new CartWorkspaceTransitionRequest(expectedVersion, Guid.NewGuid().ToString("N")), cancellationToken);
+        StatusMessage = "Venta pausada descartada; la operación quedó registrada en auditoría.";
+    }
+
+    public void AcceptCurrentCartValues()
+    {
+        if (!RequiresCartPriceConfirmation) return;
+        RequiresCartPriceConfirmation = false;
+        QueueWorkspaceSync();
+        StatusMessage = "Se aceptaron los precios, impuestos y tasa actuales. El carrito se está guardando.";
+    }
+
+    public async Task FlushWorkspaceSyncAsync(CancellationToken cancellationToken = default)
+    {
+        _workspaceSaveDelay?.Cancel();
+        try { await _workspaceSaveTask.WaitAsync(cancellationToken); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+        await PersistWorkspaceUntilCurrentAsync(cancellationToken);
+    }
+
+    private Task _workspaceSaveTask = Task.CompletedTask;
+
+    private static string? NormalizeWorkspaceNote(string? note)
+    {
+        var value = note?.Trim();
+        if (string.IsNullOrEmpty(value)) return null;
+        if (value.Length > 250) throw new ArgumentException("La nota no puede superar 250 caracteres.", nameof(note));
+        return value;
+    }
+
+    private void RestoreCartWorkspace(CartWorkspaceSnapshot? workspace)
+    {
+        _isRestoringCart = true;
+        try
+        {
+            CartLines.Clear();
+            SelectedCartLine = null;
+            SelectedCustomer = workspace?.Customer is { } customer
+                ? new CustomerInfo(customer.Id, customer.Name, customer.DocumentNumber, customer.Phone, customer.Currency, customer.CreditLimit)
+                : null;
+            CurrentProduct = null;
+            RequiresCartPriceConfirmation = false;
+            if (workspace is null) return;
+
+            var needsReview = false;
+            foreach (var saved in workspace.Lines)
+            {
+                var product = new ProductInfo(saved.ProductId, saved.CurrentSku ?? saved.Sku, saved.CurrentName ?? saved.Name,
+                    saved.CurrentPrice1, saved.CurrentCurrency, false, saved.CurrentStock, saved.CurrentPrice2, saved.CurrentPrice3,
+                    saved.CurrentTaxTreatment, saved.ProductActive);
+                var line = new CartLineViewModel(product, saved.Quantity, Currency, _usdToVesRate);
+                var tierConfigured = saved.PriceTier switch
+                {
+                    "Price1" => true,
+                    "Price2" => product.Price2.HasValue,
+                    "Price3" => product.Price3.HasValue,
+                    _ => false
+                };
+                line.RestoreEdits(saved.Quantity, saved.PriceTier, saved.UnitPriceOverride, saved.PriceOverrideReason,
+                    saved.SavedUnitPrice, tierConfigured);
+                if (!product.Active) line.ResumeIssue = "Producto inactivo; retíralo o solicita su reactivación.";
+                else if (product.StockQuantity is { } stock && saved.Quantity > stock)
+                    line.ResumeIssue = $"Existencia actual {stock:0.###}; reduce la cantidad o quita el artículo.";
+                else if (!product.IsTaxClassified) line.ResumeIssue = "El impuesto del producto está pendiente de clasificar.";
+                else if (!tierConfigured) line.ResumeIssue = "El nivel de precio guardado ya no está configurado.";
+                else if (saved.CurrentCurrency != Currency && _usdToVesRate is null && !saved.UnitPriceOverride.HasValue)
+                    line.ResumeIssue = $"Falta una tasa vigente para convertir de {saved.CurrentCurrency} a {Currency}.";
+                CartLines.Add(line);
+                if (line.UnitPrice != saved.SavedUnitPrice || line.TaxRate != saved.SavedTaxRate ||
+                    line.LineTotal != saved.SavedLineTotal || saved.SavedCurrency != Currency) needsReview = true;
+            }
+            CurrentProduct = CartLines.LastOrDefault()?.Product;
+            if (needsReview)
+            {
+                RequiresCartPriceConfirmation = true;
+                StatusMessage = "La venta guardada tiene cambios de precio, impuesto o moneda. Confirma los valores antes de cobrar.";
+            }
+            else if (CartLines.Count > 0)
+                StatusMessage = "Se recuperó el carrito guardado de esta terminal.";
+        }
+        finally { _isRestoringCart = false; }
+        RefreshTotals();
+    }
+
+    private void ApplyWorkspacePricingContext(CartWorkspaceSnapshot? workspace)
+    {
+        var rate = workspace?.CurrentExchangeRate;
+        if (rate is null)
+        {
+            _usdToVesRate = null;
+            return;
+        }
+        var normalized = NormalizeWorkspaceExchangeRate(rate);
+        _usdToVesRate = normalized is > 0m
+            ? new ExchangeRateInfo(rate.Id, "USD", "VES", normalized.Value, rate.EffectiveAtUtc, rate.Source, rate.ActorId)
+            : null;
+    }
+
+    private static decimal? NormalizeWorkspaceExchangeRate(CartWorkspaceExchangeRateSnapshot? rate)
+    {
+        if (rate is null || rate.Rate <= 0m) return null;
+        if (rate.FromCurrency == "USD" && rate.ToCurrency == "VES") return rate.Rate;
+        if (rate.FromCurrency == "VES" && rate.ToCurrency == "USD") return 1m / rate.Rate;
+        return null;
+    }
+
+    private void QueueWorkspaceSync()
+    {
+        if (_isRestoringCart || !IsAuthenticated || _pendingWorkspacePauseRequest is not null) return;
+        _workspaceRevision++;
+        _workspaceSyncFailed = false;
+        OnWorkspaceSyncStateChanged();
+        if (RequiresCartPriceConfirmation)
+        {
+            _workspaceSaveDelay?.Cancel();
+            return;
+        }
+        _workspaceSaveDelay?.Cancel();
+        _workspaceSaveDelay?.Dispose();
+        var delay = new CancellationTokenSource();
+        _workspaceSaveDelay = delay;
+        _workspaceSaveTask = DebounceAndPersistWorkspaceAsync(delay.Token);
+    }
+
+    private async Task DebounceAndPersistWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(250, cancellationToken);
+            await PersistWorkspaceUntilCurrentAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            _workspaceSyncFailed = true;
+            StatusMessage = "No se pudo guardar el carrito en el servidor. Se conserva en pantalla; reintenta antes de pausar o cobrar.";
+            OnWorkspaceSyncStateChanged();
+        }
+    }
+
+    private async Task PersistWorkspaceUntilCurrentAsync(CancellationToken cancellationToken)
+    {
+        if (_isRestoringCart || !IsAuthenticated || _workspaceRevision == _workspaceSyncedRevision) return;
+        if (RequiresCartPriceConfirmation)
+            throw new InvalidOperationException("Confirma los valores actuales antes de guardar los cambios de este carrito.");
+        await _workspaceSaveLock.WaitAsync(cancellationToken);
+        try
+        {
+            while (_workspaceRevision != _workspaceSyncedRevision)
+            {
+                if (_pendingWorkspaceSaveRequest is null)
+                {
+                    var previous = _activeCartWorkspace;
+                    _pendingWorkspaceSaveRequest = new CartWorkspaceSaveRequest(previous?.Id, previous?.Version ?? 0,
+                        Guid.NewGuid().ToString("N"), SelectedCustomer?.Id,
+                        CartLines.Select(line => new CartWorkspaceLineInput(line.Product.Id, line.Quantity, line.PriceTier,
+                            line.UnitPriceOverride, line.PriceOverrideReason)).ToArray());
+                    _pendingWorkspaceSaveRevision = _workspaceRevision;
+                }
+                var request = _pendingWorkspaceSaveRequest;
+                var revision = _pendingWorkspaceSaveRevision;
+                _activeCartWorkspace = await _api.SaveActiveCartWorkspaceAsync(request, cancellationToken);
+                _workspaceSyncedRevision = revision;
+                _pendingWorkspaceSaveRequest = null;
+                _pendingWorkspaceSaveRevision = 0;
+            }
+            _workspaceSyncFailed = false;
+        }
+        catch
+        {
+            _workspaceSyncFailed = true;
+            throw;
+        }
+        finally
+        {
+            _workspaceSaveLock.Release();
+            OnWorkspaceSyncStateChanged();
+        }
+    }
+
+    private void OnWorkspaceSyncStateChanged()
+    {
+        OnPropertyChanged(nameof(IsWorkspaceSyncPending));
+        OnPropertyChanged(nameof(CartWorkspaceStatus));
+        OnPropertyChanged(nameof(CanCharge));
+        OnPropertyChanged(nameof(CanPauseSale));
+        OnPropertyChanged(nameof(CanViewPausedSales));
+        OnPropertyChanged(nameof(CanEditCart));
+        NotifyChargeCommand();
     }
 
     public async Task OpenCashSessionAsync(decimal openingBalance, string currency, CancellationToken cancellationToken = default)
@@ -325,6 +688,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task ChangePriceAsync(Guid productId, decimal price, string reason, CancellationToken cancellationToken = default) => _api.ChangePriceAsync(productId, price, reason, cancellationToken);
     public Task ChangePriceAsync(Guid productId, string priceTier, decimal price, string reason, CancellationToken cancellationToken = default)
         => _api.ChangePriceAsync(productId, priceTier, price, reason, cancellationToken);
+    public Task InitializeProductCostAsync(Guid productId, decimal unitCost, string reason, CancellationToken cancellationToken = default)
+        => _api.InitializeProductCostAsync(productId, unitCost, reason, cancellationToken);
     public Task<IReadOnlyList<ExchangeRateInfo>> GetExchangeRatesAsync(CancellationToken cancellationToken = default) => _api.GetExchangeRatesAsync(cancellationToken);
     public async Task SetExchangeRateAsync(string from, string to, decimal rate, DateTime effectiveAtUtc, string source, CancellationToken cancellationToken = default)
     {
@@ -382,7 +747,17 @@ public sealed class PosViewModel : INotifyPropertyChanged
         => _api.RecordReceivablePaymentAsync(customerId, amount, currency, reference, cancellationToken);
     public Task RecordReceivableOpeningBalanceAsync(Guid customerId, decimal amountUsd, string reason, string idempotencyKey, CancellationToken cancellationToken = default)
         => _api.RecordReceivableOpeningBalanceAsync(customerId, amountUsd, reason, idempotencyKey, cancellationToken);
-    public void SelectCustomer(CustomerInfo? customer) { SelectedCustomer = customer; StatusMessage = customer is null ? "Venta general." : $"Cliente: {customer.Name}."; }
+    public void SelectCustomer(CustomerInfo? customer)
+    {
+        if (!CanEditCart)
+        {
+            StatusMessage = "Espera a que termine la operación pendiente antes de cambiar el cliente.";
+            return;
+        }
+        SelectedCustomer = customer;
+        StatusMessage = customer is null ? "Venta general." : $"Cliente: {customer.Name}.";
+        QueueWorkspaceSync();
+    }
 
     public async Task SearchAsync(string query, CancellationToken cancellationToken = default)
     {
@@ -487,7 +862,10 @@ public sealed class PosViewModel : INotifyPropertyChanged
 
     public async Task<SaleReceipt> CompleteSaleAsync(IReadOnlyList<SalePaymentInput> payments, CancellationToken cancellationToken = default)
     {
-        if (!CanCharge || CashSession is null) throw new InvalidOperationException("A signed-in operator and open cash session are required.");
+        if (!IsAuthenticated || CashSession is not { IsActiveForCurrentOperator: true })
+            throw new InvalidOperationException("A signed-in operator and open cash session are required.");
+        await FlushWorkspaceSyncAsync(cancellationToken);
+        if (!CanCharge) throw new InvalidOperationException("Sincroniza el carrito y resuelve los avisos antes de cobrar.");
         if (_pendingIdempotencyKey is null)
         {
             if (payments.Count == 0 || payments.Any(x => x.Amount <= 0 || x.Currency is not ("USD" or "VES")))
@@ -532,11 +910,23 @@ public sealed class PosViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            var saleId = await _api.CheckoutAsync(CashSession.Id, lines, fixedPayments, _pendingCustomerId, _pendingIdempotencyKey, _pendingExchangeRateId, cancellationToken);
+            var saleId = await _api.CheckoutAsync(CashSession.Id, lines, fixedPayments, _pendingCustomerId,
+                _pendingIdempotencyKey, _pendingExchangeRateId, _activeCartWorkspace?.Id, cancellationToken);
             var receipt = new SaleReceipt(saleId, DateTime.Now, _pendingCurrency, _pendingTotal, receiptLines, fixedPayments)
             { RoundingAdjustment = _pendingRoundingAdjustment };
             ClearPendingCheckout();
-            CartLines.Clear(); SelectedCartLine = null; CurrentProduct = null; SelectedCustomer = null; RefreshTotals();
+            _isRestoringCart = true;
+            try { CartLines.Clear(); SelectedCartLine = null; CurrentProduct = null; SelectedCustomer = null; }
+            finally { _isRestoringCart = false; }
+            _activeCartWorkspace = null;
+            _pendingWorkspaceSaveRequest = null;
+            _pendingWorkspaceSaveRevision = 0;
+            _pendingWorkspacePauseRequest = null;
+            _workspaceRevision = 0;
+            _workspaceSyncedRevision = 0;
+            _workspaceSyncFailed = false;
+            RequiresCartPriceConfirmation = false;
+            RefreshTotals();
             StatusMessage = $"Venta {saleId.ToString("N")[..8]} confirmada.";
             return receipt;
         }
@@ -589,7 +979,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
         if (CurrentProduct?.Id == removedLine.Product.Id)
             CurrentProduct = CartLines.LastOrDefault()?.Product;
     }
-    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); }
+    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanPauseSale)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); }
 
     private void CartLines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -605,11 +995,16 @@ public sealed class PosViewModel : INotifyPropertyChanged
             foreach (CartLineViewModel line in e.NewItems)
                 if (_observedCartLines.Add(line)) line.PropertyChanged += CartLine_PropertyChanged;
         RefreshTotals();
+        QueueWorkspaceSync();
     }
 
     private void CartLine_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(CartLineViewModel.Quantity) or nameof(CartLineViewModel.LineTotal)) RefreshTotals();
+        if (e.PropertyName is nameof(CartLineViewModel.Quantity) or nameof(CartLineViewModel.LineTotal) or nameof(CartLineViewModel.PriceTier) or nameof(CartLineViewModel.UnitPriceOverride))
+        {
+            RefreshTotals();
+            QueueWorkspaceSync();
+        }
     }
     private string FormatReference(decimal amount)
     {
@@ -666,10 +1061,13 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private decimal? _unitPriceOverride;
     private string? _priceOverrideReason;
     private string _priceTier = "Price1";
+    private decimal? _savedPriceFallback;
+    private string? _resumeIssue;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProductInfo Product { get; } = product;
     public string SettlementCurrency => _settlementCurrency;
     public string PriceTier => _priceTier;
+    public string PriceTierLabel => _priceTier switch { "Price2" => "Precio 2", "Price3" => "Precio 3", _ => "Precio 1" };
     public IReadOnlyList<string> AvailablePriceTiers
     {
         get
@@ -680,7 +1078,7 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
             return tiers;
         }
     }
-    public decimal CatalogUnitPrice => CatalogUnitPriceFor(PriceTier);
+    public decimal CatalogUnitPrice => _savedPriceFallback ?? CatalogUnitPriceFor(PriceTier);
     public decimal CatalogUnitPriceFor(string priceTier)
     {
         var source = priceTier switch { "Price1" => Product.UnitPrice, "Price2" => Product.Price2, "Price3" => Product.Price3, _ => null };
@@ -688,6 +1086,16 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         return PosViewModel.ConvertPrice(source.Value, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
     }
     public decimal UnitPrice => _unitPriceOverride ?? CatalogUnitPrice;
+    public string? ResumeIssue
+    {
+        get => _resumeIssue;
+        set
+        {
+            if (_resumeIssue == value) return;
+            _resumeIssue = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ResumeIssue)));
+        }
+    }
     public decimal? UnitPriceOverride => _unitPriceOverride;
     public string? PriceOverrideReason => _priceOverrideReason;
     public Guid? ExchangeRateId => Product.Currency == SettlementCurrency ? null : _usdToVesRate?.Id;
@@ -720,6 +1128,7 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
 
     public void ApplyEdits(decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
     {
+        _savedPriceFallback = null;
         _priceTier = priceTier;
         _unitPriceOverride = unitPriceOverride;
         _priceOverrideReason = priceOverrideReason;
@@ -729,6 +1138,17 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPriceOverride)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceOverrideReason)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceTier)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PriceTierLabel)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
+    }
+    public void RestoreEdits(decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason,
+        decimal savedUnitPrice, bool tierConfigured)
+    {
+        _savedPriceFallback = tierConfigured ? null : savedUnitPrice;
+        ApplyEdits(quantity, priceTier, unitPriceOverride, priceOverrideReason);
+        if (!tierConfigured) _savedPriceFallback = savedUnitPrice;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CatalogUnitPrice)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
     }
     public decimal TaxRate => Product.TaxTreatment switch { "Taxable16" => 0.16m, "Taxable8" => 0.08m, _ => 0m };

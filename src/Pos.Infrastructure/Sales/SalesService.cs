@@ -13,18 +13,40 @@ namespace Pos.Infrastructure.Sales;
 public sealed class SalesService(PosDbContext db)
 {
     public async Task<SaleResult> ConfirmAsync(Guid operatorId, Guid terminalId, Guid cashSessionId, string idempotencyKey,
-        CheckoutRequest request, CancellationToken cancellationToken = default)
+        CheckoutRequest request, CancellationToken cancellationToken = default, Guid? cartWorkspaceId = null)
     {
         if (request is null || request.Lines is null || request.Payments is null || request.Lines.Any(x => x is null) || request.Payments.Any(x => x is null))
             throw new CheckoutRejectedException("invalid_checkout_shape");
         ValidateRequest(idempotencyKey, request);
         var payloadHash = ComputePayloadHash(request);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({terminalId.ToString()}, 0))", cancellationToken);
         var prior = await db.IdempotencyRecords.SingleOrDefaultAsync(x => x.TerminalId == terminalId && x.Key == idempotencyKey, cancellationToken);
         if (prior is not null)
         {
             await transaction.CommitAsync(cancellationToken);
             return prior.PayloadHash == payloadHash ? new SaleResult(prior.SaleId, true, null) : new SaleResult(Guid.Empty, false, "idempotency_conflict");
+        }
+
+        CartWorkspaceRecord? workspace = null;
+        if (cartWorkspaceId.HasValue)
+        {
+            workspace = await db.CartWorkspaces.FromSqlInterpolated($"SELECT * FROM cart_workspaces WHERE \"Id\" = {cartWorkspaceId.Value} AND \"TerminalId\" = {terminalId} FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+            if (workspace is null || workspace.Status != "Active") throw new CheckoutRejectedException("active_workspace_required");
+            if (!CartWorkspaceService.MatchesCheckout(workspace, request.CustomerId, request.Lines))
+                throw new CheckoutRejectedException("workspace_cart_mismatch");
+        }
+        else
+        {
+            workspace = await db.CartWorkspaces.FromSqlInterpolated($"SELECT * FROM cart_workspaces WHERE \"TerminalId\" = {terminalId} AND \"Status\" = 'Active' FOR UPDATE")
+                .SingleOrDefaultAsync(cancellationToken);
+            if (workspace is not null && CartWorkspaceService.ReadLines(workspace.LinesJson).Count > 0)
+            {
+                if (!CartWorkspaceService.MatchesCheckout(workspace, request.CustomerId, request.Lines))
+                    throw new CheckoutRejectedException("workspace_id_required");
+            }
+            else workspace = null;
         }
 
         var cashSession = await db.CashSessions.FromSqlInterpolated($"SELECT * FROM cash_sessions WHERE \"Id\" = {cashSessionId} AND \"ActiveOperatorId\" = {operatorId} AND \"TerminalId\" = {terminalId} AND \"Status\" = 'Open' FOR UPDATE")
@@ -202,6 +224,13 @@ public sealed class SalesService(PosDbContext db)
                 })
             }), OccurredAtUtc = DateTime.UtcNow
         });
+        if (workspace is not null)
+        {
+            workspace.Status = "Completed";
+            workspace.SaleId = saleId;
+            workspace.Version++;
+            workspace.UpdatedAtUtc = sale.CreatedAtUtc;
+        }
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new SaleResult(saleId, false, null);

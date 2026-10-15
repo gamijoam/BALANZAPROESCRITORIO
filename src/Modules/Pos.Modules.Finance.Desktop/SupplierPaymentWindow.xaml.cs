@@ -11,6 +11,7 @@ public partial class SupplierPaymentWindow : Window
     {
         InitializeComponent();
         Owner = owner;
+        FitToWorkArea();
         if (isImmediateSettlement)
         {
             Title = "Contabilizar factura de contado";
@@ -45,6 +46,15 @@ public partial class SupplierPaymentWindow : Window
     public string Method { get; private set; } = string.Empty;
     public string ReceivingAccount { get; private set; } = string.Empty;
     public string? Reference { get; private set; }
+
+    private void FitToWorkArea()
+    {
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(Width, workArea.Width - 32);
+        Height = Math.Min(Height, workArea.Height - 48);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
+    }
 
     private void ConfirmPayment_Click(object sender, RoutedEventArgs e)
     {

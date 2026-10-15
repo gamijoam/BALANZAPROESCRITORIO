@@ -1,11 +1,27 @@
 using Pos.Modules.Abstractions;
 using Pos.Modules.Finance;
+using System.Security.Cryptography;
 using System.Xml.Linq;
 
 namespace Pos.Modules.Tests;
 
 public sealed class FinanceModuleContractTests
 {
+    [Fact]
+    public void Receipt_query_quotes_the_product_currency_identifier_for_postgresql()
+    {
+        var sql = FinanceSql.LoadInvoiceReceiptCosts("\"finance\".\"purchase_invoice_lines\"");
+
+        Assert.Contains("p.\"Currency\"", sql);
+        Assert.DoesNotContain("\\", sql);
+    }
+
+    [Fact]
+    public void Supplier_payment_query_uses_the_case_sensitive_exchange_rate_column()
+    {
+        Assert.Contains("SELECT \"Rate\" FROM exchange_rates", FinanceSql.ReadCurrentUsdToVesRate);
+    }
+
     [Theory]
     [InlineData(12.34, "USD", "VES", 40.5, 499.77)]
     [InlineData(405, "VES", "USD", 40.5, 10)]
@@ -70,7 +86,7 @@ public sealed class FinanceModuleContractTests
         var manifest = ModuleManifestReader.ParseAndValidate(File.ReadAllText(path));
 
         Assert.Equal("finance", manifest.Id);
-        Assert.Equal("1.0.3", manifest.Version.ToString(3));
+        Assert.Equal("1.0.6", manifest.Version.ToString(3));
         Assert.NotNull(manifest.EntryAssembly);
         Assert.NotNull(manifest.DesktopEntryAssembly);
         Assert.Contains("Supplier.View", manifest.Permissions);
@@ -103,6 +119,15 @@ public sealed class FinanceModuleContractTests
         var settingsPath = Path.Combine(AppContext.BaseDirectory, "finance", "finance-0002.json");
         var settingsMigration = ModuleMigrationReader.Parse(File.ReadAllText(settingsPath));
         Assert.Contains(settingsMigration.Operations.OfType<CreateModuleTable>(), table => table.Table == "price_suggestion_margins");
+    }
+
+    [Fact]
+    public void Finance_price_suggestion_migration_keeps_the_checksum_from_the_published_1_0_3_package()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "finance", "finance-0002.json");
+        var checksum = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
+
+        Assert.Equal("119628a9f57dec16af3a56e69a2fa330271787b86174031b95e5ea6067955b72", checksum);
     }
 
     [Fact]
@@ -139,7 +164,7 @@ public sealed class FinanceModuleContractTests
 
         Assert.Contains("PriceSuggestion.Manage", manifest.Permissions);
         Assert.Contains("finance:0002", manifest.Migrations);
-        Assert.Equal("1.0.3", manifest.Version.ToString(3));
+        Assert.Equal("1.0.6", manifest.Version.ToString(3));
     }
 
     [Fact]

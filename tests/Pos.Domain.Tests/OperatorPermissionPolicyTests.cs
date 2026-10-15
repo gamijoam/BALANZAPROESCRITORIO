@@ -49,6 +49,17 @@ public sealed class OperatorPermissionPolicyTests
     }
 
     [Fact]
+    public void Initial_inventory_cost_requires_administrator_approval_for_non_admin_roles()
+    {
+        Assert.Equal(PermissionAccessMode.RequireAdminPin, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Cashier, Permission.InitializeInventoryCost, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.RequireAdminPin, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Supervisor, Permission.InitializeInventoryCost, PermissionOverrideMode.Inherit));
+        Assert.Equal(PermissionAccessMode.Allow, OperatorPermissionPolicy.Resolve(
+            OperatorRole.Administrator, Permission.InitializeInventoryCost, PermissionOverrideMode.Deny));
+    }
+
+    [Fact]
     public void Supplier_payments_require_administrator_approval_for_non_admin_roles_by_default()
     {
         Assert.Equal(PermissionAccessMode.RequireAdminPin, OperatorPermissionPolicy.Resolve(

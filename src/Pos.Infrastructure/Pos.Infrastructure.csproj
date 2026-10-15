@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pos.Domain\Pos.Domain.csproj" />
+    <ProjectReference Include="..\Pos.Shared.Contracts\Pos.Shared.Contracts.csproj" />
     <ProjectReference Include="..\Pos.Application\Pos.Application.csproj" />
     <ProjectReference Include="..\Modules\Pos.Modules.Packaging\Pos.Modules.Packaging.csproj" />
     <ProjectReference Include="..\Modules\Pos.Modules.Server.Abstractions\Pos.Modules.Server.Abstractions.csproj" />

@@ -40,6 +40,6 @@ public sealed class PosDbContextMigrationSnapshotTests
 
         Assert.False(context.Database.HasPendingModelChanges(),
             $"PosDbContext changed without a matching migration and model snapshot. Pending operations: {pendingOperations}");
-        Assert.Contains("20261014180000_Hito30RemoveRedundantPurchaseReceiptEffectLineIndex", context.Database.GetMigrations());
+        Assert.Equal("20261015102000_Hito31CartWorkspaces", context.Database.GetMigrations().Last());
     }
 }

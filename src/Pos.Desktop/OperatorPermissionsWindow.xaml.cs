@@ -66,6 +66,7 @@ public partial class OperatorPermissionsWindow : Window
         "CreateCreditSale" => "Vender a crédito",
         "ApplyDiscount" => "Aplicar descuentos",
         "ChangePrice" => "Cambiar precios",
+        "InitializeInventoryCost" => "Asignar costo inicial del inventario",
         "OverrideSalePrice" => "Autorizar precio especial en una venta",
         "AdjustStock" => "Ajustar inventario",
         "ViewInventory" => "Consultar inventario y movimientos",
