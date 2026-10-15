@@ -31,6 +31,15 @@ $financeSettingsPackageEntry = "Source = 'src\Modules\Pos.Modules.Finance\migrat
 if ($prepare -notmatch [regex]::Escape($financeSettingsPackageEntry)) {
     throw 'RED: el paquete de Finanzas no incluye la migración finance-0002 para los márgenes de precios.'
 }
+$financeCostBasisPackageEntry = "Source = 'src\Modules\Pos.Modules.Finance\migrations\finance-0003.json'; Package = 'migrations/finance-0003.json'"
+if ($prepare -notmatch [regex]::Escape($financeCostBasisPackageEntry)) {
+    throw 'RED: el paquete de Finanzas no incluye la migración finance-0003 para el costo base de precios sugeridos.'
+}
+$financeManifestPath = Join-Path $repoRoot 'src\Modules\Pos.Modules.Finance\module.manifest.json'
+$financeManifest = Get-Content -LiteralPath $financeManifestPath -Raw | ConvertFrom-Json
+if ($financeManifest.migrations -notcontains 'finance:0003') {
+    throw 'El manifiesto de Finanzas debe declarar finance:0003 antes de publicarse.'
+}
 if ($workflow -notmatch 'PUBLISH_MODULE_INPUT' -or $workflow -notmatch 'expected_modules') {
     throw 'RED: el firmador no valida que recibió todos los paquetes solicitados.'
 }
