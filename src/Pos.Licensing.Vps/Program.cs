@@ -205,8 +205,17 @@ public sealed record LicenseServiceOptions(string KeyId, string PrivateKeyPath, 
         var privateKeyPath = configuration["LicensingVps:PrivateKeyPath"] ?? "/etc/pos-license-api/license-private.pem";
         var storePath = configuration["LicensingVps:StorePath"] ?? "/var/lib/pos-license-api/subscriptions.json";
         var adminToken = configuration["LicensingVps:AdminToken"];
+        var adminTokenFile = configuration["LicensingVps:AdminTokenFile"];
+        if (!string.IsNullOrWhiteSpace(adminTokenFile))
+        {
+            if (!Path.IsPathFullyQualified(adminTokenFile))
+                throw new InvalidOperationException("LicensingVps:AdminTokenFile debe ser una ruta absoluta.");
+            if (!File.Exists(adminTokenFile))
+                throw new FileNotFoundException("No se encontró el archivo del token administrativo.", adminTokenFile);
+            adminToken = File.ReadAllText(adminTokenFile).TrimEnd('\r', '\n');
+        }
         if (string.IsNullOrWhiteSpace(adminToken) || adminToken.Length < 32)
-            throw new InvalidOperationException("Configure LicensingVps:AdminToken con al menos 32 caracteres mediante un secreto del sistema.");
+            throw new InvalidOperationException("Configure un token administrativo con al menos 32 caracteres mediante LicensingVps:AdminToken o LicensingVps:AdminTokenFile.");
         if (!Path.IsPathFullyQualified(privateKeyPath) || !Path.IsPathFullyQualified(storePath))
             throw new InvalidOperationException("Las rutas de llave privada y suscripciones deben ser absolutas.");
         if (!File.Exists(privateKeyPath)) throw new FileNotFoundException("No se encontró la llave privada de licencias.", privateKeyPath);

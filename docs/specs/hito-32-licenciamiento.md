@@ -45,7 +45,7 @@ El formato del primer corte es un sobre JSON con `schemaVersion`, `keyId`, `payl
 - Consultar al iniciar, cuando vuelve la conexión y cada cuatro horas, con reintentos limitados.
 - Guardar atómicamente la licencia firmada y conservar la última licencia válida ante errores de red.
 
-**Estado 16 de octubre de 2026:** primera implementación disponible en `Pos.Licensing.Vps`. Ubuntu 24.04 puede alojarla como servicio systemd. El POS consulta al inicio y cada cuatro horas; ante fallos de red reintenta cada quince minutos. Las suscripciones se guardan en un archivo JSON atómico, fuera del repositorio, y la llave privada solo existe en el VPS. La respuesta se verifica localmente con el anillo de llaves públicas antes de reemplazar la licencia.
+**Estado 16 de octubre de 2026:** primera implementación disponible en `Pos.Licensing.Vps`. Ubuntu 24.04 puede alojarla como servicio systemd o como contenedor Docker detrás de Traefik. El POS consulta al inicio y cada cuatro horas; ante fallos de red reintenta cada quince minutos. Las suscripciones se guardan en un archivo JSON atómico, fuera del repositorio, y la llave privada solo existe en el VPS. La respuesta se verifica localmente con el anillo de llaves públicas antes de reemplazar la licencia.
 
 El primer corte no integra cobros con una pasarela: un administrador registra el período pagado en el VPS mediante el endpoint administrativo. Tras ese registro, la renovación del POS es automática. Ver `docs/operacion/licencias-vps.md` para instalar, respaldar y operar el servicio. La renovación queda inactiva hasta configurar el dominio HTTPS y `Licensing__RenewalEndpoint` en el Windows Server.
 - Renovar automáticamente incluso si el POS está en cierre seguro.
