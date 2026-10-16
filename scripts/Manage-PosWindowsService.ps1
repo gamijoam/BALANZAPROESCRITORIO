@@ -107,6 +107,13 @@ function Set-PosServiceConfiguration {
     $connectionBuilder['Command Timeout'] = 30
 
     $urls = 'http://127.0.0.1:5155'
+    $licenseRenewalEndpoint = [Environment]::GetEnvironmentVariable('BALANZAPRO_LICENSE_RENEWAL_ENDPOINT', 'Machine')
+    if (-not [string]::IsNullOrWhiteSpace($licenseRenewalEndpoint) -and $licenseRenewalEndpoint -notmatch '^https://[^/]+/api/v1/renewals$') {
+        throw 'La URL de renovación debe usar HTTPS y terminar en /api/v1/renewals.'
+    }
+    $licenseEnforce = [Environment]::GetEnvironmentVariable('BALANZAPRO_LICENSE_ENFORCE', 'Machine')
+    if ([string]::IsNullOrWhiteSpace($licenseEnforce)) { $licenseEnforce = 'false' }
+    if ($licenseEnforce -notin @('true', 'false')) { throw 'BALANZAPRO_LICENSE_ENFORCE solo admite true o false.' }
     $certificatePath = $null
     $certificatePassword = $null
     if ($null -ne $profile -and [string]$profile.Mode -eq 'Server') {
@@ -145,6 +152,8 @@ function Set-PosServiceConfiguration {
         certificatePath = $certificatePath
         certificatePassword = $certificatePassword
         moduleTrustKeyRingPath = $(if (Test-Path -LiteralPath $trustedKeys -PathType Leaf) { $trustedKeys } else { $null })
+        licenseRenewalEndpoint = $licenseRenewalEndpoint
+        licenseEnforce = $licenseEnforce
         moduleStoragePath = $moduleStoragePath
         moduleBackupPath = $moduleBackupPath
         logDirectory = $logDirectory

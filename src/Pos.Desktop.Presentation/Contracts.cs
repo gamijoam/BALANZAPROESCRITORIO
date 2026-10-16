@@ -46,6 +46,20 @@ public sealed record ModuleClientApiRangeClient(string Min, string MaxExclusive)
 public sealed record DesktopModuleClientInfo(string ModuleId, string Version, string SignerKeyId,
     string SignerPublicKeyPem, IReadOnlyList<string> GrantedPermissions);
 public sealed record ModuleManagementAccessInfo(bool CanOpenManagement, bool RequiresAdministratorPin);
+public sealed record LicenseStatusClient(Guid InstallationId, string State, string? LicenseId, string? CustomerName,
+    string? Plan, int? MaxTerminals, DateTimeOffset? ExpiresAtUtc, IReadOnlyList<string> Entitlements, string? Diagnostic)
+{
+    public string StateLabel => State switch
+    {
+        "Active" => "Activa",
+        "Grace" => "En período de gracia",
+        "Locked" => "Bloqueada",
+        "Missing" => "Falta instalar una licencia",
+        "NotConfigured" => "Falta configurar la llave pública del emisor",
+        "Invalid" => "Licencia inválida",
+        _ => State
+    };
+}
 public sealed record ModuleTerminalCompatibilityClientResult(bool IsCompatible, int RegisteredTerminalCount,
     int UnreportedTerminalCount, IReadOnlyList<string> IncompatibleVersions)
 {
@@ -264,6 +278,10 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
 {
     Uri BaseAddress { get; set; }
     string? AccessToken { get; }
+    Task<LicenseStatusClient> GetLicenseStatusAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta el estado de la licencia.");
+    Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no permite importar una licencia.");
     Task<ModuleInstallationPlanClientResult> PlanModuleInstallationAsync(string requestedModuleId, IReadOnlyList<string> packagePaths, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no implementa la planificación de módulos.");
     Task<ModuleInstallationClientResult> InstallModuleAsync(string requestedModuleId, IReadOnlyList<string> packagePaths, CancellationToken cancellationToken = default)
