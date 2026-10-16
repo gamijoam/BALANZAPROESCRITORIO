@@ -1,6 +1,6 @@
 {
   "id": "advanced-reports",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "hostApi": { "min": 1, "max": 1 },
   "clientApi": { "min": "1.0.0", "maxExclusive": "2.0.0" },
   "entryAssembly": "Pos.Modules.Reporting.dll",

@@ -7,18 +7,21 @@ Este módulo agrega un visor de reportes WPF al POS anfitrión. Usa los endpoint
 - **1.0.1:** evita que la selección inicial de moneda filtre la tabla antes de que WPF termine de construir la pantalla. No requiere migraciones ni una actualización del POS anfitrión.
 - **1.0.2:** elimina el panel lateral, da el ancho completo a la tabla y traslada las columnas visibles a un botón emergente junto a las vistas personales. Abre el visor maximizado. No requiere migraciones ni actualización del POS anfitrión.
 - **1.1.0:** agrega saldos y movimientos paginados de cuentas por cobrar, y cobros/reintegros agrupados por caja, método y moneda. Usa `ViewReports`, requiere Desktop API 1.4 y no agrega migraciones.
+- **1.2.0:** agrega una vista paginada tipo hoja que respeta filtros, filas, orden y columnas visibles, con papel Carta/Oficio/A4 y orientación horizontal/vertical; permite imprimirla o guardarla como PDF mediante Microsoft Print to PDF en Windows. También incorpora el reporte de precios y márgenes actuales por nivel, calculado con el costo vigente cuando está registrado. No requiere migraciones ni actualización del POS anfitrión.
 
-## Construir el paquete firmado
+## Publicar el paquete firmado
 
-Desde PowerShell en la raíz del repositorio:
+Después de fusionar los cambios a `main`, el firmador centralizado genera el ZIP desde GitHub Actions:
 
-    .\scripts\Build-ReportModulePackage.ps1 -CertificateThumbprint "<huella-certificado>"
+1. Abre **Actions → Publicar módulo firmado → Run workflow**.
+2. Selecciona `main` y `advanced-reports`.
+3. Descarga el ZIP firmado del artifact `signed-module-output`.
 
-El certificado debe estar instalado en Cert:\CurrentUser\My y contar con su clave privada. El ZIP firmado y su clave pública salen en artifacts\modules\advanced-reports\ (el ZIP contiene la versión configurada; la versión actual del módulo es 1.1.0).
+El runner de firma del VPS guarda la clave privada fuera de GitHub y del equipo Windows. No se requiere copiar esa clave al repositorio.
 
 Antes de instalar, actualiza el POS anfitrión a Desktop API 1.4. No hay migración nueva; las vistas personales siguen necesitando que esté aplicada `OperatorReportViews`. El visor y las tres nuevas fuentes requieren `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
 
-Los cambios visibles al operador y los pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.1.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.1.0.md).
+Los cambios visibles al operador y los pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.2.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.2.0.md).
 
 ## Cómo agregar una fuente de reporte
 
