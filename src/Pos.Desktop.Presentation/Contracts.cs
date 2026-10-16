@@ -185,7 +185,12 @@ public sealed record SaleDetailLine(string Sku, string Description, decimal Quan
         "Taxable16" => "Gravado 16 %", "Taxable8" => "Gravado 8 %", "Taxable0" => "Gravado 0 %", "Exempt" => "Exento", _ => "Impuesto anterior no registrado"
     };
     public decimal ReturnedQuantity { get; init; }
+    public decimal ReturnedAmount { get; init; }
+    public decimal ReturnedRestockedQuantity { get; init; }
     public decimal ReturnableQuantity { get; init; } = Quantity;
+    public decimal? UnitCost { get; init; }
+    public string? CostCurrency { get; init; }
+    public decimal? AppliedExchangeRate { get; init; }
     public bool HasReturnedUnits => ReturnedQuantity > 0m;
     public string ReturnStatusLabel => ReturnedQuantity <= 0m
         ? "Sin devolución"

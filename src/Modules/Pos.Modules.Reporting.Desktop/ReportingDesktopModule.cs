@@ -24,6 +24,16 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
              Decimal("devuelto", "Devuelto"), Decimal("neto_unidades", "Unidades netas"), Decimal("bruto", "Importe bruto"),
              Decimal("devoluciones", "Importe devuelto"), Decimal("neto", "Importe neto")], LoadProductSales,
             supportsDateRange: true));
+        registry.RegisterReportSource(Source("reports.sales.profit", "Utilidad bruta por artículo", "Reports.View",
+            [Date("fecha", "Fecha"), Text("venta", "Venta"), Text("operador", "Responsable"), Text("cliente", "Cliente"),
+             Text("sku", "Código"), Text("producto", "Producto"), Text("moneda", "Moneda"), Decimal("vendido", "Unidades vendidas"),
+             Decimal("devuelto", "Unidades devueltas"), Decimal("reingresado", "Unidades reingresadas"), Decimal("neto_unidades", "Unidades netas"),
+             Decimal("venta_bruta", "Venta antes de devoluciones"), Decimal("impuesto", "Impuesto registrado"),
+             Decimal("devoluciones", "Importe devuelto"), Decimal("venta_neta", "Venta neta"),
+             Decimal("costo_unitario", "Costo unitario convertido"), Decimal("costo_total", "Costo de venta"),
+             Decimal("utilidad_bruta", "Utilidad bruta"), Decimal("margen_pct", "Margen bruto (%)"),
+             Text("estado_impuesto", "Estado del impuesto"), Text("estado_costo", "Estado del costo")],
+            LoadSalesProfit, supportsDateRange: true));
         registry.RegisterReportSource(Source("reports.cash.sessions", "Cajas y arqueos", "Reports.View",
             [Date("apertura", "Apertura"), Date("cierre", "Cierre"), Text("operador", "Responsable"), Text("estado", "Estado"),
              Decimal("usd_esperado", "USD esperado"), Decimal("usd_contado", "USD contado"), Decimal("usd_diferencia", "Diferencia USD"),
@@ -98,6 +108,61 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
         return Rows(report.Products.Select(row => Row(("sku", row.Sku), ("producto", row.Name), ("moneda", row.Currency),
             ("vendido", row.SoldQuantity), ("devuelto", row.ReturnedQuantity), ("neto_unidades", row.NetQuantity),
             ("bruto", row.GrossAmount), ("devoluciones", row.ReturnedAmount), ("neto", row.NetAmount))));
+    }
+
+    private static async Task<PosDesktopReportResult> LoadSalesProfit(PosDesktopModuleContext context, PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var api = RequireReports(context);
+        var currency = Filter(query, "currency");
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        for (var page = 1; ; page++)
+        {
+            var report = await api.GetSalesDetailReportAsync(From(query), To(query), currency, page, ct);
+            foreach (var sale in report.Sales)
+            foreach (var line in sale.Lines)
+            {
+                var soldQuantity = line.Quantity;
+                var returnedQuantity = Math.Clamp(line.ReturnedQuantity, 0m, soldQuantity);
+                var restockedQuantity = Math.Clamp(line.ReturnedRestockedQuantity, 0m, returnedQuantity);
+                var netQuantity = Math.Max(0m, soldQuantity - returnedQuantity);
+                var cogsQuantity = Math.Max(0m, soldQuantity - restockedQuantity);
+                var taxCaptured = line.TaxTreatment is "Taxable16" or "Taxable8" or "Taxable0" or "Exempt";
+                var grossSales = taxCaptured ? Math.Max(0m, line.LineTotal - line.TaxAmount) : (decimal?)null;
+                var returnedAmount = Math.Clamp(line.ReturnedAmount, 0m, line.LineTotal);
+                var netSales = grossSales.HasValue ? Math.Max(0m, grossSales.Value - returnedAmount) : (decimal?)null;
+                var unitCost = ConvertHistoricalUnitCost(line, sale.Currency);
+                var costTotal = unitCost.HasValue ? unitCost.Value * cogsQuantity : (decimal?)null;
+                var grossProfit = costTotal.HasValue && netSales.HasValue ? netSales.Value - costTotal.Value : (decimal?)null;
+                var margin = grossProfit.HasValue && netSales > 0m ? grossProfit.Value / netSales.Value * 100m : (decimal?)null;
+                var costStatus = unitCost.HasValue
+                    ? "Calculado con costo histórico"
+                    : line.UnitCost.HasValue ? "Moneda o tasa no disponible" : "Costo histórico no registrado";
+                var taxStatus = taxCaptured
+                    ? line.TaxAmount > 0m ? "Impuesto registrado y excluido" : "Impuesto registrado: sin cargo"
+                    : "Impuesto histórico no registrado";
+
+                rows.Add(Row(("fecha", sale.CreatedAtUtc), ("venta", sale.SaleNumber), ("operador", sale.OperatorName),
+                    ("cliente", sale.CustomerName), ("sku", line.Sku), ("producto", line.Description), ("moneda", sale.Currency),
+                    ("vendido", soldQuantity), ("devuelto", returnedQuantity), ("reingresado", restockedQuantity), ("neto_unidades", netQuantity),
+                    ("venta_bruta", grossSales), ("impuesto", taxCaptured ? line.TaxAmount : (decimal?)null),
+                    ("devoluciones", returnedAmount), ("venta_neta", netSales),
+                    ("costo_unitario", unitCost), ("costo_total", costTotal), ("utilidad_bruta", grossProfit),
+                    ("margen_pct", margin), ("estado_impuesto", taxStatus), ("estado_costo", costStatus)));
+            }
+            if (report.Sales.Count == 0 || page * report.PageSize >= report.TotalCount) break;
+        }
+        return new(rows);
+    }
+
+    private static decimal? ConvertHistoricalUnitCost(SaleDetailLine line, string saleCurrency)
+    {
+        if (line.UnitCost is not { } cost) return null;
+        var costCurrency = string.IsNullOrWhiteSpace(line.CostCurrency) ? line.OriginalCurrency : line.CostCurrency;
+        if (string.IsNullOrWhiteSpace(costCurrency)) return null;
+        if (string.Equals(costCurrency, saleCurrency, StringComparison.OrdinalIgnoreCase)) return cost;
+        if (string.Equals(costCurrency, line.OriginalCurrency, StringComparison.OrdinalIgnoreCase) && line.AppliedExchangeRate is > 0m)
+            return cost * line.AppliedExchangeRate.Value;
+        return null;
     }
 
     private static async Task<PosDesktopReportResult> LoadCashSessions(PosDesktopModuleContext context, PosDesktopReportQuery query, CancellationToken ct)

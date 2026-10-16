@@ -645,7 +645,7 @@ internal static class Hito4Endpoints
             var returnedLines = await (from line in db.SaleReturnLines.AsNoTracking()
                                        join header in db.SaleReturns.AsNoTracking() on line.SaleReturnId equals header.Id
                                        where ids.Contains(header.SaleId)
-                                       select new { header.SaleId, line.SaleLineId, line.Quantity }).ToListAsync(ct);
+                                       select new { header.SaleId, line.SaleLineId, line.Quantity, line.Amount, line.Restock }).ToListAsync(ct);
             var payments = await db.Payments.AsNoTracking().Where(x => ids.Contains(x.SaleId)).ToListAsync(ct);
             var operatorIds = sales.Select(x => x.OperatorId).Distinct().ToArray();
             var users = await db.OperatorUsers.AsNoTracking().Where(x => operatorIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Username, ct);
@@ -660,8 +660,10 @@ internal static class Hito4Endpoints
                 lines = lines.Where(x => x.SaleId == s.Id).Select(x => new
                 {
                     x.Id, x.Sku, x.Description, x.Quantity, x.UnitPrice, x.LineTotal, x.OriginalCurrency, x.OriginalUnitPrice,
-                    x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount,
+                    x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount, x.UnitCost, x.CostCurrency, x.AppliedExchangeRate,
                     returnedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity),
+                    returnedAmount = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Amount),
+                    returnedRestockedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id && r.Restock).Sum(r => r.Quantity),
                     returnableQuantity = x.Quantity - returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity)
                 }),
                 payments = payments.Where(x => x.SaleId == s.Id).Select(x => new { x.Method, x.Amount, x.Currency, x.AppliedExchangeRate })

@@ -18,6 +18,8 @@ internal static class ReportSummaryProjection
             "reports.sales.daily" => SalesDaily(data),
             "reports.sales.detail" => SalesDetails(data),
             "reports.sales.products" => ProductSales(data),
+            "reports.sales.profit" => SalesProfit(data),
+            "finance.payables" => Payables(data),
             "reports.cash.sessions" => CashSessions(data),
             "reports.cash.methods" => CashMethods(data),
             "reports.inventory.products" => Inventory(data, "existencia", "precio", "sku"),
@@ -84,6 +86,49 @@ internal static class ReportSummaryProjection
             result.Add(new($"Unidades netas {group.Key}", Quantity(group.Sum(row => Number(row, "neto_unidades"))), "Unidades vendidas menos las devueltas"));
             result.Add(new($"Venta neta {group.Key}", Money(group.Sum(row => Number(row, "neto"))), "Importe bruto menos devoluciones"));
         }
+        return result;
+    }
+
+    private static IReadOnlyList<ReportSummaryMetric> SalesProfit(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var calculable = rows.Where(row => Text(row, "estado_costo") == "Calculado con costo histórico" &&
+                                           Text(row, "estado_impuesto") != "Impuesto histórico no registrado").ToArray();
+        var result = new List<ReportSummaryMetric>
+        {
+            new("Ventas", Count(rows.Select(row => Text(row, "venta")).Where(value => value.Length > 0).Distinct(StringComparer.Ordinal).Count()), "Ventas incluidas en el período"),
+            new("Artículos", Count(rows.Count), "Líneas de venta incluidas en el período"),
+            new("Líneas sin costo histórico", Count(rows.Count(row => Text(row, "estado_costo") == "Costo histórico no registrado")), "No se puede calcular su utilidad sin el costo guardado al vender"),
+            new("Líneas sin conversión", Count(rows.Count(row => Text(row, "estado_costo") == "Moneda o tasa no disponible")), "Hay costo registrado, pero falta la moneda o tasa histórica para convertirlo"),
+            new("Líneas sin impuesto histórico", Count(rows.Count(row => Text(row, "estado_impuesto") == "Impuesto histórico no registrado")), "No se puede separar el impuesto; venta neta y utilidad excluidas del resumen")
+        };
+        foreach (var group in rows.Where(row => TryNumber(row, "venta_neta", out _)).GroupBy(Currency).OrderBy(group => group.Key, StringComparer.Ordinal))
+            result.Add(new($"Venta neta {group.Key}", Money(group.Sum(row => Number(row, "venta_neta"))), "Impuestos registrados excluidos; menos devoluciones"));
+        foreach (var group in calculable.GroupBy(Currency).OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var revenue = group.Sum(row => Number(row, "venta_neta"));
+            var profit = group.Sum(row => Number(row, "utilidad_bruta"));
+            result.Add(new($"Costo de venta {group.Key}", Money(group.Sum(row => Number(row, "costo_total"))), "Costo histórico de las unidades no reingresadas"));
+            result.Add(new($"Utilidad bruta {group.Key}", Money(profit), "Calculada solo en líneas con costo e impuesto histórico disponibles"));
+            if (revenue > 0m)
+                result.Add(new($"Margen bruto {group.Key}", Percent(profit / revenue * 100m), "Utilidad bruta ÷ venta neta calculable"));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<ReportSummaryMetric> Payables(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var overdue = rows.Where(row => Text(row, "estado") == "Vencida").ToArray();
+        var dueSoon = rows.Where(row => Text(row, "estado") is "Vence hoy" or "Por vencer").ToArray();
+        var result = new List<ReportSummaryMetric>
+        {
+            new("Documentos pendientes", Count(rows.Count), "Facturas y notas con saldo abierto"),
+            new("Proveedores", Count(rows.Select(row => Text(row, "proveedor_id")).Where(value => value.Length > 0).Distinct(StringComparer.Ordinal).Count()), "Proveedores con saldo abierto"),
+            new("Saldo total equivalente USD", Money(Sum(rows, "saldo_usd")), "Saldos convertidos según la tasa registrada en cada documento"),
+            new("Vencido equivalente USD", Money(Sum(overdue, "saldo_usd")), "Saldo de documentos vencidos"),
+            new("Por vencer equivalente USD", Money(Sum(dueSoon, "saldo_usd")), "Saldo que vence hoy o dentro de los próximos siete días")
+        };
+        result.AddRange(rows.GroupBy(Currency).OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => new ReportSummaryMetric($"Saldo pendiente {group.Key}", Money(group.Sum(row => Number(row, "saldo_pendiente"))), "Saldo abierto en la moneda del documento")));
         return result;
     }
 
