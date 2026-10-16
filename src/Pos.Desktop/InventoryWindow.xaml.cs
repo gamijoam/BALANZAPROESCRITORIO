@@ -52,7 +52,7 @@ public partial class InventoryWindow : Window
         {
             var status = StatusFilter.SelectedIndex switch { 1 => "inactive", 2 => "all", _ => "active" };
             var currency = CurrencyFilter.SelectedIndex switch { 1 => "VES", 2 => "USD", _ => "" };
-            var stock = StockFilter.SelectedIndex switch { 1 => "available", 2 => "out-of-stock", _ => "" };
+            var stock = StockFilter.SelectedIndex switch { 1 => "available", 2 => "out-of-stock", 3 => "low", _ => "" };
             bool? hasImage = ImageFilter.SelectedIndex switch { 1 => true, 2 => false, _ => null };
             // Extensions can replace catalog quantities with a location-specific balance. Fetch
             // the full stock set first, then evaluate availability against the displayed quantity.
@@ -67,7 +67,8 @@ public partial class InventoryWindow : Window
             var id = selectedProductId ?? (InventoryGrid.SelectedItem as InventoryItemInfo)?.Id;
             InventoryGrid.ItemsSource = items;
             var activeCount = items.Count(x => x.Active);
-            InventorySummary.Text = $"{items.Count} productos · {activeCount} activos · {items.Count - activeCount} inactivos.";
+            var lowStockCount = items.Count(x => x.MinimumStock > 0m && x.Quantity <= x.MinimumStock);
+            InventorySummary.Text = $"{items.Count} productos · {activeCount} activos · {items.Count - activeCount} inactivos · {lowStockCount} bajo mínimo.";
             InventoryGrid.SelectedItem = id.HasValue
                 ? items.FirstOrDefault(x => x.Id == id.Value)
                 : items.FirstOrDefault(x => x.Active) ?? items.FirstOrDefault();
@@ -103,6 +104,7 @@ public partial class InventoryWindow : Window
         SelectedProductName.Text = item?.Name ?? "Selecciona un producto";
         SelectedProductSku.Text = item is null ? string.Empty : $"Código: {item.Sku}";
         SelectedProductCost.Text = item is null ? string.Empty : $"Costo promedio: {item.UnitCostLabel}";
+        SelectedProductMinimum.Text = item is null ? string.Empty : $"Aviso de bajo stock: {PosNumberFormat.FormatQuantity(item.MinimumStock)} unidades";
         ProductImagePreview.Source = null;
         ProductImagePreview.Visibility = Visibility.Collapsed;
         ProductImagePlaceholder.Visibility = Visibility.Visible;
@@ -227,6 +229,7 @@ public partial class InventoryWindow : Window
         ChangeTaxTreatmentButton.IsEnabled = false;
         TaxTreatmentStatusLabel.Text = string.Empty;
         SelectedProductCost.Text = string.Empty;
+        SelectedProductMinimum.Text = string.Empty;
         AdjustButton.IsEnabled = false;
     }
 

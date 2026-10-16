@@ -584,6 +584,9 @@ public sealed class FinanceModule : IPosServerModule
 
     private static async Task<IResult> ListPayablesAsync(HttpContext context)
     {
+        var page = ReadPositiveInt(context.Request.Query["page"], 1, 1_000_000);
+        var pageSize = ReadPositiveInt(context.Request.Query["pageSize"], 1000, 1000);
+        var offset = ((long)page - 1) * pageSize;
         await using var connection = await OpenAsync(context, context.RequestAborted);
         await using var command = new NpgsqlCommand($"""
             SELECT i.id,s.id,s.legal_name,i.document_type,i.document_number,i.currency,i.issue_date,i.due_date,
@@ -592,8 +595,11 @@ public sealed class FinanceModule : IPosServerModule
             FROM {Table("purchase_invoices")} i JOIN {Table("suppliers")} s ON s.id=i.supplier_id
             JOIN {Table("supplier_payables")} p ON p.invoice_id=i.id
             WHERE i.status IN ('Posted','Partial','Paid') GROUP BY i.id,s.id,s.legal_name
-            HAVING sum(p.amount)>0 ORDER BY i.due_date NULLS LAST,i.issue_date,i.document_number LIMIT 1000
+            HAVING sum(p.amount)>0 ORDER BY i.due_date NULLS LAST,i.issue_date,i.document_number,i.id
+            LIMIT @pageSize OFFSET @offset
             """, connection);
+        command.Parameters.AddWithValue("pageSize", pageSize);
+        command.Parameters.AddWithValue("offset", offset);
         await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
         var rows = new List<PayableInfo>();
         while (await reader.ReadAsync(context.RequestAborted))
@@ -602,6 +608,11 @@ public sealed class FinanceModule : IPosServerModule
                 reader.GetDecimal(8), reader.GetDecimal(9), reader.GetDecimal(10), reader.GetDecimal(11)));
         return Results.Ok(rows);
     }
+
+    private static int ReadPositiveInt(string? value, int fallback, int maximum)
+        => int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, 1, maximum)
+            : fallback;
 
     private static async Task<IResult> ListPaymentsAsync(HttpContext context)
     {

@@ -22,25 +22,6 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Pos.Infrastructure.Persistence.CartWorkspaceRecord", b =>
-                {
-                    b.HasOne("Pos.Infrastructure.Persistence.CustomerRecord", null)
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
-                        .WithMany()
-                        .HasForeignKey("OperatorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Pos.Infrastructure.Persistence.SaleRecord", null)
-                        .WithMany()
-                        .HasForeignKey("SaleId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
             modelBuilder.Entity("Pos.Infrastructure.Persistence.AccessSessionRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -106,6 +87,80 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasIndex("OccurredAtUtc");
 
                     b.ToTable("audit_events", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.CartWorkspaceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastMutationHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastMutationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LinesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TerminalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("TotalAtPause")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("OperatorId");
+
+                    b.HasIndex("SaleId");
+
+                    b.HasIndex("TerminalId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Active'");
+
+                    b.HasIndex("TerminalId", "Status", "UpdatedAtUtc");
+
+                    b.ToTable("cart_workspaces", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.CashMovementRecord", b =>
@@ -617,6 +672,12 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<decimal>("MinimumStock")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -658,6 +719,96 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("products", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectLineRecord", b =>
+                {
+                    b.Property<Guid>("ReceiptId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("MovementId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("movement_id");
+
+                    b.Property<decimal>("PriorStockQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("prior_stock_quantity");
+
+                    b.Property<decimal?>("PriorUnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("prior_unit_cost");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal>("QuantityAfterReceipt")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("quantity_after_receipt");
+
+                    b.Property<decimal?>("UnitCostAfter")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("unit_cost_after");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("ReceiptId", "ProductId");
+
+                    b.ToTable("purchase_receipt_effect_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", b =>
+                {
+                    b.Property<Guid>("ReceiptId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_id");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTime>("AppliedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("applied_at_utc");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("payload_hash");
+
+                    b.Property<DateTime?>("ReversedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reversed_at_utc");
+
+                    b.Property<Guid?>("ReversedByActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reversed_by_actor_id");
+
+                    b.Property<Guid?>("ReversedByTerminalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reversed_by_terminal_id");
+
+                    b.Property<Guid>("TerminalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("terminal_id");
+
+                    b.HasKey("ReceiptId");
+
+                    b.ToTable("purchase_receipt_effects", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.ReceivableEntryRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -682,6 +833,9 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("EntryType")
                         .IsRequired()
@@ -1119,6 +1273,25 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.CartWorkspaceRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.CustomerRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Pos.Infrastructure.Persistence.OperatorUserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.SaleRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.CashMovementRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.CashSessionRecord", null)
@@ -1191,6 +1364,15 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasOne("Pos.Infrastructure.Persistence.ProductRecord", null)
                         .WithMany()
                         .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectLineRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -1307,175 +1489,6 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasForeignKey("Pos.Infrastructure.Persistence.StockRecord", "ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Pos.Infrastructure.Persistence.CartWorkspaceRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<string>("LastMutationHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("LastMutationId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("LinesJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(250)
-                        .HasColumnType("character varying(250)");
-
-                    b.Property<Guid>("OperatorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SaleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<Guid>("TerminalId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAtPause")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("Version")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("OperatorId");
-
-                    b.HasIndex("SaleId");
-
-                    b.HasIndex("TerminalId")
-                        .IsUnique()
-                        .HasFilter("\"Status\" = 'Active'");
-
-                    b.HasIndex("TerminalId", "Status", "UpdatedAtUtc");
-
-                    b.ToTable("cart_workspaces", (string)null);
-                });
-
-            modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", b =>
-                {
-                    b.Property<Guid>("ReceiptId")
-                        .HasColumnName("receipt_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PayloadHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnName("payload_hash")
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<Guid>("ActorId")
-                        .HasColumnName("actor_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TerminalId")
-                        .HasColumnName("terminal_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AppliedAtUtc")
-                        .HasColumnName("applied_at_utc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ReversedAtUtc")
-                        .HasColumnName("reversed_at_utc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReversedByActorId")
-                        .HasColumnName("reversed_by_actor_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ReversedByTerminalId")
-                        .HasColumnName("reversed_by_terminal_id")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("ReceiptId");
-
-                    b.ToTable("purchase_receipt_effects", (string)null);
-                });
-
-            modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectLineRecord", b =>
-                {
-                    b.Property<Guid>("ReceiptId")
-                        .HasColumnName("receipt_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnName("product_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnName("quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("PriorStockQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnName("prior_stock_quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal?>("PriorUnitCost")
-                        .HasPrecision(18, 4)
-                        .HasColumnName("prior_unit_cost")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal?>("UnitCostAfter")
-                        .HasPrecision(18, 4)
-                        .HasColumnName("unit_cost_after")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("QuantityAfterReceipt")
-                        .HasPrecision(18, 4)
-                        .HasColumnName("quantity_after_receipt")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<Guid?>("WarehouseId")
-                        .HasColumnName("warehouse_id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("MovementId")
-                        .HasColumnName("movement_id")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("ReceiptId", "ProductId");
-
-                    b.HasOne("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", null)
-                        .WithMany()
-                        .HasForeignKey("ReceiptId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.ToTable("purchase_receipt_effect_lines", (string)null);
                 });
 #pragma warning restore 612, 618
         }

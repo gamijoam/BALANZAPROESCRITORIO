@@ -103,6 +103,7 @@ public sealed record InventoryItemInfo(Guid Id, string Sku, string Name, decimal
     public decimal? Price2 { get; init; }
     public decimal? Price3 { get; init; }
     public decimal? UnitCost { get; init; }
+    public decimal MinimumStock { get; init; }
     public string UnitCostLabel => UnitCost.HasValue ? $"{Currency} {UnitCost.Value:N4}" : "Sin costo inicial";
     public string TaxTreatment { get; init; } = "Unclassified";
     public string TaxTreatmentLabel => TaxTreatment switch
@@ -185,7 +186,12 @@ public sealed record SaleDetailLine(string Sku, string Description, decimal Quan
         "Taxable16" => "Gravado 16 %", "Taxable8" => "Gravado 8 %", "Taxable0" => "Gravado 0 %", "Exempt" => "Exento", _ => "Impuesto anterior no registrado"
     };
     public decimal ReturnedQuantity { get; init; }
+    public decimal ReturnedAmount { get; init; }
+    public decimal ReturnedRestockedQuantity { get; init; }
     public decimal ReturnableQuantity { get; init; } = Quantity;
+    public decimal? UnitCost { get; init; }
+    public string? CostCurrency { get; init; }
+    public decimal? AppliedExchangeRate { get; init; }
     public bool HasReturnedUnits => ReturnedQuantity > 0m;
     public string ReturnStatusLabel => ReturnedQuantity <= 0m
         ? "Sin devolución"
@@ -235,6 +241,7 @@ public sealed record ProductSalesReportInfo(DateTime FromUtc, DateTime ToUtc, st
 public sealed record ProductSalesReportRow(Guid ProductId, string Sku, string Name, string Currency, decimal SoldQuantity, decimal ReturnedQuantity, decimal NetQuantity, decimal GrossAmount, decimal ReturnedAmount, decimal NetAmount);
 public sealed record ReceivableEntryInfo(Guid Id, Guid CustomerId, Guid? SaleId, string EntryType, decimal Amount, string Currency, string Reason, Guid ActorId, Guid TerminalId, DateTime OccurredAtUtc)
 {
+    public DateOnly? DueDate { get; init; }
     public decimal? OriginalAmount { get; init; }
     public string? OriginalCurrency { get; init; }
     public decimal? AppliedExchangeRate { get; init; }
@@ -346,11 +353,11 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
         => GetInventoryAsync(cancellationToken);
     Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default);
     Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3, string taxTreatment,
-        string currency, decimal initialStock, CancellationToken cancellationToken = default)
+        string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
         => CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
     Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite clasificar el impuesto del producto.");
-    Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
+    Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
         => throw new NotSupportedException("El cliente no permite editar productos.");
     Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite cambiar el estado del producto.");
@@ -365,7 +372,8 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
     Task<IReadOnlyList<ProductInfo>> SearchProductsAsync(string query, CancellationToken cancellationToken = default);
     Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId = null, CancellationToken cancellationToken = default);
     Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines, IReadOnlyList<SalePaymentInput> payments, Guid? customerId,
-        string idempotencyKey, Guid? exchangeRateId, Guid? cartWorkspaceId, CancellationToken cancellationToken = default)
+        string idempotencyKey, Guid? exchangeRateId, Guid? cartWorkspaceId, CancellationToken cancellationToken = default,
+        DateOnly? receivableDueDate = null)
         => CheckoutAsync(cashSessionId, lines, payments, customerId, idempotencyKey, exchangeRateId, cancellationToken);
     Task<CartWorkspaceSnapshot> GetActiveCartWorkspaceAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no recupera el carrito activo del servidor.");
@@ -440,6 +448,9 @@ public interface IPosReportApiClient
     Task<ReceivableMovementReportPage> GetReceivableMovementReportPageAsync(DateTime fromUtc, DateTime toUtc,
         string? currency, int page = 1, int pageSize = 250, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no consulta los movimientos consolidados de cuentas por cobrar.");
+    Task<ReceivableAgingReportPage> GetReceivableAgingReportPageAsync(DateOnly asOfDate, int page = 1, int pageSize = 250,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta la antigüedad de cuentas por cobrar.");
 }
 
 public sealed class PosApiException(HttpStatusCode statusCode, string code, string? detail = null, string? diagnosticId = null) : Exception(code)

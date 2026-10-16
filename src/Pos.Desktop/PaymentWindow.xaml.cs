@@ -20,8 +20,10 @@ public partial class PaymentWindow : Window
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromMilliseconds(150) };
 
     public IReadOnlyList<SalePaymentInput> Payments { get; private set; } = [];
+    public DateOnly? ReceivableDueDate { get; private set; }
 
-    public PaymentWindow(decimal total, string currency, IReadOnlyList<SalePaymentInput>? fixedPayments = null, decimal? usdToVes = null)
+    public PaymentWindow(decimal total, string currency, IReadOnlyList<SalePaymentInput>? fixedPayments = null, decimal? usdToVes = null,
+        DateOnly? fixedReceivableDueDate = null)
     {
         InitializeComponent();
         _total = total;
@@ -31,7 +33,11 @@ public partial class PaymentWindow : Window
         TotalOtherCurrencyTitle.Text = $"EQUIVALENTE {OtherCurrency(currency)}";
         TotalOtherCurrencyLabel.Text = FormatOtherCurrencyEquivalent(total, currency, usdToVes);
         _isRetry = fixedPayments is { Count: > 0 };
-        _rows.CollectionChanged += (_, _) => PaymentsPlaceholder.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _rows.CollectionChanged += (_, _) =>
+        {
+            PaymentsPlaceholder.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            RefreshDueDateVisibility();
+        };
         if (_isRetry)
         {
             PaymentTitle.Text = "Pagos de la venta pendiente";
@@ -40,11 +46,14 @@ public partial class PaymentWindow : Window
         }
         PaymentsGrid.ItemsSource = _rows;
         PaymentsGrid.IsReadOnly = _isRetry;
+        ReceivableDueDatePicker.SelectedDate = (fixedReceivableDueDate ?? DateOnly.FromDateTime(DateTime.Today.AddDays(30))).ToDateTime(TimeOnly.MinValue);
+        ReceivableDueDatePicker.IsEnabled = !_isRetry;
         ConfirmButton.Content = _isRetry ? "Reintentar venta" : "Confirmar venta";
         _refresh.Tick += (_, _) => RefreshTotals();
         _refresh.Start();
         Closed += (_, _) => _refresh.Stop();
         RefreshTotals();
+        RefreshDueDateVisibility();
     }
 
     private void PaymentMethod_Click(object sender, RoutedEventArgs e)
@@ -139,12 +148,28 @@ public partial class PaymentWindow : Window
             ErrorLabel.Text = summary.Guidance;
             return;
         }
+        var hasCredit = payments.Any(payment => IsCreditMethod(payment.Method));
+        if (hasCredit && ReceivableDueDatePicker.SelectedDate is null)
+        {
+            ErrorLabel.Text = "Indica la fecha de vencimiento del crédito.";
+            return;
+        }
+        ReceivableDueDate = hasCredit ? DateOnly.FromDateTime(ReceivableDueDatePicker.SelectedDate!.Value) : null;
         Payments = payments;
         DialogResult = true;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
     private decimal CurrentPaidInSaleCurrency() => PaymentSummary.Calculate(_total, _currency, _rows, _usdToVes).Paid;
+
+    private void RefreshDueDateVisibility()
+    {
+        ReceivableDueDatePanel.Visibility = _rows.Any(row => IsCreditMethod(row.Method)) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static bool IsCreditMethod(string method) => string.Equals(method, "Crédito", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(method, "credit", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "fiado", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(method, "credito", StringComparison.OrdinalIgnoreCase) || string.Equals(method, "crédito", StringComparison.OrdinalIgnoreCase);
 
     private void RefreshTotals()
     {

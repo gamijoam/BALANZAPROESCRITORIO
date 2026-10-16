@@ -10,20 +10,23 @@ Este módulo agrega un visor de reportes WPF al POS anfitrión. Usa los endpoint
 - **1.2.0:** agrega una vista paginada tipo hoja que respeta filtros, filas, orden y columnas visibles, con papel Carta/Oficio/A4 y orientación horizontal/vertical; permite imprimirla o guardarla como PDF mediante Microsoft Print to PDF en Windows. También incorpora el reporte de precios y márgenes actuales por nivel, calculado con el costo vigente cuando está registrado. No requiere migraciones ni actualización del POS anfitrión.
 - **1.3.0:** incorpora un diseñador de hojas con encabezado, columnas configurables, agrupaciones, sumatorias, estilos del comercio y plantillas personales. Requiere Desktop API 1.5 y la migración `ReportSheetTemplates`; el guardado usa la base local del POS y funciona sin Internet.
 - **1.4.0:** agrega resúmenes automáticos por categoría, calculados con los resultados filtrados y con opción para incluirlos en las hojas. Mantiene el requisito de Desktop API 1.5; no agrega migraciones.
+- **1.5.0:** agrega el reporte de utilidad bruta histórica por artículo (con costo guardado en cada venta, devoluciones y reingresos) y el resumen actual de cuentas por pagar publicado por Finanzas. Señala líneas sin costo o sin conversión histórica. No agrega migraciones; requiere actualizar el POS anfitrión para que la API de ventas entregue los datos históricos.
+- **1.6.0:** agrega la valoración de existencias al costo actual, incluyendo productos inactivos que aún tienen unidades. Separa los valores por moneda y marca productos sin costo. No requiere migraciones ni cambios al POS anfitrión.
+- **1.7.0:** agrega productos bajo mínimo y antigüedad de cuentas por cobrar. El mínimo se configura por producto; las ventas a crédito nuevas permiten elegir vencimiento, inicialmente a 30 días. Las deudas anteriores sin fecha se muestran como "Sin vencimiento"; los abonos se aplican primero a la deuda más antigua. Requiere Desktop API 1.6 y la migración `Hito35StockMinimumAndReceivableDueDate` del POS anfitrión.
 
 ## Publicar el paquete firmado
 
 Después de fusionar los cambios a `main`, el firmador centralizado genera el ZIP desde GitHub Actions:
 
 1. Abre **Actions → Publicar módulo firmado → Run workflow**.
-2. Selecciona `main` y `advanced-reports`.
+2. Selecciona la rama `main` y un módulo (`finance` o `advanced-reports`); ejecuta el workflow una vez por cada módulo.
 3. Descarga el ZIP firmado del artifact `signed-module-output`.
 
 El runner de firma del VPS guarda la clave privada fuera de GitHub y del equipo Windows. No se requiere copiar esa clave al repositorio.
 
-Antes de instalar la versión 1.3.0 o superior, actualiza el POS anfitrión a Desktop API 1.5 para que aplique la migración `ReportSheetTemplates`. Las plantillas se guardan junto a las vistas personales del operador. El visor y las fuentes de reportes requieren `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
+Antes de instalar la versión 1.3.0 o superior, actualiza el POS anfitrión a Desktop API 1.5 para que aplique la migración `ReportSheetTemplates`. Para usar la versión 1.7.0, actualiza primero el POS anfitrión a Desktop API 1.6 para aplicar `Hito35StockMinimumAndReceivableDueDate`; el instalador conserva las existencias y las cuentas actuales, y no inventa vencimientos para cargos históricos. Para usar el reporte de utilidad histórica, actualiza también el POS anfitrión a la versión que expone costos y devoluciones en el reporte de ventas, e instala `finance` 1.0.8 para habilitar cuentas por pagar. Las plantillas se guardan junto a las vistas personales del operador. El visor y las fuentes de reportes requieren `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Finanzas requieren `Purchase.View`; las de Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
 
-Los resúmenes, cambios visibles y pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.4.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.4.0.md).
+Genera también el paquete del POS con **Actions → Empaquetar POS para Windows** para que la API de ventas entregue costo y devoluciones. Los cambios visibles y pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.7.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.7.0.md).
 
 ## Cómo agregar una fuente de reporte
 

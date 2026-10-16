@@ -31,23 +31,25 @@ internal static class Hito4Endpoints
                 decimal.Round(request.UnitPrice, 4) != request.UnitPrice || request.Price2 is < 0m || request.Price3 is < 0m ||
                 request.Price2 is decimal price2 && decimal.Round(price2, 4) != price2 ||
                 request.Price3 is decimal price3 && decimal.Round(price3, 4) != price3 ||
-                request.InitialStock < 0m || decimal.Round(request.InitialStock, 3) != request.InitialStock)
+                request.InitialStock < 0m || decimal.Round(request.InitialStock, 3) != request.InitialStock ||
+                request.MinimumStock < 0m || decimal.Round(request.MinimumStock, 3) != request.MinimumStock)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["SKU, name, currency, price or opening stock is invalid."] });
             var id = Guid.NewGuid(); var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             db.Products.Add(new ProductRecord { Id = id, Sku = sku, Name = name, UnitPrice = request.UnitPrice,
-                Price2 = request.Price2, Price3 = request.Price3, TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
+                Price2 = request.Price2, Price3 = request.Price3, MinimumStock = request.MinimumStock,
+                TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
             db.Stocks.Add(new StockRecord { ProductId = id, Quantity = request.InitialStock });
             if (request.InitialStock > 0m)
                 db.StockMovements.Add(new StockMovementRecord { Id = Guid.NewGuid(), ProductId = id, QuantityDelta = request.InitialStock, Reason = "Existencia inicial", ActorId = access.OperatorId, TerminalId = access.TerminalId, OccurredAtUtc = now });
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.created", new { id, sku, name, request.UnitPrice,
-                request.Price2, request.Price3, taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
+                request.Price2, request.Price3, request.MinimumStock, taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
             try { await db.SaveChangesAsync(ct); await WarehouseStockBridge.AddProductToWarehousesAsync(db, id, ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
             await tx.CommitAsync(ct);
             return Results.Created($"/api/v1/products/{id}", new { id, sku, name, request.UnitPrice, request.Price2, request.Price3,
-                taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
+                request.MinimumStock, taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
         });
 
         app.MapPatch("/api/v1/products/{productId:guid}/tax-treatment", async (Guid productId, HttpContext context, PosDbContext db,
@@ -76,20 +78,24 @@ internal static class Hito4Endpoints
             if (access is null) return PermissionFailure(context);
             var sku = (request.Sku ?? string.Empty).Trim();
             var name = (request.Name ?? string.Empty).Trim();
-            if (sku.Length is < 1 or > 64 || name.Length is < 2 or > 200)
+            if (sku.Length is < 1 or > 64 || name.Length is < 2 or > 200 ||
+                request.MinimumStock is < 0m || request.MinimumStock is decimal minimumStock && decimal.Round(minimumStock, 3) != minimumStock)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["El SKU debe tener entre 1 y 64 caracteres y el nombre entre 2 y 200."] });
             var product = await db.Products.SingleOrDefaultAsync(x => x.Id == productId, ct);
             if (product is null) return Results.NotFound();
             var oldSku = product.Sku;
             var oldName = product.Name;
+            var oldMinimumStock = product.MinimumStock;
             product.Sku = sku;
             product.Name = name;
+            if (request.MinimumStock.HasValue) product.MinimumStock = request.MinimumStock.Value;
             var now = DateTime.UtcNow;
-            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.details_changed", new { productId, oldSku, sku, oldName, name }, now));
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.details_changed",
+                new { productId, oldSku, sku, oldName, name, oldMinimumStock, minimumStock = product.MinimumStock }, now));
             try { await db.SaveChangesAsync(ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
-            return Results.Ok(new { productId, product.Sku, product.Name });
+            return Results.Ok(new { productId, product.Sku, product.Name, product.MinimumStock });
         });
 
         app.MapPost("/api/v1/products/{productId:guid}/image", async (Guid productId, HttpContext context, PosDbContext db,
@@ -371,7 +377,7 @@ internal static class Hito4Endpoints
             {
                 entry.Id, entry.CustomerId, entry.SaleId, entry.EntryType, entry.Amount, entry.Currency,
                 entry.Reason, entry.IsOpeningBalance, entry.ActorId, entry.TerminalId, entry.OccurredAtUtc, entry.OriginalAmount,
-                entry.OriginalCurrency, entry.AppliedExchangeRate,
+                entry.OriginalCurrency, entry.AppliedExchangeRate, entry.DueDate,
                 saleItems = entry.SaleId is Guid saleId && saleItems.TryGetValue(saleId, out var items) ? items : []
             }).ToArray();
             return Results.Ok(new { customer.Id, customer.Name, currency = "USD", customer.CreditLimit, balance,
@@ -515,6 +521,14 @@ internal static class Hito4Endpoints
                 .GetBalancePageAsync(page ?? 1, pageSize ?? 100, ct);
             return Results.Ok(result);
         });
+        app.MapGet("/api/v1/reports/receivables/aging", async (HttpContext context, PosDbContext db,
+            AuthenticationService auth, DateOnly asOfDate, int? page, int? pageSize, CancellationToken ct) =>
+        {
+            if (await AuthorizedAsync(context, auth, Permission.ViewReports, ct) is null) return PermissionFailure(context);
+            var result = await new ReceivablesReportQueryService(db)
+                .GetAgingPageAsync(asOfDate, page ?? 1, pageSize ?? 100, ct);
+            return Results.Ok(result);
+        });
         app.MapGet("/api/v1/reports/receivables/movements", async (HttpContext context, PosDbContext db,
             AuthenticationService auth, DateTime fromUtc, DateTime toUtc, string? currency, int? page, int? pageSize, CancellationToken ct) =>
         {
@@ -645,7 +659,7 @@ internal static class Hito4Endpoints
             var returnedLines = await (from line in db.SaleReturnLines.AsNoTracking()
                                        join header in db.SaleReturns.AsNoTracking() on line.SaleReturnId equals header.Id
                                        where ids.Contains(header.SaleId)
-                                       select new { header.SaleId, line.SaleLineId, line.Quantity }).ToListAsync(ct);
+                                       select new { header.SaleId, line.SaleLineId, line.Quantity, line.Amount, line.Restock }).ToListAsync(ct);
             var payments = await db.Payments.AsNoTracking().Where(x => ids.Contains(x.SaleId)).ToListAsync(ct);
             var operatorIds = sales.Select(x => x.OperatorId).Distinct().ToArray();
             var users = await db.OperatorUsers.AsNoTracking().Where(x => operatorIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Username, ct);
@@ -660,8 +674,10 @@ internal static class Hito4Endpoints
                 lines = lines.Where(x => x.SaleId == s.Id).Select(x => new
                 {
                     x.Id, x.Sku, x.Description, x.Quantity, x.UnitPrice, x.LineTotal, x.OriginalCurrency, x.OriginalUnitPrice,
-                    x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount,
+                    x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount, x.UnitCost, x.CostCurrency, x.AppliedExchangeRate,
                     returnedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity),
+                    returnedAmount = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Amount),
+                    returnedRestockedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id && r.Restock).Sum(r => r.Quantity),
                     returnableQuantity = x.Quantity - returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity)
                 }),
                 payments = payments.Where(x => x.SaleId == s.Id).Select(x => new { x.Method, x.Amount, x.Currency, x.AppliedExchangeRate })
@@ -880,8 +896,8 @@ internal static class Hito4Endpoints
 }
 
 public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock,
-    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null);
-public sealed record UpdateProductRequest(string? Sku, string? Name);
+    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null, decimal MinimumStock = 0m);
+public sealed record UpdateProductRequest(string? Sku, string? Name, decimal? MinimumStock = null);
 public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1",
     decimal? ExpectedCurrentPrice = null, decimal? ExpectedUnitCost = null, bool ValidateSnapshot = false);
 public sealed record SetInitialInventoryCostRequest(decimal UnitCost, string? Reason);

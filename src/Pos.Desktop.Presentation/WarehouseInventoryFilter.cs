@@ -18,6 +18,7 @@ public static class WarehouseInventoryFilter
         {
             "available" => items.Where(item => item.Quantity > 0m).ToArray(),
             "out-of-stock" => items.Where(item => item.Quantity <= 0m).ToArray(),
+            "low" => items.Where(item => item.MinimumStock > 0m && item.Quantity <= item.MinimumStock).ToArray(),
             _ => items.ToArray()
         };
     }
@@ -33,6 +34,7 @@ public static class InventoryStockFilter
         {
             "available" => inventory.Where(item => item.Quantity > 0m).ToArray(),
             "out-of-stock" => inventory.Where(item => item.Quantity <= 0m).ToArray(),
+            "low" => inventory.Where(item => item.MinimumStock > 0m && item.Quantity <= item.MinimumStock).ToArray(),
             _ => inventory
         };
 }

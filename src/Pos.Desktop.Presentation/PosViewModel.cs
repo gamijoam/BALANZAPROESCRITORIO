@@ -27,6 +27,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
     private string? _pendingIdempotencyKey;
     private SaleLineInput[]? _pendingLines;
     private SalePaymentInput[]? _pendingPayments;
+    private DateOnly? _pendingReceivableDueDate;
     private ReceiptLine[]? _pendingReceiptLines;
     private decimal _pendingTotal;
     private decimal _pendingRoundingAdjustment;
@@ -130,6 +131,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public bool CanEditSelectedLine => CanEditCart && !IsBusy && SelectedCartLine is not null;
     public bool HasPendingCheckout => _pendingIdempotencyKey is not null;
     public IReadOnlyList<SalePaymentInput>? PendingPayments => _pendingPayments?.ToArray();
+    public DateOnly? PendingReceivableDueDate => _pendingReceivableDueDate;
     public string CashStatus => CashSession is null ? "Caja cerrada"
         : CashSession.IsActiveForCurrentOperator
             ? $"Caja abierta · {CashSession.Currency} · turno de {CashSession.OpenedByOperatorName}"
@@ -660,12 +662,12 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => _api.CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
-        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
-        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken);
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
+        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken, minimumStock);
     public Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => _api.SetProductTaxTreatmentAsync(productId, taxTreatment, cancellationToken);
-    public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
-        => _api.UpdateProductAsync(productId, sku, name, cancellationToken);
+    public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
+        => _api.UpdateProductAsync(productId, sku, name, cancellationToken, minimumStock);
     public Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
         => _api.SetProductActiveAsync(productId, active, cancellationToken);
     public Task UploadProductImageAsync(Guid productId, string imagePath, CancellationToken cancellationToken = default)
@@ -870,7 +872,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
         return true;
     }
 
-    public async Task<SaleReceipt> CompleteSaleAsync(IReadOnlyList<SalePaymentInput> payments, CancellationToken cancellationToken = default)
+    public async Task<SaleReceipt> CompleteSaleAsync(IReadOnlyList<SalePaymentInput> payments, CancellationToken cancellationToken = default,
+        DateOnly? receivableDueDate = null)
     {
         if (!IsAuthenticated || CashSession is not { IsActiveForCurrentOperator: true })
             throw new InvalidOperationException("A signed-in operator and open cash session are required.");
@@ -905,6 +908,9 @@ public sealed class PosViewModel : INotifyPropertyChanged
             _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier)).ToArray();
             _pendingPayments = payments.ToArray();
             _pendingCustomerId = SelectedCustomer?.Id;
+            _pendingReceivableDueDate = payments.Any(x => IsCreditPayment(x.Method))
+                ? receivableDueDate ?? DateOnly.FromDateTime(DateTime.Today.AddDays(30))
+                : null;
             _pendingReceiptLines = CartLines.Select(x => new ReceiptLine(x.Product.Sku, x.Product.Name, x.Quantity, x.UnitPrice, x.LineTotal,
                 x.Product.UnitPrice, x.Product.Currency, x.AppliedExchangeRate, x.PriceTier, x.Product.TaxTreatment, x.TaxRate, x.TaxAmount)).ToArray();
             _pendingTotal = Total;
@@ -921,7 +927,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
         try
         {
             var saleId = await _api.CheckoutAsync(CashSession.Id, lines, fixedPayments, _pendingCustomerId,
-                _pendingIdempotencyKey, _pendingExchangeRateId, _activeCartWorkspace?.Id, cancellationToken);
+                _pendingIdempotencyKey, _pendingExchangeRateId, _activeCartWorkspace?.Id, cancellationToken, _pendingReceivableDueDate);
             var receipt = new SaleReceipt(saleId, DateTime.Now, _pendingCurrency, _pendingTotal, receiptLines, fixedPayments)
             { RoundingAdjustment = _pendingRoundingAdjustment };
             ClearPendingCheckout();
@@ -1044,7 +1050,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
         string.Equals(method, "crédito", StringComparison.OrdinalIgnoreCase);
     private void ClearPendingCheckout()
     {
-        _pendingIdempotencyKey = null; _pendingLines = null; _pendingPayments = null; _pendingReceiptLines = null; _pendingCustomerId = null; _pendingExchangeRateId = null; _pendingRoundingAdjustment = 0m;
+        _pendingIdempotencyKey = null; _pendingLines = null; _pendingPayments = null; _pendingReceivableDueDate = null; _pendingReceiptLines = null; _pendingCustomerId = null; _pendingExchangeRateId = null; _pendingRoundingAdjustment = 0m;
         OnPropertyChanged(nameof(CanEditCart)); OnPropertyChanged(nameof(HasPendingCheckout)); OnPropertyChanged(nameof(PendingPayments)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyCartCommands();
     }
     private void NotifyChargeCommand() => (ChargeCommand as RelayCommand)?.NotifyCanExecuteChanged();

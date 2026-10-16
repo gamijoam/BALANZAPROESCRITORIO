@@ -53,6 +53,7 @@ public partial class ReceivablesWindow : Window
                 entry.OccurredAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm"),
                 entry.IsOpeningBalance ? "Saldo inicial" : isCharge ? "Venta a crédito" : "Abono",
                 reference,
+                isCharge && entry.DueDate is DateOnly dueDate ? dueDate.ToString("dd/MM/yyyy") : "—",
                 isCharge ? ReceivableSaleItemPresentation.Format(entry.SaleItems) : "—",
                 FormatMovementAmount(entry),
                 FormatMoney("USD", balance)));
@@ -138,4 +139,4 @@ public partial class ReceivablesWindow : Window
 }
 
 public sealed record ReceivableMovementRow(string DateLabel, string MovementLabel, string ReferenceLabel,
-    string SaleItemsLabel, string AmountLabel, string ResultingBalanceLabel);
+    string DueDateLabel, string SaleItemsLabel, string AmountLabel, string ResultingBalanceLabel);

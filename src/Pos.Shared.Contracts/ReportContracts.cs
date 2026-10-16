@@ -41,6 +41,13 @@ public sealed record ReceivableBalanceReportPage(int Page, int PageSize, int Tot
 public sealed record ReceivableBalanceReportRow(Guid CustomerId, string CustomerName, decimal CreditLimitUsd,
     decimal BalanceUsd, decimal AvailableCreditUsd, decimal? BalanceVesEquivalent, DateTime? LastMovementAtUtc);
 
+public sealed record ReceivableAgingReportPage(int Page, int PageSize, int TotalCount, DateOnly AsOfDate,
+    IReadOnlyList<ReceivableAgingReportRow> Customers);
+
+public sealed record ReceivableAgingReportRow(Guid CustomerId, string CustomerName, decimal NotDueUsd,
+    decimal Overdue1To30Usd, decimal Overdue31To60Usd, decimal Overdue61To90Usd, decimal OverdueOver90Usd,
+    decimal NoDueDateUsd, decimal BalanceUsd);
+
 public sealed record ReceivableMovementReportPage(int Page, int PageSize, int TotalCount,
     IReadOnlyList<ReceivableMovementReportRow> Movements);
 

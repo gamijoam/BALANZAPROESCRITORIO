@@ -26,6 +26,7 @@
                     <DockPanel><Button Content="Seleccionar foto" Padding="10,7" Click="SelectImage_Click"/><TextBlock x:Name="ImageNameLabel" Text="Sin foto" Foreground="#63758B" VerticalAlignment="Center" Margin="9,0,0,0" TextTrimming="CharacterEllipsis"/></DockPanel>
                     <Image x:Name="ProductImagePreview" Height="92" Margin="0,7,0,0" Stretch="Uniform" Visibility="Collapsed"/>
                 </StackPanel>
+                <StackPanel Grid.Row="5" Margin="0,0,10,12"><TextBlock Text="Avisar cuando queden (unidades)" FontWeight="SemiBold"/><TextBox x:Name="MinimumStockBox" Text="0" Height="38" Padding="8" Margin="0,4,0,0" AutomationProperties.Name="Cantidad mínima de inventario"/><TextBlock Text="0 desactiva el aviso para este producto." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
             </Grid>
         </ScrollViewer>
         <TextBlock x:Name="ErrorLabel" Grid.Row="2" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,8,0,0"/>

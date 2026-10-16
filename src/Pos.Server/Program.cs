@@ -1159,7 +1159,7 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
     var currencyFilter = (currency ?? string.Empty).Trim().ToUpperInvariant();
     var stockFilter = (stockStatus ?? string.Empty).Trim().ToLowerInvariant();
     if (term.Length > 100 || stateFilter is not ("active" or "inactive" or "all") ||
-        currencyFilter is not ("" or "VES" or "USD") || stockFilter is not ("" or "available" or "out-of-stock"))
+        currencyFilter is not ("" or "VES" or "USD") || stockFilter is not ("" or "available" or "out-of-stock" or "low"))
         return Results.BadRequest(new { error = "invalid_inventory_filter" });
     var productsQuery = db.Products.AsNoTracking().AsQueryable();
     if (stateFilter == "active") productsQuery = productsQuery.Where(x => x.Active);
@@ -1171,10 +1171,12 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
                            join stock in db.Stocks.AsNoTracking() on product.Id equals stock.ProductId into stockRows
                            from stockRow in stockRows.DefaultIfEmpty()
                            select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3, product.UnitCost,
+                               product.MinimumStock,
                                product.TaxTreatment, product.Currency, Quantity = stockRow == null ? 0m : stockRow.Quantity,
                                hasImage = product.ImageFileName != null, product.Active };
     if (stockFilter == "available") inventoryQuery = inventoryQuery.Where(x => x.Quantity > 0m);
     else if (stockFilter == "out-of-stock") inventoryQuery = inventoryQuery.Where(x => x.Quantity <= 0m);
+    else if (stockFilter == "low") inventoryQuery = inventoryQuery.Where(x => x.MinimumStock > 0m && x.Quantity <= x.MinimumStock);
     var inventory = await inventoryQuery.OrderBy(x => x.Name).ThenBy(x => x.Sku).ToListAsync(cancellationToken);
     return Results.Ok(inventory);
 });
