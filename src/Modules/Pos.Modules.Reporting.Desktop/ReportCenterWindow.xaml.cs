@@ -308,15 +308,22 @@ public partial class ReportCenterWindow : Window
             filters.Add($"Moneda: {currency}");
         if (!string.IsNullOrWhiteSpace(SearchBox.Text)) filters.Add($"Búsqueda: {SearchBox.Text.Trim()}");
 
-        var preview = new ReportPreviewWindow(
-            _selectedSource.Source.Title,
-            string.Join("   ·   ", filters),
-            columns,
-            VisibleRows())
+        try
         {
-            Owner = this
-        };
-        preview.ShowDialog();
+            var preview = new ReportPreviewWindow(
+                _selectedSource.Source.Title,
+                string.Join("   ·   ", filters),
+                columns,
+                VisibleRows())
+            {
+                Owner = this
+            };
+            preview.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo preparar la vista de hoja: {PosUserMessage.ForException(exception)}";
+        }
     }
 
     private IReadOnlyList<PosDesktopReportColumn> VisibleColumns()
