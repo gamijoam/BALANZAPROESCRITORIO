@@ -154,7 +154,7 @@
                                 ToolTip="Importa el archivo temporal firmado que preparaste desde el VPS"/>
                     </StackPanel>
                     <TextBlock x:Name="LicenseStatus" Grid.Row="4" Margin="0,10,0,0" Foreground="#52677F" TextWrapping="Wrap"/>
-                    <TextBlock Grid.Row="5" Margin="0,16,0,0" Text="La renovación automática requiere que el administrador configure la conexión HTTPS de este servidor POS con el VPS. Sin Internet, la licencia local conserva su vigencia y los dos días de gracia." TextWrapping="Wrap" Foreground="#63758B"/>
+                    <TextBlock x:Name="LicenseConnectionText" Grid.Row="5" Margin="0,16,0,0" Text="Consultando configuración de renovación…" TextWrapping="Wrap" Foreground="#63758B"/>
                 </Grid>
             </TabItem>
         </TabControl>

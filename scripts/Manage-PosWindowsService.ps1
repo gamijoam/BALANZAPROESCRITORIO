@@ -108,6 +108,9 @@ function Set-PosServiceConfiguration {
 
     $urls = 'http://127.0.0.1:5155'
     $licenseRenewalEndpoint = [Environment]::GetEnvironmentVariable('BALANZAPRO_LICENSE_RENEWAL_ENDPOINT', 'Machine')
+    if ([string]::IsNullOrWhiteSpace($licenseRenewalEndpoint)) {
+        $licenseRenewalEndpoint = 'https://licencias.balanzapro.com/api/v1/renewals'
+    }
     if (-not [string]::IsNullOrWhiteSpace($licenseRenewalEndpoint) -and $licenseRenewalEndpoint -notmatch '^https://[^/]+/api/v1/renewals$') {
         throw 'La URL de renovación debe usar HTTPS y terminar en /api/v1/renewals.'
     }

@@ -18,7 +18,9 @@ public sealed record PosLicenseStatus(
     string? Diagnostic,
     long ControlVersion = 0,
     DateTimeOffset? SuspendedAtUtc = null,
-    DateTimeOffset? RecoveryExpiresAtUtc = null);
+    DateTimeOffset? RecoveryExpiresAtUtc = null,
+    bool RenewalConfigured = false,
+    bool EnforcementEnabled = false);
 
 public sealed record PosLicenseRenewalRequest(string LicenseId, Guid InstallationId, string RenewalToken, int ProtocolVersion = 2);
 

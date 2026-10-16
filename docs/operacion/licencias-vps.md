@@ -77,15 +77,9 @@ La ruta es para la computadora que ejecuta `BalanzaProPosServer`, no para cada t
 
 ## Activar la consulta automática
 
-En PowerShell como administrador, configura la dirección del endpoint:
+El paquete oficial configura por defecto `https://licencias.balanzapro.com/api/v1/renewals`. Al instalar o actualizar el servicio, `Administrar servicio POS.cmd` guarda esa dirección en la configuración local protegida con DPAPI. En una instalación ya existente, después de actualizar el POS abre esa herramienta como administrador, selecciona **Instalar / actualizar configuración y arrancar** y confirma que el servicio queda iniciado.
 
-```powershell
-[Environment]::SetEnvironmentVariable('BALANZAPRO_LICENSE_RENEWAL_ENDPOINT', 'https://licencias.balanzapro.com/api/v1/renewals', 'Machine')
-```
-
-Luego ejecuta `Administrar servicio POS.cmd` como administrador, selecciona **Instalar / actualizar configuración y arrancar** y confirma que el servicio queda iniciado. El script guarda la URL en la configuración local protegida con DPAPI.
-
-El endpoint se valida con HTTPS. Para desactivarlo, borra esa variable a nivel máquina y vuelve a reiniciar el servicio.
+La pestaña **Administración → Licencia** muestra si el endpoint está configurado y si el cumplimiento está activo. El POS consulta al VPS al iniciar y cada cuatro horas; los fallos de red se reintentan cada quince minutos. Para usar un VPS distinto, define `BALANZAPRO_LICENSE_RENEWAL_ENDPOINT` a nivel máquina antes de reconfigurar el servicio. La dirección debe usar HTTPS y terminar en `/api/v1/renewals`.
 
 Cuando la llave pública esté instalada, la licencia inicial importada y el estado muestre `Active`, habilita el cumplimiento local así:
 
@@ -93,7 +87,7 @@ Cuando la llave pública esté instalada, la licencia inicial importada y el est
 [Environment]::SetEnvironmentVariable('BALANZAPRO_LICENSE_ENFORCE', 'true', 'Machine')
 ```
 
-Vuelve a ejecutar `Administrar servicio POS.cmd` como administrador y selecciona **Instalar / actualizar configuración y arrancar**. No habilites esto antes de instalar una licencia y el anillo público, porque el POS entraría en modo de cierre seguro.
+Vuelve a ejecutar `Administrar servicio POS.cmd` como administrador y selecciona **Instalar / actualizar configuración y arrancar**. El paquete lo mantiene desactivado por defecto para no bloquear una instalación antes de importar su primera licencia. No lo habilites antes de instalar una licencia y el anillo público, porque el POS entraría en modo de cierre seguro.
 
 ## Crear una suscripción y la licencia inicial
 

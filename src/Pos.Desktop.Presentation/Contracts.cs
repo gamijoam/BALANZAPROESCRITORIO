@@ -47,7 +47,8 @@ public sealed record DesktopModuleClientInfo(string ModuleId, string Version, st
     string SignerPublicKeyPem, IReadOnlyList<string> GrantedPermissions);
 public sealed record ModuleManagementAccessInfo(bool CanOpenManagement, bool RequiresAdministratorPin);
 public sealed record LicenseStatusClient(Guid InstallationId, string State, string? LicenseId, string? CustomerName,
-    string? Plan, int? MaxTerminals, DateTimeOffset? ExpiresAtUtc, IReadOnlyList<string> Entitlements, string? Diagnostic)
+    string? Plan, int? MaxTerminals, DateTimeOffset? ExpiresAtUtc, IReadOnlyList<string> Entitlements, string? Diagnostic,
+    bool RenewalConfigured = false, bool EnforcementEnabled = false)
 {
     public string StateLabel => State switch
     {

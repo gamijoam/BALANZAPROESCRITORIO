@@ -7,6 +7,15 @@ on:
         description: "Etiqueta pos-v* cuya Release recibirá el ZIP; déjala vacía para solo generar un artifact"
         required: false
         type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'security/**'
+      - 'docs/manuales/INSTRUCCIONES-INSTALACION-POS.md'
+      - 'docs/runbooks/importar-saldos-iniciales-legado.md'
+      - 'docs/security/publicar-modulos-desde-cualquier-equipo.md'
   release:
     types: [published]
 
