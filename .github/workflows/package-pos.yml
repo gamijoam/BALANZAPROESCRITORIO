@@ -2,9 +2,13 @@ name: Empaquetar POS para Windows
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'pos-v*'
+    inputs:
+      release_tag:
+        description: "Etiqueta pos-v* cuya Release recibirá el ZIP; déjala vacía para solo generar un artifact"
+        required: false
+        type: string
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -12,10 +16,23 @@ permissions:
 jobs:
   package:
     name: Compilar y empaquetar win-x64
+    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'pos-v') }}
     runs-on: windows-latest
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag || github.event.release.tag_name || github.ref }}
+
+      - name: Validar etiqueta de Release solicitada
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^pos-v[0-9]+(\.[0-9]+){1,3}$') {
+            throw 'La etiqueta debe tener el formato pos-vX.Y.Z o pos-vAAAA.MM.DD.N.'
+          }
 
       - name: Instalar .NET 10
         uses: actions/setup-dotnet@v4
@@ -27,7 +44,7 @@ jobs:
         run: .\scripts\Publish-LocalPos.ps1
 
       - name: Crear suma de comprobación del paquete de Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+        if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
         shell: pwsh
         run: |
           $archive = 'artifacts\local-pos-win-x64.zip'
@@ -43,7 +60,7 @@ jobs:
           retention-days: 30
 
       - name: Preparar archivos de Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+        if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
         uses: actions/upload-artifact@v4
         with:
           name: pos-release-files
@@ -55,7 +72,7 @@ jobs:
 
   publish-release:
     name: Publicar Release versionada
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -70,10 +87,11 @@ jobs:
       - name: Crear o actualizar el Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="$GITHUB_REF_NAME"
+          tag="$RELEASE_TAG"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" \
               release/local-pos-win-x64.zip \
