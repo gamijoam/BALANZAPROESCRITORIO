@@ -1,6 +1,6 @@
-# Reportes avanzados 1.3.0
+# Reportes avanzados 1.4.0
 
-Esta versión añade resúmenes automáticos y un editor para personalizar las hojas impresas de los reportes.
+Esta versión añade resúmenes automáticos por categoría a los reportes y a sus hojas personalizadas. El diseñador de hojas y sus plantillas se incorporaron en la versión 1.3.0.
 
 ## Resúmenes
 
@@ -36,7 +36,7 @@ Si el precio de un nivel no está configurado, el reporte lo indica. Si falta el
 
 ## Actualización
 
-Primero instala la actualización completa del POS anfitrión que ofrece Desktop API 1.5 y aplica la migración `ReportSheetTemplates`. Después instala el módulo firmado `advanced-reports-1.3.0.zip` desde **Administración → Módulos**.
+Primero instala la actualización completa del POS anfitrión que ofrece Desktop API 1.5 y aplica la migración `ReportSheetTemplates`. Después instala el módulo firmado `advanced-reports-1.4.0.zip` desde **Administración → Módulos**.
 
 Para generar el módulo firmado después de fusionar los cambios a `main`:
 
