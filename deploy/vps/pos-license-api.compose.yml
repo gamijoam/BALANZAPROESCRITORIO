@@ -1,0 +1,38 @@
+services:
+  pos-license-api:
+    build:
+      context: ../..
+      dockerfile: deploy/vps/LicenseApi.Dockerfile
+    container_name: pos-license-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      LicensingVps__KeyId: pos-publisher-vps-2026
+      LicensingVps__PrivateKeyPath: /run/secrets/license-private.pem
+      LicensingVps__StorePath: /var/lib/pos-license-api/subscriptions.json
+      LicensingVps__AdminTokenFile: /run/secrets/admin-token
+    volumes:
+      - /etc/pos-license-api/license-private.pem:/run/secrets/license-private.pem:ro
+      - /etc/pos-license-api/admin-token:/run/secrets/admin-token:ro
+      - /var/lib/pos-license-api:/var/lib/pos-license-api
+    networks:
+      - web_publica
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: web_publica
+      traefik.http.routers.pos-license-api.rule: Host(`licencias.balanzapro.com`)
+      traefik.http.routers.pos-license-api.entrypoints: websecure
+      traefik.http.routers.pos-license-api.tls: "true"
+      traefik.http.routers.pos-license-api.tls.certresolver: myresolver
+      traefik.http.services.pos-license-api.loadbalancer.server.port: "8080"
+
+networks:
+  web_publica:
+    external: true

@@ -1,0 +1,16 @@
+.git
+.github
+**/bin
+**/obj
+**/TestResults
+**/artifacts
+.env
+.env.*
+*.pem
+*.pfx
+admin-token
+subscriptions.json
+**/*.pem
+**/*.pfx
+**/admin-token
+**/subscriptions.json
