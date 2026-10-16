@@ -53,6 +53,8 @@ public sealed record LicenseStatusClient(Guid InstallationId, string State, stri
     {
         "Active" => "Activa",
         "Grace" => "En período de gracia",
+        "Recovery" => "Desbloqueo temporal de emergencia",
+        "Suspended" => "Suspendida desde el VPS",
         "Locked" => "Bloqueada",
         "Missing" => "Falta instalar una licencia",
         "NotConfigured" => "Falta configurar la llave pública del emisor",
@@ -60,6 +62,8 @@ public sealed record LicenseStatusClient(Guid InstallationId, string State, stri
         _ => State
     };
 }
+public sealed record LicenseNoticeClient(string State, DateTimeOffset? ExpiresAtUtc,
+    DateTimeOffset? SuspendedAtUtc = null, DateTimeOffset? RecoveryExpiresAtUtc = null);
 public sealed record ModuleTerminalCompatibilityClientResult(bool IsCompatible, int RegisteredTerminalCount,
     int UnreportedTerminalCount, IReadOnlyList<string> IncompatibleVersions)
 {
@@ -278,8 +282,14 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
 {
     Uri BaseAddress { get; set; }
     string? AccessToken { get; }
+    Task<LicenseNoticeClient> GetLicenseNoticeAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta los avisos de licencia.");
     Task<LicenseStatusClient> GetLicenseStatusAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no consulta el estado de la licencia.");
+    Task<byte[]> CreateLicenseRecoveryRequestAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no crea solicitudes de desbloqueo.");
+    Task<LicenseStatusClient> ApplyLicenseRecoveryGrantAsync(byte[] document, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no aplica archivos de desbloqueo.");
     Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite importar una licencia.");
     Task<ModuleInstallationPlanClientResult> PlanModuleInstallationAsync(string requestedModuleId, IReadOnlyList<string> packagePaths, CancellationToken cancellationToken = default)

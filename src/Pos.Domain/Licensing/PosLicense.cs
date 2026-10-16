@@ -12,7 +12,38 @@ public sealed record PosLicense(
     IReadOnlyList<string> Entitlements,
     DateTimeOffset IssuedAtUtc,
     DateTimeOffset ExpiresAtUtc,
-    string? RenewalToken = null);
+    string? RenewalToken = null,
+    long ControlVersion = 0);
+
+/// <summary>A VPS-signed command that suspends one installation until a newer license is issued.</summary>
+public sealed record PosLicenseControlDocument(
+    int SchemaVersion,
+    string LicenseId,
+    Guid InstallationId,
+    long ControlVersion,
+    string Status,
+    string? Reason,
+    DateTimeOffset IssuedAtUtc);
+
+/// <summary>Offline request created by a blocked POS installation.</summary>
+public sealed record PosLicenseRecoveryRequest(
+    int SchemaVersion,
+    string LicenseId,
+    Guid InstallationId,
+    Guid RequestId,
+    string Nonce,
+    DateTimeOffset CreatedAtUtc);
+
+/// <summary>Short-lived, one-time VPS-signed emergency unlock for a single request.</summary>
+public sealed record PosLicenseRecoveryGrant(
+    int SchemaVersion,
+    string LicenseId,
+    Guid InstallationId,
+    Guid RequestId,
+    string Nonce,
+    DateTimeOffset IssuedAtUtc,
+    DateTimeOffset ExpiresAtUtc,
+    string Reason);
 
 public enum PosLicenseState
 {

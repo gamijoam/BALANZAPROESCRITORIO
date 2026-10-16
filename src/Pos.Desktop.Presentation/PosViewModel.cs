@@ -715,6 +715,12 @@ public sealed class PosViewModel : INotifyPropertyChanged
         => _api.GetInstalledModulesAsync(cancellationToken);
     public Task<LicenseStatusClient> GetLicenseStatusAsync(CancellationToken cancellationToken = default)
         => _api.GetLicenseStatusAsync(cancellationToken);
+    public Task<byte[]> CreateLicenseRecoveryRequestAsync(CancellationToken cancellationToken = default)
+        => _api.CreateLicenseRecoveryRequestAsync(cancellationToken);
+    public Task<LicenseStatusClient> ApplyLicenseRecoveryGrantAsync(byte[] document, CancellationToken cancellationToken = default)
+        => _api.ApplyLicenseRecoveryGrantAsync(document, cancellationToken);
+    public Task<LicenseNoticeClient> GetLicenseNoticeAsync(CancellationToken cancellationToken = default)
+        => _api.GetLicenseNoticeAsync(cancellationToken);
     public Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
         => _api.ImportLicenseAsync(document, cancellationToken);
     public Task DeactivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)

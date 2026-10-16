@@ -26,7 +26,8 @@ internal static partial class PosLicenseRequestGate
 
         var path = request.Path.Value ?? string.Empty;
         return path is "/api/v1/auth/login" or "/api/v1/auth/logout" or "/api/v1/auth/authorize" or
-            "/api/v1/setup/first-operator" or "/api/v1/license/import" or "/api/v1/sales" ||
+            "/api/v1/setup/first-operator" or "/api/v1/license/import" or "/api/v1/license/recovery/request" or
+            "/api/v1/license/recovery/apply" or "/api/v1/sales" ||
             CashSessionClosePath().IsMatch(path) || SaleReturnPath().IsMatch(path) || ReceivablePaymentPath().IsMatch(path) || TerminalUnpairPath().IsMatch(path);
     }
 }

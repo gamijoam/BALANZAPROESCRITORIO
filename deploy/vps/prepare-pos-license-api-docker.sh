@@ -11,6 +11,7 @@ config_dir="/etc/pos-license-api"
 data_dir="/var/lib/pos-license-api"
 private_key="$config_dir/license-private.pem"
 admin_token="$config_dir/admin-token"
+admin_web_config="$config_dir/admin-web.json"
 
 install -d -o root -g 1654 -m 0750 "$config_dir"
 install -d -o 1654 -g 1654 -m 0750 "$data_dir"
@@ -27,6 +28,13 @@ if [[ ! -s "$admin_token" ]]; then
 fi
 chown root:1654 "$admin_token"
 chmod 0440 "$admin_token"
+
+if [[ ! -e "$admin_web_config" ]]; then
+  printf '{"enabled":false}\n' > "$admin_web_config"
+fi
+chown root:1654 "$admin_web_config"
+chmod 0440 "$admin_web_config"
+
 token="$(<"$admin_token")"
 if [[ ! "$token" =~ ^[[:xdigit:]]{64}$ ]]; then
   echo "El token administrativo debe contener exactamente 64 caracteres hexadecimales." >&2

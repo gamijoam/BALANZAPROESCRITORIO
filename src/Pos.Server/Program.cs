@@ -83,7 +83,7 @@ app.Use(async (context, next) =>
     }
 
     var license = app.Services.GetRequiredService<PosLicenseManager>().GetStatus(DateTimeOffset.UtcNow);
-    if (license.State is "Active" or "Grace")
+    if (license.State is "Active" or "Grace" or "Recovery")
     {
         await next();
         return;
@@ -149,6 +149,18 @@ app.MapGet("/api/v1/license/status", async (HttpContext context, AuthenticationS
         return Results.StatusCode(StatusCodes.Status403Forbidden);
     return Results.Ok(licenses.GetStatus(DateTimeOffset.UtcNow));
 });
+app.MapGet("/api/v1/license/notice", async (HttpContext context, AuthenticationService auth,
+    PosLicenseManager licenses, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+
+    var status = licenses.GetStatus(DateTimeOffset.UtcNow);
+    return Results.Ok(new { state = status.State, expiresAtUtc = status.ExpiresAtUtc, suspendedAtUtc = status.SuspendedAtUtc,
+        recoveryExpiresAtUtc = status.RecoveryExpiresAtUtc });
+});
 app.MapPost("/api/v1/license/import", async (HttpContext context, PosLicenseImportRequest request,
     AuthenticationService auth, PosLicenseManager licenses, CancellationToken cancellationToken) =>
 {
@@ -167,6 +179,41 @@ app.MapPost("/api/v1/license/import", async (HttpContext context, PosLicenseImpo
     try { return Results.Ok(licenses.Install(document, DateTimeOffset.UtcNow)); }
     catch (PosLicenseDocumentException exception)
     { return Results.BadRequest(new { error = "license_document_invalid", detail = exception.Message }); }
+});
+app.MapPost("/api/v1/license/recovery/request", async (HttpContext context, AuthenticationService auth,
+    PosLicenseManager licenses, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    if (await auth.GetRoleAsync(access.OperatorId, cancellationToken) != Pos.Domain.Identity.OperatorRole.Administrator)
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    try
+    {
+        var requestDocument = licenses.CreateRecoveryRequest(DateTimeOffset.UtcNow);
+        return Results.Ok(new { requestDocumentBase64 = Convert.ToBase64String(requestDocument) });
+    }
+    catch (PosLicenseDocumentException exception)
+    { return Results.BadRequest(new { error = "license_recovery_request_unavailable", detail = exception.Message }); }
+});
+app.MapPost("/api/v1/license/recovery/apply", async (HttpContext context, PosLicenseRecoveryApplyRequest request,
+    AuthenticationService auth, PosLicenseManager licenses, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    if (await auth.GetRoleAsync(access.OperatorId, cancellationToken) != Pos.Domain.Identity.OperatorRole.Administrator)
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    if (string.IsNullOrWhiteSpace(request.DocumentBase64) || request.DocumentBase64.Length > 48 * 1024)
+        return Results.BadRequest(new { error = "license_recovery_document_required" });
+    byte[] document;
+    try { document = Convert.FromBase64String(request.DocumentBase64); }
+    catch (FormatException) { return Results.BadRequest(new { error = "license_recovery_document_base64_invalid" }); }
+    try { return Results.Ok(licenses.ApplyRecoveryGrant(document, DateTimeOffset.UtcNow)); }
+    catch (PosLicenseDocumentException exception)
+    { return Results.BadRequest(new { error = "license_recovery_document_invalid", detail = exception.Message }); }
 });
 app.MapPost("/api/v1/modules/plan", async (HttpContext context, PosDbContext db, AuthenticationService auth,
     SupervisorAuthorizationStore approvals, PosLicenseManager licenses, ILogger<Program> logger) =>
@@ -555,7 +602,7 @@ app.MapPost("/api/v1/terminals/pair", async (HttpContext context, PosDbContext d
     if (enforceLicensing)
     {
         var license = licenses.GetStatus(DateTimeOffset.UtcNow);
-        if (license.State is not ("Active" or "Grace") || license.MaxTerminals is not { } maxTerminals)
+        if (license.State is not ("Active" or "Grace" or "Recovery") || license.MaxTerminals is not { } maxTerminals)
             return Results.Json(new { error = "pos_license_required" }, statusCode: StatusCodes.Status423Locked);
         var activeTerminalCount = await db.PairedTerminals.CountAsync(x => x.Active && x.TerminalId != request.TerminalId, cancellationToken);
         if (!Pos.Domain.Licensing.PosLicensePolicy.CanPairTerminal(activeTerminalCount, terminal?.Active == true, maxTerminals))
@@ -1000,7 +1047,7 @@ app.MapPost("/api/v1/sales", async (HttpContext context, PosDbContext db, Authen
     if (enforceLicensing)
     {
         var license = licenses.GetStatus(DateTimeOffset.UtcNow);
-        if (license.State is not ("Active" or "Grace"))
+        if (license.State is not ("Active" or "Grace" or "Recovery"))
         {
             var workspaceQuery = db.CartWorkspaces.AsNoTracking()
                 .Where(workspace => workspace.TerminalId == access.TerminalId && workspace.Status == "Active");
@@ -1429,6 +1476,7 @@ public sealed record CreateOperatorRequest(string? Username, string? Pin);
 public sealed record OperatorCreateRequest(string? Username, string? Pin, string? Role);
 public sealed record LoginRequest(string? Username, string? Pin, Guid TerminalId, string? ClientVersion);
 public sealed record PosLicenseImportRequest(string? DocumentBase64);
+public sealed record PosLicenseRecoveryApplyRequest(string? DocumentBase64);
 public sealed record TerminalUnpairRequest(string? AdministratorUsername, string? AdministratorPin);
 public sealed record TerminalPairRequest(Guid TerminalId, string? AdministratorUsername, string? AdministratorPin);
 public sealed record SupervisorAuthorizationRequest(string? AdministratorUsername, string? AdministratorPin, string? Permission, Guid OperationId, string? Operation, string? RequestFingerprint);

@@ -1,0 +1,69 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #172b45;
+  background: #eef2f7;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 360px; }
+.shell { width: min(1280px, calc(100% - 36px)); margin: 38px auto; }
+.card { background: #fff; border: 1px solid #dce4ef; border-radius: 12px; box-shadow: 0 8px 26px rgb(23 43 69 / 6%); }
+.login-card { width: min(440px, 100%); margin: 8vh auto; padding: 34px; }
+.brand-mark { width: 44px; height: 44px; display: grid; place-items: center; background: #173f78; color: white; border-radius: 10px; font-weight: 800; }
+.eyebrow { color: #55708f; letter-spacing: .09em; font-size: 11px; font-weight: 800; margin: 19px 0 6px; }
+h1, h2, p { margin-top: 0; }
+h1 { font-size: 27px; margin-bottom: 8px; }
+h2 { font-size: 19px; margin: 0 0 6px; }
+.muted, small { color: #64758a; }
+.login-card .muted { line-height: 1.5; margin-bottom: 24px; }
+form { display: grid; gap: 14px; }
+label { display: grid; gap: 6px; color: #344b67; font-size: 13px; font-weight: 700; }
+input { width: 100%; min-height: 42px; border: 1px solid #bfccdc; border-radius: 7px; padding: 9px 11px; color: #172b45; background: #fff; font: inherit; font-weight: 400; }
+input:focus { outline: 3px solid rgb(46 100 183 / 18%); border-color: #2e64b7; }
+small { font-size: 11px; font-weight: 400; }
+button { min-height: 39px; border: 0; border-radius: 7px; padding: 9px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+button:disabled { cursor: progress; opacity: .65; }
+.primary { color: #fff; background: #245ba9; }
+.primary:hover { background: #1e4e91; }
+.secondary { color: #214b8a; background: #eaf1fb; border: 1px solid #cad8ec; }
+.secondary:hover { background: #dce9fa; }
+.topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.topbar h1 { margin-bottom: 0; }
+.topbar .eyebrow { margin: 0 0 6px; }
+.top-actions { display: flex; gap: 14px; align-items: center; }
+.section-card { padding: 20px; margin: 16px 0; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 17px; }
+.section-heading p { margin-bottom: 0; font-size: 13px; }
+.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.form-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wide { grid-column: 1 / -1; }
+.form-footer { display: flex; justify-content: flex-end; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+th { color: #52677f; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: #f5f7fa; }
+th, td { border-bottom: 1px solid #e6ebf1; padding: 11px 9px; vertical-align: middle; }
+td.actions { min-width: 250px; }
+.license-cell { white-space: pre-line; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.row-actions button { min-height: 30px; padding: 6px 8px; font-size: 11px; }
+.badge { display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 800; background: #e5f5e8; color: #21612b; }
+.badge.off { background: #ffeded; color: #963b40; }
+.badge.warn { background: #fff0d2; color: #82510a; }
+.message { min-height: 20px; color: #52677f; font-size: 13px; }
+.message.error { color: #9d333a; }
+.message.success { color: #21612b; }
+#global-message:not(:empty) { padding: 10px 13px; border-radius: 7px; background: #eaf1fb; margin-bottom: 12px; }
+footer { color: #64758a; font-size: 12px; padding: 12px 2px; }
+[hidden] { display: none !important; }
+@media (max-width: 850px) {
+  .form-grid, .form-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-card { padding: 15px; }
+}
+@media (max-width: 560px) {
+  .shell { width: min(100% - 20px, 1280px); margin: 12px auto; }
+  .login-card { padding: 24px; margin-top: 7vh; }
+  .form-grid, .form-grid.compact { grid-template-columns: 1fr; }
+  .topbar { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
+}
