@@ -35,10 +35,23 @@ try:
     current = json.loads(config_path.read_text(encoding="utf-8"))
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"No se pudo leer la configuración actual: {exc}")
+
+def terminal_input(prompt):
+    try:
+        with open("/dev/tty", "r+", encoding="utf-8") as terminal:
+            terminal.write(prompt)
+            terminal.flush()
+            value = terminal.readline()
+    except OSError as exc:
+        raise SystemExit(f"No se pudo leer la respuesta desde la terminal interactiva: {exc}")
+    if value == "":
+        raise SystemExit("No se recibió una respuesta desde la terminal.")
+    return value.rstrip("\r\n")
+
 if current.get("enabled"):
     if not reset:
         raise SystemExit("El panel ya está configurado. Para rotar credenciales, vuelve a ejecutar con --reset.")
-    if input("Escribe RECONFIGURAR para generar nuevas credenciales: ").strip() != "RECONFIGURAR":
+    if terminal_input("Escribe RECONFIGURAR para generar nuevas credenciales: ").strip() != "RECONFIGURAR":
         raise SystemExit("No se cambió la configuración.")
     backup = config_path.with_name("admin-web.json.bak-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
     shutil.copy2(config_path, backup)
@@ -47,7 +60,7 @@ if current.get("enabled"):
     print(f"Respaldo de configuración anterior: {backup}")
 
 while True:
-    username = input("Usuario administrador (3 a 64 letras, números, punto, guion o guion bajo): ").strip()
+    username = terminal_input("Usuario administrador (3 a 64 letras, números, punto, guion o guion bajo): ").strip()
     if re.fullmatch(r"[A-Za-z0-9._-]{3,64}", username):
         break
     print("El usuario no tiene el formato permitido.")

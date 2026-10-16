@@ -571,6 +571,8 @@ public sealed record LicensePayment(Guid PaymentId, DateTimeOffset PaidAtUtc, de
     string Reference, DateTimeOffset PaidThroughUtc);
 public sealed record LicenseRecoveryIssuance(Guid RequestId, Guid InstallationId, string Nonce,
     DateTimeOffset ExpiresAtUtc, string DocumentBase64);
+public sealed record PosLicenseControlDocument(int SchemaVersion, string LicenseId, Guid InstallationId,
+    long ControlVersion, string Status, string? Reason, DateTimeOffset IssuedAtUtc);
 public sealed record PosLicenseRecoveryGrantDocument(int SchemaVersion, string LicenseId, Guid InstallationId,
     Guid RequestId, string Nonce, DateTimeOffset IssuedAtUtc, DateTimeOffset ExpiresAtUtc, string Reason);
 
