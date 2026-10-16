@@ -322,7 +322,8 @@ public partial class ReportCenterWindow : Window
         }
         catch (Exception exception)
         {
-            StatusText.Text = $"No se pudo preparar la vista de hoja: {PosUserMessage.ForException(exception)}";
+            var cause = exception.GetBaseException();
+            StatusText.Text = $"No se pudo preparar la vista de hoja ({cause.GetType().Name}): {cause.Message}";
         }
     }
 
