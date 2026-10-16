@@ -63,6 +63,19 @@ Para preparar una distribución nueva de escritorio/servidor:
 
 El paquete se genera bajo `artifacts/`. `Actualizar POS.cmd` debe ejecutarse en la PC servidor con todas las ventanas del POS cerradas; verifica la conexión, crea el respaldo, prepara el esquema y reemplaza la instalación. No copies archivos sobre un servidor activo.
 
+#### Descargar un paquete desde GitHub
+
+En **Actions → Empaquetar POS para Windows → Run workflow**, selecciona la rama que quieres probar y ejecuta el flujo. Al terminar, descarga el Artifact `BALANZAPRO-POS-win-x64-...` y extrae su contenido: `Actualizar POS.cmd` queda en la carpeta principal junto con `desktop`, `server` y `scripts`.
+
+Para publicar una versión estable, crea y sube un tag `pos-v...` después de revisar el cambio y sus resultados de CI. Por ejemplo:
+
+```powershell
+git tag pos-v1.0.0
+git push origin pos-v1.0.0
+```
+
+El mismo flujo compila el paquete y adjunta `local-pos-win-x64.zip` y su suma SHA-256 a un GitHub Release. Descarga ese ZIP desde **Releases**, extráelo y ejecuta `Actualizar POS.cmd` en el servidor con el POS cerrado.
+
 ## Módulos
 
 ### Probar Almacenes y traslados
