@@ -127,36 +127,46 @@
             </TabItem>
             <TabItem x:Name="LicenseTab" Header="Licencia">
                 <Grid Margin="18" MaxWidth="900" HorizontalAlignment="Left">
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <TextBlock Text="Licencia del servidor POS" FontSize="20" FontWeight="Bold" Foreground="#173F78"/>
-                    <TextBlock Grid.Row="1" Text="La licencia se valida en este servidor y funciona sin Internet durante su vigencia y los dos días de gracia. La primera activación requiere importar un archivo .poslic; después, al configurar la conexión con el VPS, las renovaciones se guardan automáticamente." TextWrapping="Wrap" Foreground="#52677F" Margin="0,6,0,14"/>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <TextBlock Text="Estado de la licencia" FontSize="20" FontWeight="Bold" Foreground="#173F78"/>
+                    <TextBlock Grid.Row="1" Text="La renovación se descarga automáticamente al conectar este equipo a Internet, si el pago está registrado. Sin conexión, conserva su vigencia y dos días adicionales." TextWrapping="Wrap" Foreground="#52677F" Margin="0,6,0,14"/>
                     <Border Grid.Row="2" Background="White" Padding="14" Margin="0,0,0,12">
-                        <StackPanel>
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <TextBlock x:Name="LicenseStateText" Text="Consultando licencia…" FontSize="18" FontWeight="Bold" Foreground="#173F78"/>
-                            <TextBlock x:Name="LicenseCustomerText" Margin="0,8,0,0" Text="Comercio: —"/>
-                            <TextBlock x:Name="LicensePlanText" Margin="0,4,0,0" Text="Plan: —"/>
-                            <TextBlock x:Name="LicenseExpiryText" Margin="0,4,0,0" Text="Vencimiento: —"/>
-                            <TextBlock x:Name="LicenseTerminalLimitText" Margin="0,4,0,0" Text="Terminales permitidas: —"/>
-                            <TextBlock x:Name="LicenseEntitlementsText" Margin="0,4,0,0" Text="Módulos autorizados: —" TextWrapping="Wrap"/>
-                            <Grid Margin="0,8,0,0">
+                            <Grid Grid.Row="1" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LicenseCustomerText" Text="Comercio: —"/>
+                                <TextBlock x:Name="LicensePlanText" Grid.Column="1" Margin="14,0,0,0" Text="Plan: —"/>
+                            </Grid>
+                            <Grid Grid.Row="2" Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LicenseExpiryText" Text="Vence: —"/>
+                                <TextBlock x:Name="LicenseTerminalLimitText" Grid.Column="1" Margin="14,0,0,0" Text="Equipos autorizados: —"/>
+                            </Grid>
+                            <TextBlock x:Name="LicenseEntitlementsText" Grid.Row="3" Margin="0,5,0,0" Text="Módulos: —" TextWrapping="Wrap"/>
+                            <Grid Grid.Row="4" Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock x:Name="LicenseInstallationText" FontSize="11" Foreground="#63758B" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                <Button x:Name="CopyLicenseInstallationIdButton" Grid.Column="1" Content="Copiar ID" Padding="10,5" Margin="10,0,0,0" IsEnabled="False" Click="CopyLicenseInstallationId_Click" ToolTip="Copia el ID de instalación al portapapeles"/>
+                                <Button x:Name="CopyLicenseInstallationIdButton" Grid.Column="1" Content="Copiar ID" Padding="10,5" Margin="10,0,0,0" IsEnabled="False" Click="CopyLicenseInstallationId_Click" ToolTip="Copia el identificador de este POS para enviarlo al vendedor"/>
                             </Grid>
-                        </StackPanel>
+                        </Grid>
                     </Border>
                     <StackPanel Grid.Row="3" Orientation="Horizontal">
-                        <Button x:Name="ImportLicenseButton" Content="Importar archivo .poslic…" Padding="14,8" Margin="0,0,8,0" Click="ImportLicense_Click"/>
-                        <Button Content="Actualizar estado" Padding="14,8" Click="RefreshLicense_Click"/>
-                        <Button x:Name="CreateRecoveryRequestButton" Content="Solicitar desbloqueo offline…" Padding="14,8" Margin="8,0,0,0" Click="CreateRecoveryRequest_Click"
-                                ToolTip="Genera un archivo para autorizar desde el VPS un desbloqueo temporal de esta instalación"/>
-                        <Button x:Name="ApplyRecoveryGrantButton" Content="Importar .posunlock…" Padding="14,8" Margin="8,0,0,0" Click="ApplyRecoveryGrant_Click"
-                                ToolTip="Importa el archivo temporal firmado que preparaste desde el VPS"/>
+                        <Button x:Name="ImportLicenseButton" Content="Activar o renovar licencia…" Padding="14,8" Margin="0,0,8,0" Click="ImportLicense_Click"/>
+                        <Button Content="Consultar estado" Padding="14,8" Click="RefreshLicense_Click"/>
                     </StackPanel>
-                    <TextBlock x:Name="LicenseStatus" Grid.Row="4" Margin="0,10,0,0" Foreground="#52677F" TextWrapping="Wrap"/>
-                    <TextBlock x:Name="LicenseConnectionText" Grid.Row="5" Margin="0,16,0,0" Text="Consultando configuración de renovación…" TextWrapping="Wrap" Foreground="#63758B"/>
-                    <TextBlock x:Name="LicenseRecoveryModeNotice" Grid.Row="6" Margin="0,16,0,8" Visibility="Collapsed" Text="Modo de recuperación: solo puedes consultar, renovar o recuperar la licencia. Las ventas y demás funciones del POS permanecen bloqueadas." TextWrapping="Wrap" Foreground="#8A3D16" FontWeight="SemiBold"/>
-                    <Button x:Name="ContinueToPosButton" Grid.Row="7" Content="Continuar al POS" Padding="14,8" HorizontalAlignment="Right" VerticalAlignment="Bottom" Visibility="Collapsed" IsEnabled="False" Click="ContinueToPos_Click"/>
+                    <StackPanel x:Name="LicenseRecoveryActionsPanel" Grid.Row="4" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
+                        <TextBlock Text="¿No tienes Internet?" VerticalAlignment="Center" Foreground="#52677F" Margin="0,0,12,0"/>
+                        <Button x:Name="CreateRecoveryRequestButton" Content="Preparar solicitud de desbloqueo…" Padding="14,8" Margin="0,0,8,0" Click="CreateRecoveryRequest_Click"
+                                ToolTip="Guarda un archivo para enviarlo al vendedor o administrador y recibir un desbloqueo temporal"/>
+                        <Button x:Name="ApplyRecoveryGrantButton" Content="Aplicar desbloqueo…" Padding="14,8" Click="ApplyRecoveryGrant_Click"
+                                ToolTip="Selecciona el archivo de desbloqueo que te entregaron"/>
+                    </StackPanel>
+                    <TextBlock x:Name="LicenseStatus" Grid.Row="5" Margin="0,10,0,0" Foreground="#52677F" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="LicenseConnectionText" Grid.Row="6" Margin="0,12,0,0" Text="Consultando configuración de renovación…" TextWrapping="Wrap" Foreground="#63758B"/>
+                    <TextBlock x:Name="LicenseRecoveryModeNotice" Grid.Row="7" Margin="0,12,0,8" Visibility="Collapsed" Text="El acceso a la caja está limitado. Activa o renueva la licencia para continuar." TextWrapping="Wrap" Foreground="#8A3D16" FontWeight="SemiBold"/>
+                    <Button x:Name="ContinueToPosButton" Grid.Row="8" Content="Continuar al POS" Padding="14,8" HorizontalAlignment="Right" VerticalAlignment="Bottom" Visibility="Collapsed" IsEnabled="False" Click="ContinueToPos_Click"/>
                 </Grid>
             </TabItem>
         </TabControl>

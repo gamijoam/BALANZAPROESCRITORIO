@@ -77,17 +77,11 @@ La ruta es para la computadora que ejecuta `BalanzaProPosServer`, no para cada t
 
 ## Activar la consulta automática
 
-El paquete oficial configura por defecto `https://licencias.balanzapro.com/api/v1/renewals`. Al instalar o actualizar el servicio, `Administrar servicio POS.cmd` guarda esa dirección en la configuración local protegida con DPAPI. En una instalación ya existente, después de actualizar el POS abre esa herramienta como administrador, selecciona **Instalar / actualizar configuración y arrancar** y confirma que el servicio queda iniciado.
+El paquete oficial configura por defecto `https://licencias.balanzapro.com/api/v1/renewals` y activa el bloqueo automático. Al actualizar una instalación que ya tiene el servicio, `Actualizar POS.cmd` renueva su configuración protegida con DPAPI y reinicia el servicio; Windows puede pedir permisos de administrador. En una instalación nueva, `Administrar servicio POS.cmd` guarda esta configuración al instalar el servicio.
 
-La pestaña **Administración → Licencia** muestra si el endpoint está configurado y si el cumplimiento está activo. El POS consulta al VPS al iniciar y cada cuatro horas; los fallos de red se reintentan cada quince minutos. Para usar un VPS distinto, define `BALANZAPRO_LICENSE_RENEWAL_ENDPOINT` a nivel máquina antes de reconfigurar el servicio. La dirección debe usar HTTPS y terminar en `/api/v1/renewals`.
+La pestaña **Administración → Licencia** muestra si la renovación automática y el bloqueo están activos. El POS consulta al VPS al iniciar y cada cuatro horas; los fallos de red se reintentan cada quince minutos. Para usar un VPS distinto, define `BALANZAPRO_LICENSE_RENEWAL_ENDPOINT` a nivel máquina antes de instalar o actualizar el servicio. La dirección debe usar HTTPS y terminar en `/api/v1/renewals`.
 
-Cuando la llave pública esté instalada, la licencia inicial importada y el estado muestre `Active`, habilita el cumplimiento local así:
-
-```powershell
-[Environment]::SetEnvironmentVariable('BALANZAPRO_LICENSE_ENFORCE', 'true', 'Machine')
-```
-
-Vuelve a ejecutar `Administrar servicio POS.cmd` como administrador y selecciona **Instalar / actualizar configuración y arrancar**. El paquete lo mantiene desactivado por defecto para no bloquear una instalación antes de importar su primera licencia. No lo habilites antes de instalar una licencia y el anillo público, porque el POS entraría en modo de cierre seguro.
+Instala la llave pública antes de activar el servicio. El bloqueo queda habilitado por defecto; al faltar una licencia válida, el POS abre el acceso de recuperación y permite importar la licencia inicial. Si el estado indica que no está configurada la validación, completa primero el paso anterior de instalación de la llave pública y reinicia el servicio.
 
 ## Crear una suscripción y la licencia inicial
 
@@ -112,7 +106,7 @@ La opción **Reactivar licencia** incrementa la versión de control. Si además 
 
 ### Desbloqueo temporal sin Internet
 
-Si la licencia quedó bloqueada y esa computadora no tiene Internet, en Administración → Licencia el administrador local crea y guarda un `.posreq`. Llévalo al VPS por USB o transferencia segura y, en el menú de `pos-license-admin`, selecciona **Autorizar desbloqueo offline**. El VPS valida que la solicitud sea reciente y pertenezca a la suscripción, solicita un motivo, y firma un `.posunlock` válido por entre una y 48 horas. Copia ese archivo de vuelta a la PC y usa **Importar .posunlock**.
+Si la licencia quedó bloqueada y esa computadora no tiene Internet, en Administración → Licencia el administrador local elige **Guardar solicitud de ayuda**. Envía el archivo al VPS por USB o transferencia segura y, en el menú de `pos-license-admin`, selecciona **Autorizar desbloqueo offline**. El VPS valida que la solicitud sea reciente y pertenezca a la suscripción, solicita un motivo y firma un archivo de desbloqueo válido por entre una y 48 horas. Copia ese archivo de vuelta a la PC y usa **Aplicar desbloqueo**.
 
 El desbloqueo solo sirve para la instalación y solicitud que lo generaron. El POS lo acepta una vez; el mismo archivo no puede prolongarlo. Al vencer, se aplica de nuevo el estado de licencia local o la suspensión recibida. Si la suscripción debe continuar, registra el pago y reactiva desde el VPS para que el POS reciba una licencia normal al reconectarse.
 

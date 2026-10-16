@@ -46,7 +46,7 @@ public partial class ManagementWindow : Window
         {
             Title = "Recuperación de licencia · BalanzaPro";
             ManagementTitleText.Text = "RECUPERACIÓN DE LICENCIA";
-            ManagementSubtitleText.Text = "El acceso a caja está bloqueado hasta que se renueve o recupere la licencia.";
+            ManagementSubtitleText.Text = "Activa o renueva la licencia para volver a usar la caja.";
             ManagementTabs.Items.Clear();
             ManagementTabs.Items.Add(LicenseTab);
             ManagementTabs.SelectedItem = LicenseTab;
@@ -84,40 +84,54 @@ public partial class ManagementWindow : Window
             _licenseState = license.State;
             LicenseStateText.Text = license.StateLabel;
             LicenseCustomerText.Text = $"Comercio: {license.CustomerName ?? "—"}";
-            LicensePlanText.Text = $"Plan: {license.Plan ?? "—"}{(license.LicenseId is null ? string.Empty : $" · licencia {license.LicenseId}")}";
+            LicensePlanText.Text = $"Plan: {license.Plan ?? "—"}";
             LicenseExpiryText.Text = license.ExpiresAtUtc is { } expiry
-                ? $"Vence: {expiry.ToLocalTime():dd/MM/yyyy HH:mm} · hora local"
-                : "Vencimiento: —";
+                ? $"Vence el: {expiry.ToLocalTime():dd/MM/yyyy HH:mm}"
+                : "Vence el: —";
             LicenseTerminalLimitText.Text = license.MaxTerminals is { } maximum
-                ? $"Terminales permitidas: {maximum}"
-                : "Terminales permitidas: —";
+                ? $"Equipos autorizados: {maximum}"
+                : "Equipos autorizados: —";
             LicenseEntitlementsText.Text = license.Entitlements.Count == 0
-                ? "Módulos autorizados: ninguno"
-                : $"Módulos autorizados: {string.Join(", ", license.Entitlements)}";
+                ? "Módulos incluidos: ninguno"
+                : $"Módulos incluidos: {string.Join(", ", license.Entitlements)}";
             _licenseInstallationId = license.InstallationId;
-            LicenseInstallationText.Text = $"ID de instalación: {license.InstallationId:D}";
+            LicenseInstallationText.Text = $"ID de este POS: {license.InstallationId:D}";
             ContinueToPosButton.IsEnabled = IsOperationalLicenseState(license.State);
             CopyLicenseInstallationIdButton.IsEnabled = true;
+            ImportLicenseButton.IsEnabled = license.State != "NotConfigured";
+            ImportLicenseButton.ToolTip = license.State == "NotConfigured"
+                ? "Contacta al vendedor para completar la configuración de este POS."
+                : "Selecciona el archivo de licencia que te entregaron.";
             CreateRecoveryRequestButton.IsEnabled = license.State is "Locked" or "Suspended";
-            CreateRecoveryRequestButton.ToolTip = CreateRecoveryRequestButton.IsEnabled
-                ? "Genera una solicitud para autorizar desde el VPS un desbloqueo temporal de esta instalación."
-                : "Disponible cuando la licencia esté bloqueada o suspendida.";
-            LicenseStatus.Text = license.Diagnostic ?? (license.State is "Active" or "Grace"
-                ? "La licencia está almacenada y validada localmente."
-                : "Importa una licencia emitida para este ID de instalación.");
+            ApplyRecoveryGrantButton.IsEnabled = CreateRecoveryRequestButton.IsEnabled;
+            LicenseRecoveryActionsPanel.Visibility = license.State is "Locked" or "Suspended"
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            LicenseStatus.Text = _licenseRecoveryOnly && license.State == "Recovery"
+                ? string.Empty
+                : GetLicenseStatusMessage(license);
             var renewalStatus = license.RenewalConfigured
-                ? "Renovación automática al iniciar y cada 4 horas: configurada."
-                : "Renovación automática: sin configurar; este POS no recibirá suspensiones remotas.";
+                ? "Renovación automática: activa"
+                : "Renovación automática: sin configurar";
             var enforcementStatus = license.EnforcementEnabled
-                ? "Bloqueo por licencia: activo."
-                : "Bloqueo por licencia: desactivado.";
-            LicenseConnectionText.Text = $"{renewalStatus} {enforcementStatus} Sin Internet, conserva la vigencia local y los dos días de gracia.";
+                ? "Bloqueo automático: activo"
+                : "Bloqueo automático: desactivado";
+            LicenseConnectionText.Text = $"{renewalStatus} · {enforcementStatus}";
+            LicenseRecoveryModeNotice.Text = license.State switch
+            {
+                "Active" => "La licencia está activa. Puedes continuar al POS.",
+                "Grace" => "El período de gracia está activo. Conecta el servidor POS a Internet para renovar la licencia.",
+                "Recovery" => license.RecoveryExpiresAtUtc is { } recoveryExpiry
+                    ? $"El desbloqueo temporal está activo hasta {recoveryExpiry.ToLocalTime():dd/MM/yyyy HH:mm}. Conecta el servidor POS a Internet o renueva la licencia antes de esa hora."
+                    : "El desbloqueo temporal está activo. Renueva la licencia para mantener el acceso.",
+                _ => "La caja está bloqueada. Desde aquí puedes activar o recuperar la licencia."
+            };
             LicenseStateText.Foreground = license.State switch
             {
                 "Active" => System.Windows.Media.Brushes.DarkGreen,
                 "Grace" => System.Windows.Media.Brushes.DarkOrange,
                 "Recovery" => System.Windows.Media.Brushes.DarkBlue,
-                "Locked" or "Suspended" or "Invalid" or "ClockRollback" => System.Windows.Media.Brushes.DarkRed,
+                "Locked" or "Suspended" or "Invalid" or "ClockRollback" or "NotConfigured" or "Missing" => System.Windows.Media.Brushes.DarkRed,
                 _ => System.Windows.Media.Brushes.DarkSlateGray
             };
         }
@@ -126,6 +140,20 @@ public partial class ManagementWindow : Window
             LicenseStatus.Text = PosUserMessage.ForException(exception);
         }
     }
+
+    private static string GetLicenseStatusMessage(LicenseStatusClient license) => license.State switch
+    {
+        "Active" => string.Empty,
+        "Grace" => "La licencia venció. Conecta el servidor POS a Internet para renovarla antes de que termine el período de gracia.",
+        "Recovery" => license.Diagnostic ?? "El desbloqueo de emergencia está activo por tiempo limitado.",
+        "Suspended" => "La licencia está suspendida. Contacta al vendedor para reactivarla.",
+        "Locked" => "La licencia venció y terminó el período de gracia. Conecta el servidor POS a Internet para renovarla o contacta al vendedor.",
+        "Missing" => "Selecciona el archivo de licencia que te entregó el vendedor.",
+        "NotConfigured" => "Este POS aún no está preparado para validar licencias. Contacta al vendedor.",
+        "Invalid" => "No se pudo validar la licencia. Importa un archivo actualizado o contacta al vendedor.",
+        "ClockRollback" => "Revisa la fecha y hora de esta computadora. Si el aviso continúa, contacta al vendedor.",
+        _ => "No se pudo consultar la licencia. Inténtalo de nuevo o contacta al vendedor."
+    };
 
     private static bool IsOperationalLicenseState(string state) => state is "Active" or "Grace" or "Recovery";
 
@@ -143,7 +171,7 @@ public partial class ManagementWindow : Window
         try
         {
             CreateRecoveryRequestButton.IsEnabled = false;
-            LicenseStatus.Text = "Preparando solicitud de desbloqueo para esta instalación…";
+            LicenseStatus.Text = "Preparando la solicitud de desbloqueo…";
             var document = await _viewModel.CreateLicenseRecoveryRequestAsync();
             var installationSuffix = _licenseInstallationId.HasValue ? _licenseInstallationId.Value.ToString("N")[..8] : "pos";
             var dialog = new SaveFileDialog
@@ -152,7 +180,7 @@ public partial class ManagementWindow : Window
                 DefaultExt = ".posreq",
                 FileName = $"solicitud-{installationSuffix}.posreq",
                 Filter = "Solicitud de desbloqueo POS (*.posreq)|*.posreq",
-                Title = "Guardar solicitud para el VPS"
+                Title = "Guardar solicitud para soporte"
             };
             if (dialog.ShowDialog(this) != true)
             {
@@ -160,7 +188,7 @@ public partial class ManagementWindow : Window
                 return;
             }
             await File.WriteAllBytesAsync(dialog.FileName, document);
-            LicenseStatus.Text = "Solicitud guardada. Llévala al VPS con USB o transferencia segura y selecciona allí ‘Crear desbloqueo offline’.";
+            LicenseStatus.Text = "Solicitud guardada. Envíala al vendedor o administrador para recibir un desbloqueo temporal.";
         }
         catch (Exception exception)
         {
@@ -175,7 +203,7 @@ public partial class ManagementWindow : Window
         {
             CheckFileExists = true,
             Filter = "Desbloqueo temporal POS (*.posunlock)|*.posunlock",
-            Title = "Seleccionar desbloqueo firmado por el VPS"
+            Title = "Seleccionar archivo de desbloqueo"
         };
         if (dialog.ShowDialog(this) != true) return;
         try
@@ -183,11 +211,11 @@ public partial class ManagementWindow : Window
             var info = new FileInfo(dialog.FileName);
             if (info.Length is <= 0 or > 32 * 1024)
             {
-                LicenseStatus.Text = "El archivo de desbloqueo está vacío o supera 32 KiB.";
+                LicenseStatus.Text = "No se pudo leer el archivo. Selecciona el archivo de desbloqueo que te entregaron.";
                 return;
             }
             ApplyRecoveryGrantButton.IsEnabled = false;
-            LicenseStatus.Text = "Verificando firma y solicitud de esta instalación…";
+            LicenseStatus.Text = "Validando el archivo de desbloqueo…";
             var status = await _viewModel.ApplyLicenseRecoveryGrantAsync(await File.ReadAllBytesAsync(dialog.FileName));
             await LoadLicenseStatusAsync();
             LicenseStatus.Text = status.Diagnostic ?? "Desbloqueo temporal aplicado y verificado.";
@@ -218,7 +246,7 @@ public partial class ManagementWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Selecciona la licencia firmada del POS",
+            Title = "Selecciona el archivo de licencia",
             Filter = "Licencia BalanzaPro (*.poslic)|*.poslic|Todos los archivos (*.*)|*.*",
             CheckFileExists = true,
             Multiselect = false
@@ -230,16 +258,16 @@ public partial class ManagementWindow : Window
             var info = new FileInfo(dialog.FileName);
             if (info.Length is <= 0 or > 64 * 1024)
             {
-                LicenseStatus.Text = "El archivo está vacío o supera el límite de 64 KiB.";
+                LicenseStatus.Text = "No se pudo leer el archivo. Selecciona el archivo de licencia que te entregaron.";
                 return;
             }
 
             ImportLicenseButton.IsEnabled = false;
-            LicenseStatus.Text = "Verificando firma e instalación en el servidor…";
+            LicenseStatus.Text = "Validando la licencia…";
             var document = await File.ReadAllBytesAsync(dialog.FileName);
-            var status = await _viewModel.ImportLicenseAsync(document);
+            await _viewModel.ImportLicenseAsync(document);
             await LoadLicenseStatusAsync();
-            LicenseStatus.Text = $"Licencia {status.LicenseId ?? string.Empty} importada y verificada en el servidor.";
+            LicenseStatus.Text = "Licencia activada correctamente.";
         }
         catch (Exception exception)
         {
@@ -247,7 +275,7 @@ public partial class ManagementWindow : Window
         }
         finally
         {
-            ImportLicenseButton.IsEnabled = true;
+            ImportLicenseButton.IsEnabled = _licenseState != "NotConfigured";
         }
     }
 

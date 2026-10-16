@@ -70,24 +70,24 @@ El primer corte no integra cobros con una pasarela: un administrador registra el
 
 ## Límite del primer corte
 
-La renovación requiere que el servicio VPS esté desplegado por HTTPS y que el servidor POS local tenga la llave pública. El paquete oficial configura su endpoint de renovación. El cumplimiento de licencias permanece desactivado por defecto hasta habilitarlo después de instalar una licencia válida.
+La renovación requiere que el servicio VPS esté desplegado por HTTPS y que el servidor POS local tenga la llave pública. El paquete oficial configura su endpoint de renovación y activa el cumplimiento de licencias por defecto. Si no hay una licencia válida, el POS limita el acceso a la pantalla de activación y recuperación.
 
 ## Configuración de instalación
 
-- El modo de cumplimiento queda desactivado por defecto mediante `Licensing:Enforce=false`. Activarlo antes de instalar las llaves públicas y una licencia válida bloquearía el POS.
+- El modo de cumplimiento queda activado por defecto mediante `Licensing:Enforce=true`. La pantalla de recuperación permite instalar la licencia inicial antes de continuar al POS; el servidor debe tener instalado el anillo de llaves públicas para validarla.
 - En ejecución como servicio de Windows, los datos se guardan en `%ProgramData%\BalanzaPro\PosServer\Licensing`; en ejecución interactiva se guardan en `%LocalAppData%\BalanzaPro\PosServer\Licensing`. Se puede cambiar con `Licensing:DataPath`.
 - El servidor busca `trusted-license-keys.json` dentro de esa carpeta, salvo que `Licensing:TrustKeyRingPath` indique otra ruta. El archivo debe contener solo las llaves públicas confiables; nunca se copia la llave privada del emisor al POS.
 - En Windows, el servidor guarda el máximo horario observado en `license-clock.dpapi`, protegido con DPAPI para el equipo y persistido cada cinco minutos. Un retroceso superior a cinco minutos respecto de la marca guardada o un marcador ilegible impide validar/renovar la licencia. Esto no resiste la restauración de un respaldo antiguo ni sustituye un reloj seguro; en otros sistemas operativos no se aplica esta protección.
-- Administración > Licencia consulta el estado y permite importar el `.poslic`; el servidor vuelve a verificar la firma, el emisor y el ID de instalación antes de guardarlo.
+- Administración > Licencia consulta el estado, permite activar o renovar la licencia y ofrece el desbloqueo de emergencia cuando está bloqueada o suspendida. El servidor vuelve a verificar la firma, el emisor y el ID de instalación antes de guardarla.
 - `GET /api/v1/license/status` y `POST /api/v1/license/import` requieren sesión de administrador. El endpoint de importación acepta JSON con `documentBase64`.
 
 ## Estado actual — 16 de octubre de 2026
 
 - Implementado el contrato versionado, la verificación RSA-PSS/SHA-256 con llaves públicas, la identidad estable de instalación, la persistencia atómica y la gracia fija de dos días.
-- `Pos.Server` expone estado e importación para administradores; la pestaña Licencia de Administración permite consultar/importar el `.poslic` desde Windows.
-- Si se activa `Licensing:Enforce`, el servidor bloquea operaciones comerciales nuevas al vencer la gracia; deja leer, cerrar caja, hacer devoluciones, cobrar cuentas, importar una renovación, desparear terminales y terminar un carrito activo que se guardó antes del bloqueo. Las ventas reintentadas con la misma llave de idempotencia solo pueden reproducir el resultado anterior.
+- `Pos.Server` expone estado e importación para administradores; la pestaña Licencia de Administración permite consultar/activar la licencia y gestionar el desbloqueo de emergencia desde Windows.
+- Con `Licensing:Enforce` activado (valor predeterminado), el servidor bloquea operaciones comerciales nuevas al vencer la gracia; deja leer, cerrar caja, hacer devoluciones, cobrar cuentas, importar una renovación, desparear terminales y terminar un carrito activo que se guardó antes del bloqueo. Las ventas reintentadas con la misma llave de idempotencia solo pueden reproducir el resultado anterior.
 - El emparejamiento respeta el cupo firmado y el desparejamiento desactiva la terminal y revoca sus sesiones. Los módulos solo reciben sus entitlements mientras la licencia esté activa o en gracia.
-- El servicio remoto y la consulta automática de 32C están implementados. Aún faltan el despliegue real en el VPS, el dominio HTTPS, instalar el anillo público en el Windows Server, registrar la suscripción y habilitar el endpoint de renovación. El registro del pago aún es manual; no hay pasarela de pago/webhook.
+- El servicio remoto de 32C está desplegado en `licencias.balanzapro.com`; la instalación de la llave pública en Windows y el alta/pago de la suscripción se completan una sola vez por comercio. El registro del pago aún es manual; no hay pasarela de pago/webhook.
 - El marcador horario DPAPI de Windows detecta retrocesos mayores de cinco minutos; no resiste restauraciones antiguas del equipo o sus respaldos.
-- El desbloqueo de emergencia 32D aún está pendiente.
+- El desbloqueo de emergencia 32D está implementado. Las instalaciones bloqueadas o suspendidas ofrecen solicitud y aplicación del archivo de recuperación; durante la autorización temporal, se mantiene disponible la renovación normal.
 - La llave pública real del emisor todavía debe provisionarse fuera del código; no se creó ni se almacenó ninguna llave privada en el repositorio.

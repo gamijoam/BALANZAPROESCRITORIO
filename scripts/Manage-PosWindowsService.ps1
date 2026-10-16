@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Menu', 'Install', 'Configure', 'Reconfigure', 'Status', 'Start', 'Stop', 'Restart', 'Remove', 'EnsureRunning')]
-    [string]$Action = 'Menu'
+    [string]$Action = 'Menu',
+    [switch]$WaitForElevation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -115,7 +116,7 @@ function Set-PosServiceConfiguration {
         throw 'La URL de renovación debe usar HTTPS y terminar en /api/v1/renewals.'
     }
     $licenseEnforce = [Environment]::GetEnvironmentVariable('BALANZAPRO_LICENSE_ENFORCE', 'Machine')
-    if ([string]::IsNullOrWhiteSpace($licenseEnforce)) { $licenseEnforce = 'false' }
+    if ([string]::IsNullOrWhiteSpace($licenseEnforce)) { $licenseEnforce = 'true' }
     if ($licenseEnforce -notin @('true', 'false')) { throw 'BALANZAPRO_LICENSE_ENFORCE solo admite true o false.' }
     $certificatePath = $null
     $certificatePassword = $null
@@ -271,15 +272,23 @@ function Show-PosServiceStatus {
 }
 
 function Invoke-ElevatedAction {
-    param([string]$RequestedAction = $Action)
+    param([string]$RequestedAction = $Action, [switch]$WaitForCompletion)
     if ($RequestedAction -notin @('Install', 'Configure', 'Reconfigure', 'Remove', 'Stop', 'Restart') -or (Test-IsAdministrator)) { return $false }
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Action', $RequestedAction)
-    $arguments = @('-NoExit') + $arguments
-    Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs
+    if (-not $WaitForCompletion) { $arguments = @('-NoExit') + $arguments }
+    $startParameters = @{ FilePath = 'powershell.exe'; ArgumentList = $arguments; Verb = 'RunAs' }
+    if ($WaitForCompletion) {
+        $startParameters.Wait = $true
+        $startParameters.PassThru = $true
+        $process = Start-Process @startParameters
+        if ($process.ExitCode -ne 0) { throw "La configuración del servicio POS terminó con el código $($process.ExitCode)." }
+    } else {
+        Start-Process @startParameters | Out-Null
+    }
     return $true
 }
 
-if (Invoke-ElevatedAction) { exit 0 }
+if (Invoke-ElevatedAction -WaitForCompletion:$WaitForElevation) { exit 0 }
 switch ($Action) {
     'Menu' {
         do {

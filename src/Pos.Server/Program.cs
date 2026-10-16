@@ -155,7 +155,7 @@ app.MapGet("/api/v1/license/status", async (HttpContext context, AuthenticationS
     return Results.Ok(status);
 });
 app.MapGet("/api/v1/license/notice", async (HttpContext context, AuthenticationService auth,
-    PosLicenseManager licenses, CancellationToken cancellationToken) =>
+    PosLicenseManager licenses, IConfiguration configuration, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
@@ -164,7 +164,8 @@ app.MapGet("/api/v1/license/notice", async (HttpContext context, AuthenticationS
 
     var status = licenses.GetStatus(DateTimeOffset.UtcNow);
     return Results.Ok(new { state = status.State, expiresAtUtc = status.ExpiresAtUtc, suspendedAtUtc = status.SuspendedAtUtc,
-        recoveryExpiresAtUtc = status.RecoveryExpiresAtUtc });
+        recoveryExpiresAtUtc = status.RecoveryExpiresAtUtc,
+        enforcementEnabled = configuration.GetValue<bool>("Licensing:Enforce") });
 });
 app.MapPost("/api/v1/license/import", async (HttpContext context, PosLicenseImportRequest request,
     AuthenticationService auth, PosLicenseManager licenses, CancellationToken cancellationToken) =>
