@@ -10,10 +10,13 @@ services:
       LicensingVps__KeyId: pos-publisher-vps-2026
       LicensingVps__PrivateKeyPath: /run/secrets/license-private.pem
       LicensingVps__StorePath: /var/lib/pos-license-api/subscriptions.json
+      LicensingVps__AuditPath: /var/lib/pos-license-api/audit.jsonl
       LicensingVps__AdminTokenFile: /run/secrets/admin-token
+      LicensingVps__AdminWebConfigPath: /run/secrets/admin-web.json
     volumes:
       - /etc/pos-license-api/license-private.pem:/run/secrets/license-private.pem:ro
       - /etc/pos-license-api/admin-token:/run/secrets/admin-token:ro
+      - /etc/pos-license-api/admin-web.json:/run/secrets/admin-web.json:ro
       - /var/lib/pos-license-api:/var/lib/pos-license-api
     networks:
       - web_publica

@@ -93,6 +93,16 @@ public sealed class PosLicenseDocumentVerifier
                     throw new PosLicenseDocumentException("La firma de la licencia no es válida.");
             }
 
+            using var payloadDocument = JsonDocument.Parse(payloadBytes, new JsonDocumentOptions { MaxDepth = 16 });
+            var payload = payloadDocument.RootElement;
+            var payloadVersion = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("schemaVersion", out var versionElement)
+                ? versionElement.GetInt32()
+                : 0;
+            EnsureExactProperties(payload, payloadVersion == 1
+                ? ["schemaVersion", "licenseId", "customerRif", "customerName", "installationId", "plan", "maxTerminals", "entitlements", "issuedAtUtc", "expiresAtUtc", "renewalToken"]
+                : ["schemaVersion", "licenseId", "customerRif", "customerName", "installationId", "plan", "maxTerminals", "entitlements", "issuedAtUtc", "expiresAtUtc", "renewalToken", "controlVersion"],
+                "contenido de licencia");
+
             var license = JsonSerializer.Deserialize<PosLicense>(payloadBytes, PayloadJsonOptions)
                 ?? throw new PosLicenseDocumentException("No se pudo leer el contenido de la licencia.");
             ValidateClaims(license, installationId, nowUtc);
@@ -121,8 +131,10 @@ public sealed class PosLicenseDocumentVerifier
 
     private static void ValidateClaims(PosLicense license, Guid installationId, DateTimeOffset nowUtc)
     {
-        if (license.SchemaVersion != 1)
+        if (license.SchemaVersion is not (1 or 2))
             throw new PosLicenseDocumentException("La versión del contenido de licencia no es compatible.");
+        if ((license.SchemaVersion == 1 && license.ControlVersion != 0) || license.ControlVersion < 0)
+            throw new PosLicenseDocumentException("La versión de control de la licencia no es válida.");
         if (string.IsNullOrWhiteSpace(license.LicenseId) || license.LicenseId.Length > 100)
             throw new PosLicenseDocumentException("La licencia no contiene un identificador válido.");
         if (string.IsNullOrWhiteSpace(license.CustomerName) || license.CustomerName.Length > 200)

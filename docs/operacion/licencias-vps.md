@@ -7,7 +7,9 @@
 - El POS local consulta al iniciar y luego cada cuatro horas. Ante un error de red reintenta cada quince minutos. Las ventas no esperan esa consulta.
 - La licencia sigue funcionando offline hasta su fecha de vencimiento y los dos días de gracia acordados.
 - No se importa un archivo en las renovaciones. La primera licencia sí se importa una vez.
-- En este corte, el pago se registra en el VPS con una operación administrativa. No hay pasarela de pago ni webhook todavía; por eso una persona o sistema externo debe actualizar `paidThroughUtc` al confirmar cada pago.
+- El punto de venta muestra avisos al acercarse el vencimiento (cinco días), durante los dos días de gracia, ante una suspensión y cuando la licencia queda bloqueada.
+- El pago se registra en el VPS con la herramienta administrativa. No hay pasarela de pago ni webhook todavía; una persona debe confirmar el pago.
+- Una suspensión firmada se aplica en la próxima conexión del POS al VPS. Un equipo que permanezca sin Internet no puede recibir cambios remotos hasta reconectarse.
 
 ## Instalación con Docker y Traefik
 
@@ -33,6 +35,14 @@ Prepara las carpetas y secretos. El script conserva una llave ya creada, crea un
 sudo bash deploy/vps/prepare-pos-license-api-docker.sh
 ```
 
+Configura el acceso al panel web. El asistente guarda el hash de la contraseña, la semilla TOTP y la llave de sesión en un archivo protegido; muestra la semilla TOTP una sola vez para registrarla en una aplicación autenticadora:
+
+```bash
+sudo bash deploy/vps/configure-pos-license-admin-web.sh
+```
+
+Si se pierden las credenciales, vuelve a configurar el panel con `sudo bash deploy/vps/configure-pos-license-admin-web.sh --reset`; pide confirmación y conserva una copia anterior solo legible por root.
+
 Construye y arranca la API en la red de Traefik. No publica un puerto del contenedor en el host; Traefik la alcanza por `web_publica` y solicita HTTPS con `myresolver`:
 
 ```bash
@@ -43,6 +53,8 @@ curl --fail --show-error https://licencias.balanzapro.com/api/v1/health
 ```
 
 La primera solicitud puede tardar mientras Let's Encrypt emite el certificado. Si falla, revisa `sudo docker compose -f deploy/vps/pos-license-api.compose.yml logs --tail=80` y confirma que el registro DNS apunta al VPS y que los puertos 80 y 443 llegan a Traefik. No compartas salidas de secretos ni archivos `.env`.
+
+Con el contenedor en marcha, abre `https://licencias.balanzapro.com/admin` e inicia sesión con usuario, contraseña y TOTP. La web usa una cookie segura de ocho horas y no entrega el token administrativo del API al navegador. También puedes operar desde SSH con el menú `sudo /usr/local/sbin/pos-license-admin`.
 
 La imagen se construye en el VPS con Docker y .NET 10. La llave privada y el token se montan como archivos de solo lectura; los datos persistentes quedan en `/var/lib/pos-license-api`. Guarda respaldos cifrados de esos datos y de `/etc/pos-license-api`.
 
@@ -85,6 +97,35 @@ Vuelve a ejecutar `Administrar servicio POS.cmd` como administrador y selecciona
 
 ## Crear una suscripción y la licencia inicial
 
+Instala la herramienta interactiva en el VPS después de actualizar el repositorio y preparar la API:
+
+```bash
+cd /opt/balanza-license-source
+git pull --ff-only origin main
+sudo bash deploy/vps/install-pos-license-admin.sh
+sudo /usr/local/sbin/pos-license-admin
+```
+
+El menú permite consultar suscripciones, crear una suscripción y su primer `.poslic`, registrar un pago, cambiar plan/módulos/terminales, suspender/reactivar, regenerar el `.poslic` y revisar la auditoría. La herramienta lee el token administrativo protegido directamente del VPS; nunca lo muestra ni lo guarda en el repositorio.
+
+Para crear la primera licencia, el POS debe mostrar el `installationId` en Administración → Licencia. El programa guarda el archivo en `/var/lib/pos-license-api/exports/` con permisos solo para root y muestra un comando `scp` para copiarlo a Windows. Importa ese primer archivo una sola vez desde Administración → Licencia. En adelante, registrar el pago y la nueva fecha pagada permite que el POS se renueve solo en su próxima conexión.
+
+## Suspender, reactivar y revisar avisos
+
+La opción **Suspender licencia** crea una orden firmada con la llave del VPS y deja una entrada de auditoría. Cuando el POS se conecte, guarda la orden, muestra el aviso rojo y bloquea nuevas operaciones según el modo de cumplimiento. Si la computadora está offline, conserva el estado local hasta que conecte o termine el período vigente más los dos días de gracia.
+
+La opción **Reactivar licencia** incrementa la versión de control. Si además venció, registra primero el pago; luego reactiva. Cuando el POS se conecte, recibirá la licencia firmada con la fecha vigente y limpiará la suspensión.
+
+### Desbloqueo temporal sin Internet
+
+Si la licencia quedó bloqueada y esa computadora no tiene Internet, en Administración → Licencia el administrador local crea y guarda un `.posreq`. Llévalo al VPS por USB o transferencia segura y, en el menú de `pos-license-admin`, selecciona **Autorizar desbloqueo offline**. El VPS valida que la solicitud sea reciente y pertenezca a la suscripción, solicita un motivo, y firma un `.posunlock` válido por entre una y 48 horas. Copia ese archivo de vuelta a la PC y usa **Importar .posunlock**.
+
+El desbloqueo solo sirve para la instalación y solicitud que lo generaron. El POS lo acepta una vez; el mismo archivo no puede prolongarlo. Al vencer, se aplica de nuevo el estado de licencia local o la suspensión recibida. Si la suscripción debe continuar, registra el pago y reactiva desde el VPS para que el POS reciba una licencia normal al reconectarse.
+
+Los eventos administrativos recientes también se consultan desde el menú y quedan en `/var/lib/pos-license-api/audit.jsonl`. Incluye eventos de alta, emisión de documento, pagos, cambios de plan y suspensión/reactivación. Respalda este registro junto a los datos de suscripciones.
+
+## Operación manual con API
+
 Abre una consola root en el VPS y usa la instalación de POS que muestra Administración → Licencia para copiar su `installationId`.
 
 El archivo `/etc/pos-license-api/admin.curlrc`, solo legible por root, permite llamar al API sin pegar el secreto en el comando. Sustituye los datos de ejemplo y guarda el documento inicial en un archivo:
@@ -122,4 +163,4 @@ El identificador `lic_...` se devuelve al crear la suscripción. Para conectar u
 
 ## Respaldo
 
-Respalda `/var/lib/pos-license-api/subscriptions.json`, `/etc/pos-license-api/license-private.pem` y el secreto administrativo en `/etc/pos-license-api` en un lugar cifrado y con acceso limitado. Sin el registro no se conoce el estado pagado; sin la llave privada no se pueden emitir renovaciones para las licencias existentes. No incluyas estos archivos en GitHub Actions artifacts ni en el repositorio.
+Respalda `/var/lib/pos-license-api` (suscripciones, auditoría y desbloqueos ya emitidos) y `/etc/pos-license-api` (llave privada, token API y `admin-web.json`) en un lugar cifrado y con acceso limitado. Sin los datos no se conoce el estado pagado; sin la llave privada no se pueden emitir renovaciones para las licencias existentes. No incluyas estos archivos en GitHub Actions artifacts ni en el repositorio.

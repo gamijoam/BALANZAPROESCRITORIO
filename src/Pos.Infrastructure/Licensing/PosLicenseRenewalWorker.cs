@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -53,27 +54,50 @@ public sealed class PosLicenseRenewalWorker(
                     else if (response.IsSuccessStatusCode)
                     {
                         var result = await response.Content.ReadFromJsonAsync<RenewalResponse>(cancellationToken: stoppingToken);
-                        if (result?.DocumentBase64 is null || result.DocumentBase64.Length > 96 * 1024)
-                            throw new InvalidDataException("El VPS devolvió un documento de licencia vacío o demasiado grande.");
+                        if (result is null || (result.DocumentBase64 is null) == (result.ControlDocumentBase64 is null))
+                            throw new InvalidDataException("El VPS devolvió una respuesta de renovación vacía o ambigua.");
 
-                        byte[] document;
-                        try
+                        if (result.ControlDocumentBase64 is { } controlBase64)
                         {
-                            document = Convert.FromBase64String(result.DocumentBase64);
+                            if (controlBase64.Length > 48 * 1024)
+                                throw new InvalidDataException("El VPS devolvió una orden de control demasiado grande.");
+                            byte[] controlDocument;
+                            try { controlDocument = Convert.FromBase64String(controlBase64); }
+                            catch (FormatException exception)
+                            { throw new InvalidDataException("El VPS devolvió una orden de control mal codificada.", exception); }
+                            if (controlDocument.Length is 0 or > 32 * 1024)
+                                throw new InvalidDataException("El VPS devolvió una orden de control vacía o demasiado grande.");
+
+                            var status = licenseManager.ApplyControlDocument(controlDocument, DateTimeOffset.UtcNow);
+                            logger.LogInformation("El VPS confirmó la suspensión de la licencia POS en la instalación {InstallationId} (control {ControlVersion}).",
+                                status.InstallationId, status.ControlVersion);
+                            delay = RenewalInterval;
                         }
-                        catch (FormatException exception)
+                        else
                         {
-                            throw new InvalidDataException("El VPS devolvió un documento de licencia mal codificado.", exception);
+                            var documentBase64 = result.DocumentBase64!;
+                            if (documentBase64.Length > 96 * 1024)
+                                throw new InvalidDataException("El VPS devolvió un documento de licencia demasiado grande.");
+
+                            byte[] document;
+                            try
+                            {
+                                document = Convert.FromBase64String(documentBase64);
+                            }
+                            catch (FormatException exception)
+                            {
+                                throw new InvalidDataException("El VPS devolvió un documento de licencia mal codificado.", exception);
+                            }
+
+                            if (document.Length is 0 or > 64 * 1024)
+                                throw new InvalidDataException("El VPS devolvió un documento de licencia vacío o demasiado grande.");
+
+                            var status = licenseManager.Install(document, DateTimeOffset.UtcNow);
+                            if (status.State is not ("Active" or "Grace"))
+                                throw new InvalidDataException("La licencia renovada no quedó activa después de verificar su firma.");
+
+                            logger.LogInformation("Licencia POS renovada automáticamente hasta {ExpiresAtUtc}.", status.ExpiresAtUtc);
                         }
-
-                        if (document.Length is 0 or > 64 * 1024)
-                            throw new InvalidDataException("El VPS devolvió un documento de licencia vacío o demasiado grande.");
-
-                        var status = licenseManager.Install(document, DateTimeOffset.UtcNow);
-                        if (status.State is not ("Active" or "Grace"))
-                            throw new InvalidDataException("La licencia renovada no quedó activa después de verificar su firma.");
-
-                        logger.LogInformation("Licencia POS renovada automáticamente hasta {ExpiresAtUtc}.", status.ExpiresAtUtc);
                     }
                     else
                     {
@@ -88,7 +112,7 @@ public sealed class PosLicenseRenewalWorker(
                 break;
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or IOException or
-                                              InvalidDataException or PosLicenseDocumentException or UnauthorizedAccessException)
+                                              InvalidDataException or JsonException or PosLicenseDocumentException or UnauthorizedAccessException)
             {
                 logger.LogWarning(exception, "No se pudo renovar la licencia del POS; la licencia local se conserva y se reintentará en {RetryMinutes} minutos.",
                     (int)RetryDelay.TotalMinutes);
@@ -99,5 +123,8 @@ public sealed class PosLicenseRenewalWorker(
         }
     }
 
-    private sealed record RenewalResponse([property: JsonPropertyName("documentBase64")] string? DocumentBase64);
+    private sealed record RenewalResponse(
+        [property: JsonPropertyName("documentBase64")] string? DocumentBase64,
+        [property: JsonPropertyName("expiresAtUtc")] DateTimeOffset? ExpiresAtUtc,
+        [property: JsonPropertyName("controlDocumentBase64")] string? ControlDocumentBase64);
 }

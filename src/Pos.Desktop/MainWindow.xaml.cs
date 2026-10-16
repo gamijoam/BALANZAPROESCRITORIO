@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _licenseNoticeTimer = new() { Interval = TimeSpan.FromMinutes(5) };
+    private bool _licenseNoticeRefreshInProgress;
 
     public MainWindow(PosViewModel viewModel, IPosApiClient apiClient,
         Func<CancellationToken, Task>? restartLocalServiceAsync = null,
@@ -40,7 +42,9 @@ public partial class MainWindow : Window
         _viewModel.ChargeRequested += ChargeRequested;
         _clock.Tick += (_, _) => ClockLabel.Text = DateTime.Now.ToString("dd/MM/yyyy  HH:mm:ss");
         _clock.Start();
+        _licenseNoticeTimer.Tick += LicenseNoticeTimer_Tick;
         Closed += (_, _) => _clock.Stop();
+        Closed += (_, _) => _licenseNoticeTimer.Stop();
     }
 
     private void ExitButton_Click(object sender, RoutedEventArgs e) => Close();
@@ -237,6 +241,8 @@ public partial class MainWindow : Window
         try
         {
             await _viewModel.LoadInitialPosStateAsync();
+            await RefreshLicenseNoticeAsync();
+            _licenseNoticeTimer.Start();
             await ReloadDesktopModulesAsync();
         }
         catch (Exception ex)
@@ -286,6 +292,108 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show(this, PosUserMessage.ForException(ex), "No se pudo cambiar el operador", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void LicenseNoticeTimer_Tick(object? sender, EventArgs e)
+        => await RefreshLicenseNoticeAsync();
+
+    private async Task RefreshLicenseNoticeAsync()
+    {
+        if (_licenseNoticeRefreshInProgress || !_viewModel.IsAuthenticated) return;
+        _licenseNoticeRefreshInProgress = true;
+        try
+        {
+            var notice = await _viewModel.GetLicenseNoticeAsync();
+            var now = DateTimeOffset.UtcNow;
+            var expires = notice.ExpiresAtUtc;
+            string? message = null;
+            var background = Color.FromRgb(255, 244, 214);
+            var foreground = Color.FromRgb(101, 75, 18);
+            var border = Color.FromRgb(228, 189, 89);
+
+            switch (notice.State)
+            {
+                case "Active" when expires is { } activeExpiry && activeExpiry - now <= TimeSpan.FromDays(5):
+                {
+                    var remaining = activeExpiry - now;
+                    var timeText = remaining.TotalHours < 24 ? "menos de un día" : $"{Math.Ceiling(remaining.TotalDays):0} días";
+                    message = $"AVISO DE LICENCIA · Vence el {activeExpiry.ToLocalTime():dd/MM/yyyy HH:mm}; quedan {timeText}. " +
+                              "Conecta el equipo servidor POS a Internet para renovar automáticamente. Puedes seguir trabajando sin Internet mientras la licencia esté vigente.";
+                    break;
+                }
+                case "Grace" when expires is { } graceExpiry:
+                {
+                    var graceEnds = graceExpiry.AddDays(2);
+                    var remaining = graceEnds - now;
+                    var timeText = remaining.TotalHours < 24 ? "menos de un día" : $"{Math.Ceiling(remaining.TotalDays):0} días";
+                    background = Color.FromRgb(255, 235, 196);
+                    foreground = Color.FromRgb(112, 65, 0);
+                    border = Color.FromRgb(225, 151, 42);
+                    message = $"LICENCIA EN PERÍODO DE GRACIA · Venció el {graceExpiry.ToLocalTime():dd/MM/yyyy}. " +
+                              $"Quedan {timeText} de los 2 días de gracia. Conecta el equipo servidor POS a Internet para renovar; no necesitas importar un archivo cada mes.";
+                    break;
+                }
+                case "Suspended":
+                    background = Color.FromRgb(255, 224, 224);
+                    foreground = Color.FromRgb(126, 31, 36);
+                    border = Color.FromRgb(213, 89, 94);
+                    message = "LICENCIA SUSPENDIDA · El servidor POS recibió la suspensión del VPS. Se bloquean nuevas ventas y se conservan las operaciones de cierre seguro. Contacta a administración para resolverla.";
+                    break;
+                case "Recovery":
+                    background = Color.FromRgb(255, 235, 196);
+                    foreground = Color.FromRgb(112, 65, 0);
+                    border = Color.FromRgb(225, 151, 42);
+                    message = notice.RecoveryExpiresAtUtc is { } recoveryExpiry
+                        ? $"DESBLOQUEO DE EMERGENCIA · Esta autorización temporal vence el {recoveryExpiry.ToLocalTime():dd/MM/yyyy HH:mm}. Al vencer se volverá a aplicar el estado de licencia actual. Conecta el servidor POS a Internet o contacta a administración antes de esa hora."
+                        : "DESBLOQUEO DE EMERGENCIA · Esta autorización temporal tiene una duración limitada. Al vencer se volverá a aplicar el estado de licencia actual. Conecta el servidor POS a Internet o contacta a administración.";
+                    break;
+                case "Locked":
+                    background = Color.FromRgb(255, 224, 224);
+                    foreground = Color.FromRgb(126, 31, 36);
+                    border = Color.FromRgb(213, 89, 94);
+                    message = expires is { } lockedExpiry
+                        ? $"LICENCIA VENCIDA · Venció el {lockedExpiry.ToLocalTime():dd/MM/yyyy} y terminaron los 2 días de gracia. El POS limita operaciones nuevas y permite el cierre seguro. Conecta el servidor POS a Internet para renovar o contacta a soporte."
+                        : "LICENCIA VENCIDA · Terminaron los 2 días de gracia. El POS limita operaciones nuevas y permite el cierre seguro. Conecta el servidor POS a Internet para renovar o contacta a soporte.";
+                    break;
+                case "Missing":
+                    message = "LICENCIA SIN INSTALAR · Instala la licencia desde Administración > Licencia. Este aviso no impide trabajar mientras el modo de cumplimiento de licencias no esté activado.";
+                    break;
+                case "NotConfigured":
+                    message = "LICENCIA SIN CONFIGURAR · Falta instalar la llave pública del emisor. Contacta a soporte para completar la configuración de esta instalación.";
+                    break;
+                case "Invalid":
+                case "ClockRollback":
+                    background = Color.FromRgb(255, 224, 224);
+                    foreground = Color.FromRgb(126, 31, 36);
+                    border = Color.FromRgb(213, 89, 94);
+                    message = "NO SE PUDO VALIDAR LA LICENCIA · Detén nuevas operaciones y contacta a soporte para revisar el archivo, la hora y la configuración de esta instalación.";
+                    break;
+            }
+
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                LicenseNoticeBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            LicenseNoticeBanner.Background = new SolidColorBrush(background);
+            LicenseNoticeBanner.BorderBrush = new SolidColorBrush(border);
+            LicenseNoticeText.Foreground = new SolidColorBrush(foreground);
+            LicenseNoticeText.Text = message;
+            LicenseNoticeBanner.Visibility = Visibility.Visible;
+        }
+        catch (NotSupportedException)
+        {
+            LicenseNoticeBanner.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception)
+        {
+            // El aviso no debe interferir con la venta si el servidor local no responde.
+        }
+        finally
+        {
+            _licenseNoticeRefreshInProgress = false;
         }
     }
 

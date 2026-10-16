@@ -508,6 +508,48 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
             ?? throw new InvalidDataException("El servidor devolvió un estado de licencia vacío.");
     }
 
+    public async Task<byte[]> CreateLicenseRecoveryRequestAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/license/recovery/request");
+        request.Content = JsonContent.Create(new Dictionary<string, string>(), options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<LicenseRecoveryRequestResponse>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servidor devolvió una solicitud de desbloqueo vacía.");
+        try
+        {
+            var document = Convert.FromBase64String(result.RequestDocumentBase64);
+            if (document.Length is 0 or > 16 * 1024)
+                throw new InvalidDataException("La solicitud de desbloqueo está vacía o supera 16 KiB.");
+            return document;
+        }
+        catch (FormatException exception) { throw new InvalidDataException("La solicitud de desbloqueo no está codificada correctamente.", exception); }
+    }
+
+    public async Task<LicenseStatusClient> ApplyLicenseRecoveryGrantAsync(byte[] document, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.Length is 0 or > 32 * 1024)
+            throw new ArgumentException("El archivo de desbloqueo está vacío o supera 32 KiB.", nameof(document));
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/license/recovery/apply");
+        request.Content = JsonContent.Create(new { documentBase64 = Convert.ToBase64String(document) }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<LicenseStatusClient>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servidor devolvió un estado de licencia vacío.");
+    }
+
+    public async Task<LicenseNoticeClient> GetLicenseNoticeAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/license/notice");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<LicenseNoticeClient>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servidor devolvió un aviso de licencia vacío.");
+    }
+
+    private sealed record LicenseRecoveryRequestResponse(string RequestDocumentBase64);
+
     public async Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(document);

@@ -22,6 +22,7 @@ public partial class ManagementWindow : Window
     private string[] _modulePackagePaths = [];
     private ModuleInstallationPlanClientResult? _validatedModulePlan;
     private Guid? _licenseInstallationId;
+    private string _licenseState = string.Empty;
     private bool _managementReady;
     public ManagementWindow(PosViewModel viewModel, string initialSection = "Tasa",
         Func<CancellationToken, Task>? restartLocalServiceAsync = null)
@@ -62,6 +63,7 @@ public partial class ManagementWindow : Window
         try
         {
             var license = await _viewModel.GetLicenseStatusAsync();
+            _licenseState = license.State;
             LicenseStateText.Text = license.StateLabel;
             LicenseCustomerText.Text = $"Comercio: {license.CustomerName ?? "—"}";
             LicensePlanText.Text = $"Plan: {license.Plan ?? "—"}{(license.LicenseId is null ? string.Empty : $" · licencia {license.LicenseId}")}";
@@ -77,6 +79,10 @@ public partial class ManagementWindow : Window
             _licenseInstallationId = license.InstallationId;
             LicenseInstallationText.Text = $"ID de instalación: {license.InstallationId:D}";
             CopyLicenseInstallationIdButton.IsEnabled = true;
+            CreateRecoveryRequestButton.IsEnabled = license.State is "Locked" or "Suspended";
+            CreateRecoveryRequestButton.ToolTip = CreateRecoveryRequestButton.IsEnabled
+                ? "Genera una solicitud para autorizar desde el VPS un desbloqueo temporal de esta instalación."
+                : "Disponible cuando la licencia esté bloqueada o suspendida.";
             LicenseStatus.Text = license.Diagnostic ?? (license.State is "Active" or "Grace"
                 ? "La licencia está almacenada y validada localmente."
                 : "Importa una licencia emitida para este ID de instalación.");
@@ -84,7 +90,8 @@ public partial class ManagementWindow : Window
             {
                 "Active" => System.Windows.Media.Brushes.DarkGreen,
                 "Grace" => System.Windows.Media.Brushes.DarkOrange,
-                "Locked" or "Invalid" => System.Windows.Media.Brushes.DarkRed,
+                "Recovery" => System.Windows.Media.Brushes.DarkBlue,
+                "Locked" or "Suspended" or "Invalid" or "ClockRollback" => System.Windows.Media.Brushes.DarkRed,
                 _ => System.Windows.Media.Brushes.DarkSlateGray
             };
         }
@@ -96,6 +103,67 @@ public partial class ManagementWindow : Window
 
     private async void RefreshLicense_Click(object sender, RoutedEventArgs e)
         => await LoadLicenseStatusAsync();
+
+    private async void CreateRecoveryRequest_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            CreateRecoveryRequestButton.IsEnabled = false;
+            LicenseStatus.Text = "Preparando solicitud de desbloqueo para esta instalación…";
+            var document = await _viewModel.CreateLicenseRecoveryRequestAsync();
+            var installationSuffix = _licenseInstallationId.HasValue ? _licenseInstallationId.Value.ToString("N")[..8] : "pos";
+            var dialog = new SaveFileDialog
+            {
+                AddExtension = true,
+                DefaultExt = ".posreq",
+                FileName = $"solicitud-{installationSuffix}.posreq",
+                Filter = "Solicitud de desbloqueo POS (*.posreq)|*.posreq",
+                Title = "Guardar solicitud para el VPS"
+            };
+            if (dialog.ShowDialog(this) != true)
+            {
+                LicenseStatus.Text = "La solicitud se creó localmente, pero no se guardó un archivo. Puedes volver a solicitarla cuando quieras.";
+                return;
+            }
+            await File.WriteAllBytesAsync(dialog.FileName, document);
+            LicenseStatus.Text = "Solicitud guardada. Llévala al VPS con USB o transferencia segura y selecciona allí ‘Crear desbloqueo offline’.";
+        }
+        catch (Exception exception)
+        {
+            LicenseStatus.Text = PosUserMessage.ForException(exception);
+        }
+        finally { CreateRecoveryRequestButton.IsEnabled = _licenseState is "Locked" or "Suspended"; }
+    }
+
+    private async void ApplyRecoveryGrant_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            CheckFileExists = true,
+            Filter = "Desbloqueo temporal POS (*.posunlock)|*.posunlock",
+            Title = "Seleccionar desbloqueo firmado por el VPS"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var info = new FileInfo(dialog.FileName);
+            if (info.Length is <= 0 or > 32 * 1024)
+            {
+                LicenseStatus.Text = "El archivo de desbloqueo está vacío o supera 32 KiB.";
+                return;
+            }
+            ApplyRecoveryGrantButton.IsEnabled = false;
+            LicenseStatus.Text = "Verificando firma y solicitud de esta instalación…";
+            var status = await _viewModel.ApplyLicenseRecoveryGrantAsync(await File.ReadAllBytesAsync(dialog.FileName));
+            await LoadLicenseStatusAsync();
+            LicenseStatus.Text = status.Diagnostic ?? "Desbloqueo temporal aplicado y verificado.";
+        }
+        catch (Exception exception)
+        {
+            LicenseStatus.Text = PosUserMessage.ForException(exception);
+        }
+        finally { ApplyRecoveryGrantButton.IsEnabled = true; }
+    }
 
     private void CopyLicenseInstallationId_Click(object sender, RoutedEventArgs e)
     {

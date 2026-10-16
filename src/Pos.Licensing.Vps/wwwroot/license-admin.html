@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Administración de licencias · BalanzaPro</title>
+  <link rel="stylesheet" href="/admin/license-admin.css">
+  <script src="/admin/license-admin.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <section id="login" class="login-card card" aria-labelledby="login-title">
+      <div class="brand-mark" aria-hidden="true">BP</div>
+      <p class="eyebrow">BALANZAPRO · VPS</p>
+      <h1 id="login-title">Administración de licencias</h1>
+      <p class="muted">Ingresa con tu usuario, contraseña y código de autenticación.</p>
+      <form id="login-form" autocomplete="on">
+        <label>Usuario<input name="username" autocomplete="username" required maxlength="64"></label>
+        <label>Contraseña<input name="password" type="password" autocomplete="current-password" required maxlength="1024"></label>
+        <label>Código de autenticación<input name="totpCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+        <button class="primary" type="submit">Entrar</button>
+        <p id="login-error" class="message error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="dashboard" hidden>
+      <header class="topbar">
+        <div><p class="eyebrow">BALANZAPRO · VPS</p><h1>Suscripciones</h1></div>
+        <div class="top-actions"><span id="admin-name" class="muted"></span><button id="logout" class="secondary">Cerrar sesión</button></div>
+      </header>
+
+      <div id="global-message" class="message" role="status"></div>
+
+      <section class="card section-card">
+        <div class="section-heading"><div><h2>Nueva suscripción</h2><p class="muted">El archivo inicial se descarga una sola vez; luego se renueva al conectar el POS.</p></div></div>
+        <form id="create-form" class="form-grid">
+          <label class="wide">ID de instalación<input name="installationId" required placeholder="GUID copiado desde Administración → Licencia"></label>
+          <label>RIF / identificación<input name="customerRif" required maxlength="32"></label>
+          <label>Nombre del comercio<input name="customerName" required maxlength="200"></label>
+          <label>Plan<input name="plan" required maxlength="64" placeholder="mensual"></label>
+          <label>Terminales permitidas<input name="maxTerminals" type="number" min="1" max="1000" value="1" required></label>
+          <label class="wide">Módulos autorizados<input name="entitlements" placeholder="inventario.avanzado, reportes.pdf"><small>IDs separados por coma; deja vacío si no tiene módulos.</small></label>
+          <label>Vigente hasta<input name="paidThroughDate" type="date" required></label>
+          <label>Monto recibido<input name="initialPaymentAmount" type="number" min="0.01" max="1000000000" step="0.01" required></label>
+          <label>Moneda<input name="initialPaymentCurrency" maxlength="8" value="USD" required></label>
+          <label>Referencia de pago<input name="initialPaymentReference" maxlength="128" required></label>
+          <div class="wide form-footer"><button class="primary" type="submit">Crear y descargar .poslic</button></div>
+        </form>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-heading"><div><h2>Desbloqueo temporal sin Internet</h2><p class="muted">Carga una solicitud .posreq y autoriza hasta 48 horas para esa instalación.</p></div></div>
+        <form id="recovery-form" class="form-grid compact">
+          <label class="wide">Solicitud de la PC POS (.posreq)<input name="requestFile" type="file" accept=".posreq,application/json" required></label>
+          <label>Duración en horas<input name="durationHours" type="number" min="1" max="48" value="24" required></label>
+          <label class="wide">Motivo de autorización<input name="reason" maxlength="512" required></label>
+          <div class="wide form-footer"><button class="secondary" type="submit">Firmar y descargar .posunlock</button></div>
+        </form>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-heading"><div><h2>Clientes y licencias</h2><p class="muted">Última conexión, vencimiento, terminales, módulos y estado remoto.</p></div><button id="refresh" class="secondary">Actualizar lista</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Comercio</th><th>Estado</th><th>Plan</th><th>Vence</th><th>Terminales</th><th>Última conexión</th><th>Acciones</th></tr></thead><tbody id="licenses-body"><tr><td colspan="7" class="muted">Cargando…</td></tr></tbody></table></div>
+      </section>
+
+      <section class="card section-card">
+        <div class="section-heading"><div><h2>Auditoría reciente</h2><p class="muted">Altas, pagos, cambios, suspensiones, reactivaciones y desbloqueos.</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Fecha UTC</th><th>Acción</th><th>Licencia</th><th>Detalle</th></tr></thead><tbody id="audit-body"><tr><td colspan="4" class="muted">Cargando…</td></tr></tbody></table></div>
+      </section>
+      <footer>La confirmación de pagos es manual; aún no hay una pasarela conectada. Las PCs sin Internet no reciben suspensiones hasta reconectarse.</footer>
+    </section>
+  </main>
+</body>
+</html>

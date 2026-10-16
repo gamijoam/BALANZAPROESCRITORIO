@@ -7,7 +7,7 @@ internal static class PosLicenseCheckoutPolicy
     public static bool CanCompleteLockedCheckout(string licenseState, DateTimeOffset? expiresAtUtc,
         DateTime? workspaceCreatedAtUtc, bool workspaceMatchesTerminal, bool existingIdempotencyKey)
     {
-        if (licenseState is "Active" or "Grace") return true;
+        if (licenseState is "Active" or "Grace" or "Recovery") return true;
         if (licenseState != "Locked") return false;
         if (existingIdempotencyKey) return true;
         if (expiresAtUtc is not { } expiration || expiration.Offset != TimeSpan.Zero || workspaceCreatedAtUtc is null || !workspaceMatchesTerminal)
