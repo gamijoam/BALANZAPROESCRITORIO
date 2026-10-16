@@ -54,8 +54,8 @@
         </Border>
 
         <Border Grid.Row="1" Background="White" BorderBrush="#D5DFEB" BorderThickness="1" CornerRadius="4">
-            <DocumentViewer x:Name="ReportDocumentViewer" Background="#DCE3EC"
-                            AutomationProperties.Name="Vista paginada del reporte"/>
+            <FlowDocumentReader x:Name="ReportDocumentViewer" ViewingMode="Page" Background="#DCE3EC"
+                                AutomationProperties.Name="Vista paginada del reporte"/>
         </Border>
 
         <TextBlock Grid.Row="2" x:Name="StatusText" Foreground="#52677F" Margin="2,8,2,0"
