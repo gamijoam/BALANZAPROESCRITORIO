@@ -49,6 +49,7 @@
                 <Button Content="Guardar vista" Height="32" Margin="6,0,0,0" Padding="12,0" Click="SaveView_Click" AutomationProperties.Name="Guardar vista personal"/>
                 <Button x:Name="DeleteViewButton" Content="Eliminar" Height="32" Margin="6,0,0,0" Padding="12,0" Click="DeleteView_Click" IsEnabled="False" AutomationProperties.Name="Eliminar vista guardada"/>
                 <ToggleButton x:Name="ColumnPickerToggle" Content="Columnas" Height="32" Margin="12,0,0,0" Padding="12,0" Checked="ColumnPickerToggle_Changed" Unchecked="ColumnPickerToggle_Changed" AutomationProperties.Name="Elegir columnas visibles"/>
+                <Button Content="Vista de hoja" Height="32" Margin="6,0,0,0" Padding="12,0" Click="PreviewSheet_Click" ToolTip="Previsualizar e imprimir el reporte o guardarlo como PDF" AutomationProperties.Name="Vista de hoja e impresión"/>
                 <TextBlock Text="Puedes cambiar el orden arrastrando los encabezados." Foreground="#63758B" VerticalAlignment="Center" Margin="12,0,2,0"/>
             </DockPanel>
         </Border>

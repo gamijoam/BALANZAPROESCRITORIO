@@ -44,6 +44,11 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
             LoadReceivableMovements, supportsDateRange: true));
         registry.RegisterReportSource(Source("reports.inventory.products", "Existencias por producto", "Reports.Inventory",
             [Text("sku", "Código"), Text("producto", "Producto"), Decimal("existencia", "Existencia"), Decimal("precio", "Precio"), Text("moneda", "Moneda")], LoadInventory));
+        registry.RegisterReportSource(Source("reports.inventory.price-margins", "Precios y márgenes actuales", "Reports.Inventory",
+            [Text("sku", "Código"), Text("producto", "Producto"), Text("moneda", "Moneda"), Text("nivel", "Nivel de precio"),
+             Text("estado", "Estado del cálculo"), Decimal("costo_unitario", "Costo unitario"), Decimal("precio", "Precio actual"),
+             Decimal("ganancia_unitaria", "Ganancia bruta / unidad"), Decimal("margen_pct", "Margen bruto (%)")],
+            LoadProductPriceMargins));
         registry.RegisterReportSource(Source("reports.inventory.movements", "Movimientos de inventario", "Reports.View",
             [Date("fecha", "Fecha"), Text("sku", "Código"), Text("producto", "Producto"), Decimal("variacion", "Variación"),
              Text("motivo", "Motivo"), Text("operador", "Operador"), Text("terminal", "Terminal"), Text("referencia", "Referencia")], LoadInventoryMovements,
@@ -167,6 +172,48 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
         var products = await RequireReports(context).GetInventoryAsync(ct);
         return Rows(products.Select(item => Row(("sku", item.Sku), ("producto", item.Name), ("existencia", item.Quantity),
             ("precio", item.UnitPrice), ("moneda", item.Currency))));
+    }
+
+    private static async Task<PosDesktopReportResult> LoadProductPriceMargins(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var products = await RequireReports(context).GetInventoryAsync(ct);
+        var rows = new List<IReadOnlyDictionary<string, object?>>(products.Count * 3);
+        foreach (var product in products)
+        {
+            rows.Add(PriceMarginRow(product, "Precio 1", product.UnitPrice));
+            rows.Add(PriceMarginRow(product, "Precio 2", product.Price2));
+            rows.Add(PriceMarginRow(product, "Precio 3", product.Price3));
+        }
+        return new(rows);
+    }
+
+    private static IReadOnlyDictionary<string, object?> PriceMarginRow(InventoryItemInfo product, string tier, decimal? price)
+    {
+        decimal? grossProfitPerUnit = product.UnitCost.HasValue && price.HasValue
+            ? price.Value - product.UnitCost.Value
+            : null;
+        decimal? grossMarginPercent = product.UnitCost.HasValue && price.HasValue && price.Value > 0m
+            ? (price.Value - product.UnitCost.Value) / price.Value * 100m
+            : null;
+        var calculationStatus = price is null
+            ? "Precio no configurado"
+            : !product.UnitCost.HasValue
+                ? "Sin costo: margen no disponible"
+                : price.Value == 0m
+                    ? "Precio en cero: margen no aplica"
+                    : "Calculado con costo actual";
+
+        return Row(
+            ("sku", product.Sku),
+            ("producto", product.Name),
+            ("moneda", product.Currency),
+            ("nivel", tier),
+            ("estado", calculationStatus),
+            ("costo_unitario", product.UnitCost),
+            ("precio", price),
+            ("ganancia_unitaria", grossProfitPerUnit),
+            ("margen_pct", grossMarginPercent));
     }
 
     private static async Task<PosDesktopReportResult> LoadInventoryMovements(PosDesktopModuleContext context, PosDesktopReportQuery query, CancellationToken ct)

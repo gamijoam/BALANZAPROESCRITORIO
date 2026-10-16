@@ -287,6 +287,38 @@ public partial class ReportCenterWindow : Window
         StatusText.Text = $"Excel exportado con {rows.Count:N0} filas y {columns.Count} columnas.";
     }
 
+    private void PreviewSheet_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedSource is null) return;
+        var columns = VisibleColumns();
+        if (columns.Count == 0)
+        {
+            StatusText.Text = "Activa al menos una columna para preparar la hoja del reporte.";
+            return;
+        }
+
+        var filters = new List<string>();
+        if (_selectedSource.Source.SupportsDateRange)
+        {
+            var from = FromDate.SelectedDate?.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture) ?? "—";
+            var to = ToDate.SelectedDate?.ToString("dd/MM/yyyy", CultureInfo.CurrentCulture) ?? "—";
+            filters.Add($"Período: {from} al {to}");
+        }
+        if (CurrencyPicker.SelectedItem is ComboBoxItem { Content: string currency } && currency != "Todas")
+            filters.Add($"Moneda: {currency}");
+        if (!string.IsNullOrWhiteSpace(SearchBox.Text)) filters.Add($"Búsqueda: {SearchBox.Text.Trim()}");
+
+        var preview = new ReportPreviewWindow(
+            _selectedSource.Source.Title,
+            string.Join("   ·   ", filters),
+            columns,
+            VisibleRows())
+        {
+            Owner = this
+        };
+        preview.ShowDialog();
+    }
+
     private IReadOnlyList<PosDesktopReportColumn> VisibleColumns()
         => ReportGrid.Columns.Where(column => column.Visibility == Visibility.Visible)
             .OrderBy(column => column.DisplayIndex).Select(column => _selectedSource!.Source.Columns.Single(definition => definition.Id == _columnIds[column])).ToArray();

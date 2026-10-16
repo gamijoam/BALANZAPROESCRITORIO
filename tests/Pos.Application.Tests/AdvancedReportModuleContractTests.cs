@@ -182,7 +182,7 @@ public sealed class AdvancedReportModuleContractTests
         Assert.Contains("\"Reports.Inventory\"", manifest);
         Assert.Contains("\"Reports.View\" => Permission.ViewReports", server);
         Assert.Contains("\"Reports.Inventory\" => Permission.ViewInventory", server);
-        Assert.Contains("\"version\": \"1.1.0\"", manifest);
+        Assert.Contains("\"version\": \"1.2.0\"", manifest);
         Assert.Contains("\"min\": \"1.4.0\"", manifest);
     }
 
