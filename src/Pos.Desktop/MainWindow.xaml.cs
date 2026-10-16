@@ -939,11 +939,11 @@ public partial class MainWindow : Window
             try { rate = (await _viewModel.RefreshCheckoutRateAsync())?.Rate; }
             catch (Exception ex) { MessageBox.Show(this, PosUserMessage.ForException(ex), "No se pudo consultar la tasa", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
         }
-        var dialog = new PaymentWindow(_viewModel.Total, _viewModel.Currency, pendingPayments, rate) { Owner = this };
+        var dialog = new PaymentWindow(_viewModel.Total, _viewModel.Currency, pendingPayments, rate, _viewModel.PendingReceivableDueDate) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         try
         {
-            var receipt = await _viewModel.CompleteSaleAsync(dialog.Payments);
+            var receipt = await _viewModel.CompleteSaleAsync(dialog.Payments, receivableDueDate: dialog.ReceivableDueDate);
             if (TryGetReceiptExtension(out var receiptModule, out var receiptContribution))
             {
                 try

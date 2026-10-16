@@ -15,6 +15,7 @@ public partial class ProductEditWindow : Window
         _product = product;
         SkuBox.Text = product.Sku;
         NameBox.Text = product.Name;
+        MinimumStockBox.Text = PosNumberFormat.FormatQuantity(product.MinimumStock);
         Loaded += (_, _) => { SkuBox.Focus(); SkuBox.SelectAll(); };
     }
 
@@ -22,6 +23,11 @@ public partial class ProductEditWindow : Window
     {
         var sku = SkuBox.Text.Trim();
         var name = NameBox.Text.Trim();
+        if (!PosNumberFormat.TryParseAmount(MinimumStockBox.Text, out var minimumStock) || minimumStock < 0m || decimal.Round(minimumStock, 3) != minimumStock)
+        {
+            StatusLabel.Text = "El mínimo debe ser un número igual o mayor que cero, con hasta tres decimales.";
+            return;
+        }
         if (sku.Length is < 1 or > 64 || name.Length is < 2 or > 200)
         {
             StatusLabel.Text = "El SKU debe tener entre 1 y 64 caracteres y el nombre entre 2 y 200.";
@@ -29,7 +35,7 @@ public partial class ProductEditWindow : Window
         }
         try
         {
-            await _viewModel.UpdateProductAsync(_product.Id, sku, name);
+            await _viewModel.UpdateProductAsync(_product.Id, sku, name, minimumStock: minimumStock);
             DialogResult = true;
         }
         catch (PosApiException ex) when (ex.Code == "sku_already_exists")

@@ -14,7 +14,7 @@
             <TextBox x:Name="FilterQueryBox" Height="34" Padding="7" VerticalContentAlignment="Center" ToolTip="Buscar por SKU o nombre" KeyDown="FilterQuery_KeyDown" AutomationProperties.Name="Buscar por SKU o nombre"/>
             <ComboBox x:Name="StatusFilter" Grid.Column="1" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por estado"><ComboBoxItem Content="Activos"/><ComboBoxItem Content="Inactivos"/><ComboBoxItem Content="Todos"/></ComboBox>
             <ComboBox x:Name="CurrencyFilter" Grid.Column="2" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por moneda"><ComboBoxItem Content="Moneda: todas"/><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox>
-            <ComboBox x:Name="StockFilter" Grid.Column="3" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por existencia"><ComboBoxItem Content="Existencia: todas"/><ComboBoxItem Content="Con existencia"/><ComboBoxItem Content="Agotados"/></ComboBox>
+            <ComboBox x:Name="StockFilter" Grid.Column="3" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por existencia"><ComboBoxItem Content="Existencia: todas"/><ComboBoxItem Content="Con existencia"/><ComboBoxItem Content="Agotados"/><ComboBoxItem Content="Bajo mínimo"/></ComboBox>
             <ComboBox x:Name="ImageFilter" Grid.Column="4" Height="34" Margin="7,0,0,0" SelectedIndex="0" AutomationProperties.Name="Filtrar por foto"><ComboBoxItem Content="Foto: todas"/><ComboBoxItem Content="Con foto"/><ComboBoxItem Content="Sin foto"/></ComboBox>
             <Button Grid.Column="5" Content="Filtrar" Width="75" Height="34" Margin="7,0,0,0" Click="ApplyFilters_Click" Background="#2858A2" Foreground="White" AutomationProperties.Name="Aplicar filtros"/>
             <Button Grid.Column="6" Content="Limpiar" Width="75" Height="34" Margin="7,0,0,0" Click="ClearFilters_Click" AutomationProperties.Name="Limpiar filtros"/>
@@ -45,6 +45,7 @@
                         <TextBlock x:Name="SelectedProductName" Text="Selecciona un producto" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="SelectedProductSku" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
                         <TextBlock x:Name="SelectedProductCost" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="SelectedProductMinimum" Foreground="#63758B" FontSize="12" Margin="0,2,0,0"/>
                     </StackPanel>
                     <Border Grid.Row="2" Background="#F2F5F9" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="5">
                         <Grid>

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.IO;
+using System.Globalization;
 using System.Text.Json;
 using Pos.Shared.Contracts;
 
@@ -166,7 +167,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         if (!string.IsNullOrWhiteSpace(query)) parameters.Add("query=" + Uri.EscapeDataString(query.Trim()));
         if (!string.IsNullOrWhiteSpace(status)) parameters.Add("status=" + Uri.EscapeDataString(status));
         if (!string.IsNullOrWhiteSpace(currency)) parameters.Add("currency=" + Uri.EscapeDataString(currency));
-        if (!string.IsNullOrWhiteSpace(stock)) parameters.Add("stock=" + Uri.EscapeDataString(stock));
+        if (!string.IsNullOrWhiteSpace(stock)) parameters.Add("stockStatus=" + Uri.EscapeDataString(stock));
         if (hasImage.HasValue) parameters.Add("hasImage=" + hasImage.Value.ToString().ToLowerInvariant());
         var suffix = parameters.Count == 0 ? string.Empty : "?" + string.Join("&", parameters);
         using var request = CreateRequest(HttpMethod.Get, "api/v1/inventory" + suffix);
@@ -179,16 +180,16 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         => await CreateProductAsync(sku, name, unitPrice, null, null, "Unclassified", currency, initialStock, cancellationToken);
 
     public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
-        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default)
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/products");
-        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, minimumStock }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<ProductCreateResponse>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("The service returned an empty product response.");
         return new InventoryItemInfo(result.Id, result.Sku, result.Name, result.UnitPrice, result.Currency, result.InitialStock, result.HasImage)
-        { Price2 = result.Price2, Price3 = result.Price3, TaxTreatment = result.TaxTreatment };
+        { Price2 = result.Price2, Price3 = result.Price3, MinimumStock = result.MinimumStock, TaxTreatment = result.TaxTreatment };
     }
 
     public async Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
@@ -199,10 +200,10 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    public async Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default)
+    public async Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
     {
         using var request = CreateRequest(HttpMethod.Patch, $"api/v1/products/{productId}");
-        request.Content = JsonContent.Create(new { sku, name }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, minimumStock }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
@@ -424,6 +425,18 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ReceivableMovementReportPage>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("El servicio devolvió movimientos de cartera vacíos.");
+    }
+
+    public async Task<ReceivableAgingReportPage> GetReceivableAgingReportPageAsync(DateOnly asOfDate, int page = 1, int pageSize = 250,
+        CancellationToken cancellationToken = default)
+    {
+        var path = $"api/v1/reports/receivables/aging?asOfDate={Uri.EscapeDataString(asOfDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
+                   $"&page={Math.Max(1, page)}&pageSize={Math.Clamp(pageSize, 1, 250)}";
+        using var request = CreateRequest(HttpMethod.Get, path);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ReceivableAgingReportPage>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió un reporte de antigüedad vacío.");
     }
 
     public async Task<IReadOnlyList<OperatorInfo>> GetOperatorsAsync(CancellationToken cancellationToken = default)
@@ -863,7 +876,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
 
     public async Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines,
         IReadOnlyList<SalePaymentInput> payments, Guid? customerId, string idempotencyKey, Guid? exchangeRateId,
-        Guid? cartWorkspaceId, CancellationToken cancellationToken = default)
+        Guid? cartWorkspaceId, CancellationToken cancellationToken = default, DateOnly? receivableDueDate = null)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/sales");
         request.Headers.Add("Idempotency-Key", idempotencyKey);
@@ -871,7 +884,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         {
             cashSessionId,
             workspaceId = cartWorkspaceId,
-            checkout = new { lines, payments, customerId, exchangeRateId }
+            checkout = new { lines, payments, customerId, exchangeRateId, receivableDueDate }
         }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
@@ -1073,6 +1086,7 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     {
         public decimal? Price2 { get; init; }
         public decimal? Price3 { get; init; }
+        public decimal MinimumStock { get; init; }
         public string TaxTreatment { get; init; } = "Unclassified";
     }
     private sealed record ProductSearchResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage, decimal Quantity)

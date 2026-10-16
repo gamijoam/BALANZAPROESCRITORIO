@@ -23,6 +23,7 @@
                 <DataGridTextColumn Header="Fecha" Binding="{Binding DateLabel}" Width="140"/>
                 <DataGridTextColumn Header="Movimiento" Binding="{Binding MovementLabel}" Width="130"/>
                 <DataGridTextColumn Header="Referencia" Binding="{Binding ReferenceLabel}" Width="135"/>
+                <DataGridTextColumn Header="Vence" Binding="{Binding DueDateLabel}" Width="105"/>
                 <DataGridTextColumn Header="Artículos · valor histórico USD" Binding="{Binding SaleItemsLabel}" Width="*">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="5,3"/></Style>

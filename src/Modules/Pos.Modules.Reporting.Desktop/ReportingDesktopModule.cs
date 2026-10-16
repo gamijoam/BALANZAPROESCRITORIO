@@ -47,6 +47,11 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
             [Text("cliente", "Cliente"), Decimal("saldo_usd", "Saldo USD"), Decimal("equivalente_ves", "Equivalente VES"),
              Decimal("tasa_actual", "Tasa actual USD/VES"), Decimal("limite_usd", "Límite USD"),
              Decimal("disponible_usd", "Crédito disponible USD"), Date("ultimo_movimiento", "Último movimiento")], LoadReceivableBalances));
+        registry.RegisterReportSource(Source("reports.receivables.aging", "Antigüedad de cuentas por cobrar", "Reports.View",
+            [Text("cliente", "Cliente"), Decimal("por_vencer", "Por vencer USD"), Decimal("vencido_1_30", "Vencido 1–30 días USD"),
+             Decimal("vencido_31_60", "Vencido 31–60 días USD"), Decimal("vencido_61_90", "Vencido 61–90 días USD"),
+             Decimal("vencido_mas_90", "Vencido más de 90 días USD"), Decimal("sin_vencimiento", "Sin vencimiento USD"),
+             Decimal("saldo_total", "Saldo total USD")], LoadReceivableAging));
         registry.RegisterReportSource(Source("reports.receivables.movements", "Movimientos de cuentas por cobrar", "Reports.View",
             [Date("fecha", "Fecha"), Text("cliente", "Cliente"), Text("tipo", "Tipo"), Decimal("importe_usd", "Importe USD"),
              Decimal("importe_original", "Importe original"), Text("moneda", "Moneda original"), Decimal("tasa", "Tasa aplicada"),
@@ -58,6 +63,9 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
             [Text("sku", "Código"), Text("producto", "Producto"), Text("estado_producto", "Estado"), Text("moneda", "Moneda"),
              Decimal("existencia", "Existencia"), Decimal("costo_unitario", "Costo unitario actual"),
              Decimal("valor_costo", "Valor al costo"), Text("estado_costo", "Estado del costo")], LoadInventoryValuation));
+        registry.RegisterReportSource(Source("reports.inventory.low-stock", "Productos bajo mínimo", "Reports.Inventory",
+            [Text("sku", "Código"), Text("producto", "Producto"), Decimal("existencia", "Existencia actual"),
+             Decimal("minimo", "Mínimo configurado"), Decimal("reponer", "Unidades para llegar al mínimo")], LoadLowStock));
         registry.RegisterReportSource(Source("reports.inventory.price-margins", "Precios y márgenes actuales", "Reports.Inventory",
             [Text("sku", "Código"), Text("producto", "Producto"), Text("moneda", "Moneda"), Text("nivel", "Nivel de precio"),
              Text("estado", "Estado del cálculo"), Decimal("costo_unitario", "Costo unitario"), Decimal("precio", "Precio actual"),
@@ -236,6 +244,24 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
         return new(rows);
     }
 
+    private static async Task<PosDesktopReportResult> LoadReceivableAging(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var api = RequireReports(context); var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var asOfDate = DateOnly.FromDateTime(DateTime.Today);
+        for (var page = 1; ; page++)
+        {
+            var report = await api.GetReceivableAgingReportPageAsync(asOfDate, page, 250, ct);
+            rows.AddRange(report.Customers.Select(customer => Row(("cliente", customer.CustomerName),
+                ("por_vencer", customer.NotDueUsd), ("vencido_1_30", customer.Overdue1To30Usd),
+                ("vencido_31_60", customer.Overdue31To60Usd), ("vencido_61_90", customer.Overdue61To90Usd),
+                ("vencido_mas_90", customer.OverdueOver90Usd), ("sin_vencimiento", customer.NoDueDateUsd),
+                ("saldo_total", customer.BalanceUsd))));
+            if (report.Customers.Count == 0 || page * report.PageSize >= report.TotalCount) break;
+        }
+        return new(rows);
+    }
+
     private static async Task<PosDesktopReportResult> LoadInventory(PosDesktopModuleContext context, PosDesktopReportQuery query, CancellationToken ct)
     {
         var products = await RequireReports(context).GetInventoryAsync(ct);
@@ -251,6 +277,16 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
             ("estado_producto", item.Active ? "Activo" : "Inactivo"), ("moneda", item.Currency), ("existencia", item.Quantity),
             ("costo_unitario", item.UnitCost), ("valor_costo", item.UnitCost.HasValue ? item.Quantity * item.UnitCost.Value : (decimal?)null),
             ("estado_costo", item.UnitCost.HasValue ? "Costo disponible" : "Sin costo registrado"))));
+    }
+
+    private static async Task<PosDesktopReportResult> LoadLowStock(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var products = await RequireReports(context).GetInventoryAsync(ct);
+        var rows = products.Where(item => item.MinimumStock > 0m && item.Quantity <= item.MinimumStock)
+            .Select(item => Row(("sku", item.Sku), ("producto", item.Name), ("existencia", item.Quantity),
+                ("minimo", item.MinimumStock), ("reponer", Math.Max(0m, item.MinimumStock - item.Quantity))));
+        return Rows(rows);
     }
 
     private static async Task<PosDesktopReportResult> LoadProductPriceMargins(PosDesktopModuleContext context,

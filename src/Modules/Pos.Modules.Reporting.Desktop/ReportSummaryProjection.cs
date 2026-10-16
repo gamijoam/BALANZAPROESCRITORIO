@@ -14,6 +14,7 @@ internal static class ReportSummaryProjection
         return reportId switch
         {
             "reports.receivables.balances" => ReceivableBalances(data),
+            "reports.receivables.aging" => ReceivableAging(data),
             "reports.receivables.movements" => ReceivableMovements(data),
             "reports.sales.daily" => SalesDaily(data),
             "reports.sales.detail" => SalesDetails(data),
@@ -24,6 +25,7 @@ internal static class ReportSummaryProjection
             "reports.cash.methods" => CashMethods(data),
             "reports.inventory.products" => Inventory(data, "existencia", "precio", "sku"),
             "reports.inventory.valuation" => InventoryValuation(data),
+            "reports.inventory.low-stock" => LowStock(data),
             "warehouses.stock" => Inventory(data, "existencia", "precio", "sku"),
             "reports.inventory.price-margins" => PriceMargins(data),
             "reports.inventory.movements" => InventoryMovements(data),
@@ -53,6 +55,20 @@ internal static class ReportSummaryProjection
             new("Cargos USD", Money(Sum(rows.Where(row => Text(row, "tipo") == "Cargo"), "importe_usd")), "Importe normalizado a USD"),
             new("Abonos USD", Money(Sum(rows.Where(row => Text(row, "tipo") == "Abono"), "importe_usd")), "Importe normalizado a USD")
         ];
+
+    private static IReadOnlyList<ReportSummaryMetric> ReceivableAging(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var overdue = Sum(rows, "vencido_1_30") + Sum(rows, "vencido_31_60") + Sum(rows, "vencido_61_90") + Sum(rows, "vencido_mas_90");
+        return
+        [
+            new("Clientes con deuda", Count(rows.Count), "Cuentas con saldo pendiente al día consultado"),
+            new("Saldo total USD", Money(Sum(rows, "saldo_total")), "Cargos menos abonos aplicados por antigüedad"),
+            new("Por vencer USD", Money(Sum(rows, "por_vencer")), "Créditos con vencimiento hoy o en una fecha futura"),
+            new("Vencido USD", Money(overdue), "Suma de los saldos vencidos por tramo"),
+            new("Vencido hace más de 90 días", Money(Sum(rows, "vencido_mas_90")), "Saldo que requiere seguimiento prioritario"),
+            new("Sin fecha de vencimiento", Money(Sum(rows, "sin_vencimiento")), "Incluye saldos históricos que no tenían vencimiento registrado")
+        ];
+    }
 
     private static IReadOnlyList<ReportSummaryMetric> SalesDaily(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
     {
@@ -209,6 +225,13 @@ internal static class ReportSummaryProjection
                 $"Costo unitario actual × existencia · {Count(group.Count())} productos con costo"));
         return result;
     }
+
+    private static IReadOnlyList<ReportSummaryMetric> LowStock(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+        =>
+        [
+            new("Productos bajo mínimo", Count(rows.Count), "Productos activos cuya existencia llegó al mínimo configurado"),
+            new("Unidades para reponer", Quantity(Sum(rows, "reponer")), "Unidades necesarias para volver al mínimo registrado")
+        ];
 
     private static IReadOnlyList<ReportSummaryMetric> InventoryMovements(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
         =>

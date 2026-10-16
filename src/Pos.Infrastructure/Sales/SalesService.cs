@@ -73,6 +73,7 @@ public sealed class SalesService(PosDbContext db)
         if (products.Values.Any(x => x.Currency is not ("USD" or "VES"))) throw new CheckoutRejectedException("unsupported_product_currency");
         var creditPayments = request.Payments.Where(x => IsCreditMethod(x.Method)).ToArray();
         var hasCredit = creditPayments.Length > 0;
+        if (request.ReceivableDueDate.HasValue && !hasCredit) throw new CheckoutRejectedException("receivable_due_date_without_credit");
         var needsUsdReceivableRate = creditPayments.Any(x => x.Currency == "VES");
         var needsConversion = products.Values.Any(x => x.Currency != currency) || request.Payments.Any(x => x.Currency != currency) || needsUsdReceivableRate;
         var appliedRate = needsConversion
@@ -204,6 +205,7 @@ public sealed class SalesService(PosDbContext db)
                 Id = Guid.NewGuid(), CustomerId = customer!.Id, SaleId = saleId, EntryType = "Charge",
                 Amount = creditAmountUsd, Currency = "USD", OriginalAmount = creditOriginalAmount, OriginalCurrency = creditOriginalCurrency,
                 AppliedExchangeRate = creditOriginalCurrency == "VES" ? CreditAccountCurrency.UsdPerVes(usdToVes) : null,
+                DueDate = request.ReceivableDueDate ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30),
                 Reason = $"Sale {saleId:N}", ActorId = operatorId, TerminalId = terminalId, OccurredAtUtc = DateTime.UtcNow
             });
         }
@@ -213,6 +215,7 @@ public sealed class SalesService(PosDbContext db)
             Payload = JsonSerializer.Serialize(new
             {
                 saleId, total, currency, roundingAdjustment = paymentSettlement.RoundingAdjustment,
+                receivableDueDate = request.ReceivableDueDate,
                 allowedRoundingDifference = paymentSettlement.AllowedDifference,
                 exchangeRateId = appliedRate?.Id, usdToVesRate = appliedRate is null ? (decimal?)null : usdToVes,
                 lines = lineSnapshots.Select(x => new
@@ -250,6 +253,7 @@ public sealed class SalesService(PosDbContext db)
         {
             request.CustomerId,
             request.ExchangeRateId,
+            request.ReceivableDueDate,
             lines = request.Lines.OrderBy(x => x.ProductId).Select(x => new { x.ProductId, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier }),
             payments = request.Payments.OrderBy(x => x.Currency, StringComparer.Ordinal).ThenBy(x => x.Method, StringComparer.Ordinal).ThenBy(x => x.Amount).Select(x => new { x.Method, x.Amount, x.Currency })
         };
@@ -269,7 +273,7 @@ public sealed class SalesService(PosDbContext db)
     };
 }
 
-public sealed record CheckoutRequest(IReadOnlyList<CheckoutLine> Lines, IReadOnlyList<CheckoutPayment> Payments, Guid? CustomerId = null, Guid? ExchangeRateId = null);
+public sealed record CheckoutRequest(IReadOnlyList<CheckoutLine> Lines, IReadOnlyList<CheckoutPayment> Payments, Guid? CustomerId = null, Guid? ExchangeRateId = null, DateOnly? ReceivableDueDate = null);
 public sealed record CheckoutLine(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1");
 public sealed record CheckoutPayment(string Method, decimal Amount, string Currency);
 public sealed record SaleResult(Guid SaleId, bool Replayed, string? Error);
