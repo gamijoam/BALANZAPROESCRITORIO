@@ -242,12 +242,19 @@ public partial class MainWindow : Window
         try
         {
             var licenseNotice = await _viewModel.GetLicenseNoticeAsync();
-            if (licenseNotice.State is "Locked" or "Suspended")
+            if (RequiresLicenseRecovery(licenseNotice))
             {
                 _licenseAccessBlocked = true;
+                var licenseSetupIncomplete = licenseNotice.State is "Missing" or "NotConfigured";
+                var trustKeyMissing = licenseNotice.State == "NotConfigured";
                 MessageBox.Show(this,
-                    "La licencia de este sistema no está activa. La caja permanecerá bloqueada. Puedes renovar o recuperar la licencia desde las opciones de recuperación.",
-                    "Licencia no activa", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    trustKeyMissing
+                        ? "Este POS aún no está configurado para validar licencias. Contacta al vendedor para completar la configuración."
+                        : licenseSetupIncomplete
+                            ? "Este POS necesita una licencia activa para continuar. La caja permanecerá bloqueada hasta completar la activación."
+                            : "La licencia de este POS no está activa. La caja permanecerá bloqueada hasta renovarla o recuperarla.",
+                    licenseSetupIncomplete ? "Se requiere una licencia" : "Licencia no activa",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
                 if (!await EnsureLicenseAdministratorSessionAsync()) return false;
 
                 new ManagementWindow(_viewModel, "Licencia", _restartLocalServiceAsync, licenseRecoveryOnly: true)
@@ -264,7 +271,7 @@ public partial class MainWindow : Window
                     return false;
                 }
 
-                if (refreshedNotice.State is not ("Active" or "Grace" or "Recovery"))
+                if (RequiresLicenseRecovery(refreshedNotice))
                 {
                     MessageBox.Show(this,
                         "La licencia sigue sin estar activa. El POS permanecerá bloqueado; puedes volver a iniciar sesión cuando tengas una renovación o un archivo de desbloqueo.",
@@ -291,6 +298,10 @@ public partial class MainWindow : Window
         SearchBox.Focus();
         return true;
     }
+
+    private static bool RequiresLicenseRecovery(LicenseNoticeClient notice) =>
+        (notice.State is "Locked" or "Suspended") ||
+        (notice.EnforcementEnabled && notice.State is not ("Active" or "Grace" or "Recovery"));
 
     private async Task<bool> EnsureLicenseAdministratorSessionAsync()
     {
@@ -439,10 +450,12 @@ public partial class MainWindow : Window
                         : "LICENCIA VENCIDA · Terminaron los 2 días de gracia. El POS limita operaciones nuevas y permite el cierre seguro. Conecta el servidor POS a Internet para renovar o contacta a soporte.";
                     break;
                 case "Missing":
-                    message = "LICENCIA SIN INSTALAR · Instala la licencia desde Administración > Licencia. Este aviso no impide trabajar mientras el modo de cumplimiento de licencias no esté activado.";
+                    message = notice.EnforcementEnabled
+                        ? "LICENCIA SIN INSTALAR · Importa la licencia inicial para continuar."
+                        : "LICENCIA SIN INSTALAR · Instala la licencia desde Administración > Licencia. Este aviso no impide trabajar mientras el bloqueo automático esté desactivado.";
                     break;
                 case "NotConfigured":
-                    message = "LICENCIA SIN CONFIGURAR · Falta instalar la llave pública del emisor. Contacta a soporte para completar la configuración de esta instalación.";
+                    message = "LICENCIA SIN CONFIGURAR · Contacta al vendedor para completar la configuración de este POS.";
                     break;
                 case "Invalid":
                 case "ClockRollback":

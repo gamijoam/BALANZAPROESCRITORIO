@@ -300,9 +300,29 @@ $targetScripts = Join-Path $target 'scripts'
 
 $installedService = Get-Service -Name 'BalanzaProPosServer' -ErrorAction SilentlyContinue
 if ($installationMode -ne 'ClientTerminal' -and $null -ne $installedService) {
+    $serviceManager = Join-Path $targetScripts 'Manage-PosWindowsService.ps1'
+    if (-not (Test-Path -LiteralPath $serviceManager -PathType Leaf)) {
+        throw 'No se encontró la herramienta para actualizar la configuración protegida del servicio POS.'
+    }
+    try {
+        $managerArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$serviceManager`"", '-Action', 'Reconfigure', '-WaitForElevation')
+        $managerProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $managerArguments -Wait -PassThru
+        if ($managerProcess.ExitCode -ne 0) {
+            throw "No se pudo actualizar la configuración del servicio POS (código: $($managerProcess.ExitCode))."
+        }
+    } catch {
+        try {
+            Start-Service -Name 'BalanzaProPosServer'
+            (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(45))
+            Write-Warning 'El servicio anterior volvió a iniciarse, pero la nueva configuración de licencia no se aplicó.'
+        } catch {
+            Write-Warning "El servicio no pudo iniciarse después de fallar la configuración. Usa 'Administrar servicio POS.cmd'. Detalle: $($_.Exception.Message)"
+        }
+        throw
+    }
     Start-Service -Name 'BalanzaProPosServer'
     (Get-Service -Name 'BalanzaProPosServer').WaitForStatus('Running', [TimeSpan]::FromSeconds(45))
-    Write-Output 'El servicio POS está ejecutándose con los archivos actualizados.'
+    Write-Output 'El servicio POS está ejecutándose con la configuración de licencia actualizada.'
 }
 
 $shell = New-Object -ComObject WScript.Shell

@@ -48,23 +48,24 @@ public sealed record DesktopModuleClientInfo(string ModuleId, string Version, st
 public sealed record ModuleManagementAccessInfo(bool CanOpenManagement, bool RequiresAdministratorPin);
 public sealed record LicenseStatusClient(Guid InstallationId, string State, string? LicenseId, string? CustomerName,
     string? Plan, int? MaxTerminals, DateTimeOffset? ExpiresAtUtc, IReadOnlyList<string> Entitlements, string? Diagnostic,
-    bool RenewalConfigured = false, bool EnforcementEnabled = false)
+    bool RenewalConfigured = false, bool EnforcementEnabled = false, DateTimeOffset? RecoveryExpiresAtUtc = null)
 {
     public string StateLabel => State switch
     {
         "Active" => "Activa",
-        "Grace" => "En período de gracia",
-        "Recovery" => "Desbloqueo temporal de emergencia",
+        "Grace" => "Período de gracia",
+        "Recovery" => "Desbloqueo de emergencia activo",
         "Suspended" => "Suspendida",
-        "Locked" => "Bloqueada",
-        "Missing" => "Falta instalar una licencia",
-        "NotConfigured" => "Falta configurar la llave pública del emisor",
-        "Invalid" => "Licencia inválida",
+        "Locked" => "Vencida",
+        "Missing" => "Sin licencia",
+        "NotConfigured" => "Pendiente de configuración",
+        "Invalid" => "No se pudo validar",
+        "ClockRollback" => "Revisar fecha y hora",
         _ => State
     };
 }
 public sealed record LicenseNoticeClient(string State, DateTimeOffset? ExpiresAtUtc,
-    DateTimeOffset? SuspendedAtUtc = null, DateTimeOffset? RecoveryExpiresAtUtc = null);
+    DateTimeOffset? SuspendedAtUtc = null, DateTimeOffset? RecoveryExpiresAtUtc = null, bool EnforcementEnabled = false);
 public sealed record ModuleTerminalCompatibilityClientResult(bool IsCompatible, int RegisteredTerminalCount,
     int UnreportedTerminalCount, IReadOnlyList<string> IncompatibleVersions)
 {
