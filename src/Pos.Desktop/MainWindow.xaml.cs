@@ -246,11 +246,34 @@ public partial class MainWindow : Window
             {
                 _licenseAccessBlocked = true;
                 MessageBox.Show(this,
-                    "La licencia de este sistema no está activa. Contacta con el vendedor para renovarla o recibir asistencia.",
+                    "La licencia de este sistema no está activa. La caja permanecerá bloqueada. Puedes renovar o recuperar la licencia desde las opciones de recuperación.",
                     "Licencia no activa", MessageBoxButton.OK, MessageBoxImage.Warning);
-                try { await _viewModel.LogoutAsync(); }
-                catch (Exception) { /* El POS se cerrará igualmente y no permitirá operar. */ }
-                return false;
+                if (!await EnsureLicenseAdministratorSessionAsync()) return false;
+
+                new ManagementWindow(_viewModel, "Licencia", _restartLocalServiceAsync, licenseRecoveryOnly: true)
+                    { Owner = this }.ShowDialog();
+
+                LicenseNoticeClient refreshedNotice;
+                try { refreshedNotice = await _viewModel.GetLicenseNoticeAsync(); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this,
+                        $"No se pudo verificar el estado actualizado de la licencia. El POS seguirá bloqueado.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                        "Licencia sin verificar", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    try { await _viewModel.LogoutAsync(); } catch (Exception) { }
+                    return false;
+                }
+
+                if (refreshedNotice.State is not ("Active" or "Grace" or "Recovery"))
+                {
+                    MessageBox.Show(this,
+                        "La licencia sigue sin estar activa. El POS permanecerá bloqueado; puedes volver a iniciar sesión cuando tengas una renovación o un archivo de desbloqueo.",
+                        "Licencia no activa", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    try { await _viewModel.LogoutAsync(); } catch (Exception) { }
+                    return false;
+                }
+
+                _licenseAccessBlocked = false;
             }
 
             await _viewModel.LoadInitialPosStateAsync();
@@ -267,6 +290,52 @@ public partial class MainWindow : Window
         if (_viewModel.CashSession is null) await PromptToOpenCashAsync();
         SearchBox.Focus();
         return true;
+    }
+
+    private async Task<bool> EnsureLicenseAdministratorSessionAsync()
+    {
+        var terminalId = TerminalIdentity.GetOrCreate();
+        const string instruction = "La licencia no está activa. Inicia sesión con una cuenta administradora para acceder únicamente a su recuperación.";
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                await _viewModel.GetLicenseStatusAsync();
+                return true;
+            }
+            catch (PosApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                try { await _viewModel.LogoutAsync(); }
+                catch (Exception logoutException)
+                {
+                    MessageBox.Show(this, PosUserMessage.ForException(logoutException), "No se pudo cambiar de usuario",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                if (attempt == 2)
+                {
+                    MessageBox.Show(this,
+                        "No se inició sesión con una cuenta administradora. El acceso a la caja permanecerá bloqueado.",
+                        "Se requiere una cuenta administradora", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                var administratorLogin = new LoginWindow(_viewModel, terminalId, instruction) { Owner = this };
+                if (administratorLogin.ShowDialog() != true || !_viewModel.IsAuthenticated) return false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this,
+                    $"No se pudo validar el acceso de recuperación. El POS permanecerá bloqueado.{Environment.NewLine}{Environment.NewLine}{PosUserMessage.ForException(ex)}",
+                    "Recuperación de licencia", MessageBoxButton.OK, MessageBoxImage.Warning);
+                try { await _viewModel.LogoutAsync(); } catch (Exception) { }
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private async void OperatorSessionAction_Click(object sender, RoutedEventArgs e)
