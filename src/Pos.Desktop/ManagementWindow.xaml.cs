@@ -24,10 +24,12 @@ public partial class ManagementWindow : Window
     private Guid? _licenseInstallationId;
     private string _licenseState = string.Empty;
     private bool _managementReady;
+    private readonly bool _licenseRecoveryOnly;
     public ManagementWindow(PosViewModel viewModel, string initialSection = "Tasa",
-        Func<CancellationToken, Task>? restartLocalServiceAsync = null)
+        Func<CancellationToken, Task>? restartLocalServiceAsync = null, bool licenseRecoveryOnly = false)
     {
         InitializeComponent(); _viewModel = viewModel; _restartLocalServiceAsync = restartLocalServiceAsync;
+        _licenseRecoveryOnly = licenseRecoveryOnly;
         RestartModuleHostButton.IsEnabled = _restartLocalServiceAsync is not null;
         if (_restartLocalServiceAsync is null)
             RestartModuleHostButton.ToolTip = "Esta terminal está conectada a otro equipo. Reinicia el POS desde la computadora servidor.";
@@ -40,10 +42,26 @@ public partial class ManagementWindow : Window
             "Licencia" or "Licensing" => 5,
             _ => 0
         };
+        if (_licenseRecoveryOnly)
+        {
+            Title = "Recuperación de licencia · BalanzaPro";
+            ManagementTitleText.Text = "RECUPERACIÓN DE LICENCIA";
+            ManagementSubtitleText.Text = "El acceso a caja está bloqueado hasta que se renueve o recupere la licencia.";
+            ManagementTabs.Items.Clear();
+            ManagementTabs.Items.Add(LicenseTab);
+            ManagementTabs.SelectedItem = LicenseTab;
+            LicenseRecoveryModeNotice.Visibility = Visibility.Visible;
+            ContinueToPosButton.Visibility = Visibility.Visible;
+        }
         FromDate.SelectedDate = DateTime.Today.AddDays(-30); ToDate.SelectedDate = DateTime.Today;
         Loaded += async (_, _) =>
         {
             _managementReady = true;
+            if (_licenseRecoveryOnly)
+            {
+                await LoadLicenseStatusAsync();
+                return;
+            }
             UpdateReportFilterVisibility();
             await LoadRatesAsync(); await LoadOperatorsAsync(); await LoadAuditAsync();
             if (initialSection == "Reportes") await LoadDefaultReportsAsync();
@@ -78,6 +96,7 @@ public partial class ManagementWindow : Window
                 : $"Módulos autorizados: {string.Join(", ", license.Entitlements)}";
             _licenseInstallationId = license.InstallationId;
             LicenseInstallationText.Text = $"ID de instalación: {license.InstallationId:D}";
+            ContinueToPosButton.IsEnabled = IsOperationalLicenseState(license.State);
             CopyLicenseInstallationIdButton.IsEnabled = true;
             CreateRecoveryRequestButton.IsEnabled = license.State is "Locked" or "Suspended";
             CreateRecoveryRequestButton.ToolTip = CreateRecoveryRequestButton.IsEnabled
@@ -106,6 +125,14 @@ public partial class ManagementWindow : Window
         {
             LicenseStatus.Text = PosUserMessage.ForException(exception);
         }
+    }
+
+    private static bool IsOperationalLicenseState(string state) => state is "Active" or "Grace" or "Recovery";
+
+    private void ContinueToPos_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_licenseRecoveryOnly || !IsOperationalLicenseState(_licenseState)) return;
+        DialogResult = true;
     }
 
     private async void RefreshLicense_Click(object sender, RoutedEventArgs e)

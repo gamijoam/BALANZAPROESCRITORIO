@@ -10,11 +10,12 @@ public partial class LoginWindow : Window
     private readonly Guid _terminalId;
     private bool _isSubmitting;
 
-    public LoginWindow(PosViewModel viewModel, Guid terminalId)
+    public LoginWindow(PosViewModel viewModel, Guid terminalId, string? instruction = null)
     {
         InitializeComponent();
         _viewModel = viewModel;
         _terminalId = terminalId;
+        if (!string.IsNullOrWhiteSpace(instruction)) LoginInstructionText.Text = instruction;
         BaseAddressBox.Text = _viewModel.ApiBaseAddress.ToString().TrimEnd('/');
         Loaded += (_, _) => UsernameBox.Focus();
         UsernameBox.KeyDown += (_, e) =>

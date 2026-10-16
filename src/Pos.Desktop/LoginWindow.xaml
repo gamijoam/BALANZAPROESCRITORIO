@@ -42,7 +42,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                    <TextBlock Text="Inicia sesión para continuar" Foreground="#172B45" FontSize="18"
+                    <TextBlock x:Name="LoginInstructionText" Text="Inicia sesión para continuar" Foreground="#172B45" FontSize="18"
                                FontWeight="SemiBold" Margin="0,0,0,16"/>
                     <TextBlock Text="Usuario" Foreground="#344B67" FontWeight="SemiBold" Margin="0,0,0,5"/>
                     <TextBox x:Name="UsernameBox" Height="42" Padding="10" FontSize="16" TabIndex="0"
