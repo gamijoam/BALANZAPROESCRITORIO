@@ -18,6 +18,11 @@ public partial class ProductSelectionWindow : Window
     public ProductSelectionWindow(IReadOnlyList<ProductInfo> products, string searchText, Func<Guid, Task<byte[]?>> imageLoader)
     {
         InitializeComponent();
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(1280, workArea.Width * 0.92);
+        Height = Math.Min(800, workArea.Height * 0.9);
+        MinWidth = Math.Min(900, Width);
+        MinHeight = Math.Min(560, Height);
         _imageLoader = imageLoader;
         _products = new ObservableCollection<ProductSelectionEntry>(products.Select(x => new ProductSelectionEntry(x)));
         ProductsList.ItemsSource = _products;

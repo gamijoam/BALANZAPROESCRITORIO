@@ -55,7 +55,7 @@ public sealed record LicenseStatusClient(Guid InstallationId, string State, stri
         "Active" => "Activa",
         "Grace" => "En período de gracia",
         "Recovery" => "Desbloqueo temporal de emergencia",
-        "Suspended" => "Suspendida desde el VPS",
+        "Suspended" => "Suspendida",
         "Locked" => "Bloqueada",
         "Missing" => "Falta instalar una licencia",
         "NotConfigured" => "Falta configurar la llave pública del emisor",

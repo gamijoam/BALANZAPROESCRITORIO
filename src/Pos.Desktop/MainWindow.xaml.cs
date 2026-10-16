@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly bool _stopsLocalServerOnExit;
     private bool _exitConfirmed;
     private bool _exitSaveInProgress;
+    private bool _licenseAccessBlocked;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -125,7 +126,7 @@ public partial class MainWindow : Window
     private async void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (_exitSaveInProgress) { e.Cancel = true; return; }
-        if (_exitConfirmed || !_viewModel.IsAuthenticated) return;
+        if (_exitConfirmed || _licenseAccessBlocked || !_viewModel.IsAuthenticated) return;
         if (_viewModel.HasPendingCheckout)
         {
             MessageBox.Show(this,
@@ -240,6 +241,18 @@ public partial class MainWindow : Window
         if (login.ShowDialog() != true || !_viewModel.IsAuthenticated) return false;
         try
         {
+            var licenseNotice = await _viewModel.GetLicenseNoticeAsync();
+            if (licenseNotice.State is "Locked" or "Suspended")
+            {
+                _licenseAccessBlocked = true;
+                MessageBox.Show(this,
+                    "La licencia de este sistema no está activa. Contacta con el vendedor para renovarla o recibir asistencia.",
+                    "Licencia no activa", MessageBoxButton.OK, MessageBoxImage.Warning);
+                try { await _viewModel.LogoutAsync(); }
+                catch (Exception) { /* El POS se cerrará igualmente y no permitirá operar. */ }
+                return false;
+            }
+
             await _viewModel.LoadInitialPosStateAsync();
             await RefreshLicenseNoticeAsync();
             _licenseNoticeTimer.Start();
@@ -338,7 +351,7 @@ public partial class MainWindow : Window
                     background = Color.FromRgb(255, 224, 224);
                     foreground = Color.FromRgb(126, 31, 36);
                     border = Color.FromRgb(213, 89, 94);
-                    message = "LICENCIA SUSPENDIDA · El servidor POS recibió la suspensión del VPS. Se bloquean nuevas ventas y se conservan las operaciones de cierre seguro. Contacta a administración para resolverla.";
+                    message = "LICENCIA SUSPENDIDA · El acceso a ventas está restringido. Contacta con el vendedor para resolverlo.";
                     break;
                 case "Recovery":
                     background = Color.FromRgb(255, 235, 196);
