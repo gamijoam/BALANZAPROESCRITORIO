@@ -29,6 +29,8 @@ internal static class PosWindowsServiceConfiguration
             SetOptional(root, "certificatePath", "ASPNETCORE_Kestrel__Certificates__Default__Path");
             SetOptional(root, "certificatePassword", "ASPNETCORE_Kestrel__Certificates__Default__Password");
             SetOptional(root, "moduleTrustKeyRingPath", "ModuleTrust__KeyRingPath");
+            SetOptional(root, "licenseRenewalEndpoint", "Licensing__RenewalEndpoint");
+            SetOptional(root, "licenseEnforce", "Licensing__Enforce");
             SetOptional(root, "moduleStoragePath", "Modules__StoragePath");
             SetOptional(root, "moduleBackupPath", "Modules__BackupPath");
             SetOptional(root, "postgresqlBinaryDirectory", "PostgreSql__BinaryDirectory");

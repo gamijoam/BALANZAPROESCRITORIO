@@ -713,6 +713,10 @@ public sealed class PosViewModel : INotifyPropertyChanged
         => _api.InstallModuleAsync(requestedModuleId, packagePaths, cancellationToken);
     public Task<IReadOnlyList<InstalledModuleRecordClient>> GetInstalledModulesAsync(CancellationToken cancellationToken = default)
         => _api.GetInstalledModulesAsync(cancellationToken);
+    public Task<LicenseStatusClient> GetLicenseStatusAsync(CancellationToken cancellationToken = default)
+        => _api.GetLicenseStatusAsync(cancellationToken);
+    public Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
+        => _api.ImportLicenseAsync(document, cancellationToken);
     public Task DeactivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)
         => _api.DeactivateModuleAsync(moduleId, cancellationToken);
     public Task ActivateModuleAsync(string moduleId, CancellationToken cancellationToken = default)

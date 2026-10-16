@@ -18,6 +18,8 @@ using Pos.Infrastructure.Modules;
 using Pos.Modules.Abstractions;
 using Pos.Modules.Server.Abstractions;
 using Pos.Shared.Contracts;
+using Pos.Infrastructure.Licensing;
+using Pos.Application.Licensing;
 
 var windowsServiceMode = args.Contains("--windows-service", StringComparer.Ordinal);
 PosWindowsServiceConfiguration.ApplyFromEnvironment();
@@ -30,6 +32,7 @@ var activeModuleRuntimes = new List<LoadedPosModule>();
 var activeModuleIds = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 var migrateOnly = args.Contains("--migrate", StringComparer.Ordinal);
 var requireTerminalPairing = builder.Configuration.GetValue<bool>("PosSecurity:RequireTerminalPairing");
+var enforceLicensing = builder.Configuration.GetValue<bool>("Licensing:Enforce");
 var moduleHostApiVersion = builder.Configuration.GetValue("Modules:HostApiVersion", 1);
 if (moduleHostApiVersion < 1)
     throw new InvalidOperationException("Modules:HostApiVersion must be a positive integer.");
@@ -54,6 +57,11 @@ builder.Services.AddScoped<SaleReturnService>();
 builder.Services.AddScoped<IPosInventoryReceiptService, PosInventoryReceiptService>();
 builder.Services.AddScoped<IPosProductPricingReadService, PosProductPricingReadService>();
 builder.Services.AddSingleton<SupervisorAuthorizationStore>();
+var licenseDataDirectory = ResolveLicenseDataPath(builder.Configuration["Licensing:DataPath"], windowsServiceMode);
+var licenseTrustKeyRingPath = builder.Configuration["Licensing:TrustKeyRingPath"];
+builder.Services.AddSingleton(new PosLicenseManager(licenseDataDirectory, licenseTrustKeyRingPath));
+builder.Services.AddHttpClient(nameof(PosLicenseRenewalWorker));
+builder.Services.AddHostedService<PosLicenseRenewalWorker>();
 var app = builder.Build();
 app.Use(async (context, next) =>
 {
@@ -65,6 +73,24 @@ app.Use(async (context, next) =>
         return;
     }
     await next();
+});
+app.Use(async (context, next) =>
+{
+    if (!enforceLicensing || PosLicenseRequestGate.IsAllowedWhileLocked(context.Request))
+    {
+        await next();
+        return;
+    }
+
+    var license = app.Services.GetRequiredService<PosLicenseManager>().GetStatus(DateTimeOffset.UtcNow);
+    if (license.State is "Active" or "Grace")
+    {
+        await next();
+        return;
+    }
+
+    var error = license.State is "Missing" or "NotConfigured" ? "pos_license_required" : "pos_license_locked";
+    await Results.Json(new { error, licenseState = license.State }, statusCode: StatusCodes.Status423Locked).ExecuteAsync(context);
 });
 app.Use(async (context, next) =>
 {
@@ -112,8 +138,38 @@ app.MapGet("/health/ready", async (PosDbContext db, CancellationToken cancellati
     await db.Database.CanConnectAsync(cancellationToken)
         ? Results.Ok(new { status = "ready", database = "postgresql" })
         : Results.Problem("Database is unavailable.", statusCode: StatusCodes.Status503ServiceUnavailable));
+app.MapGet("/api/v1/license/status", async (HttpContext context, AuthenticationService auth,
+    PosLicenseManager licenses, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    if (await auth.GetRoleAsync(access.OperatorId, cancellationToken) != Pos.Domain.Identity.OperatorRole.Administrator)
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    return Results.Ok(licenses.GetStatus(DateTimeOffset.UtcNow));
+});
+app.MapPost("/api/v1/license/import", async (HttpContext context, PosLicenseImportRequest request,
+    AuthenticationService auth, PosLicenseManager licenses, CancellationToken cancellationToken) =>
+{
+    var token = ReadBearerToken(context);
+    if (token is null) return Results.Unauthorized();
+    var access = await auth.FindValidSessionAsync(token, cancellationToken);
+    if (access is null) return Results.Unauthorized();
+    if (await auth.GetRoleAsync(access.OperatorId, cancellationToken) != Pos.Domain.Identity.OperatorRole.Administrator)
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    if (string.IsNullOrWhiteSpace(request.DocumentBase64))
+        return Results.BadRequest(new { error = "license_document_required" });
+
+    byte[] document;
+    try { document = Convert.FromBase64String(request.DocumentBase64); }
+    catch (FormatException) { return Results.BadRequest(new { error = "license_document_base64_invalid" }); }
+    try { return Results.Ok(licenses.Install(document, DateTimeOffset.UtcNow)); }
+    catch (PosLicenseDocumentException exception)
+    { return Results.BadRequest(new { error = "license_document_invalid", detail = exception.Message }); }
+});
 app.MapPost("/api/v1/modules/plan", async (HttpContext context, PosDbContext db, AuthenticationService auth,
-    SupervisorAuthorizationStore approvals, ILogger<Program> logger) =>
+    SupervisorAuthorizationStore approvals, PosLicenseManager licenses, ILogger<Program> logger) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
@@ -158,7 +214,7 @@ app.MapPost("/api/v1/modules/plan", async (HttpContext context, PosDbContext db,
             requestedIds[0]!,
             moduleHostApiVersion,
             trustStore.Current.VerifierPublicKeys,
-            new HashSet<string>(StringComparer.Ordinal));
+            licenses.GetGrantedEntitlements(DateTimeOffset.UtcNow));
 
         var plannedModules = new List<object>();
         foreach (var module in plan.InstallationOrder)
@@ -324,7 +380,7 @@ app.MapGet("/api/v1/modules/desktop/{moduleId}/package", async (string moduleId,
     return Results.File(stream, "application/zip", $"{moduleId}-{runtime.Package.Module.Version.ToString(3)}.zip", enableRangeProcessing: true);
 });
 app.MapPost("/api/v1/modules/install", async (HttpContext context, PosDbContext db, AuthenticationService auth,
-    SupervisorAuthorizationStore approvals, CancellationToken cancellationToken) =>
+    SupervisorAuthorizationStore approvals, PosLicenseManager licenses, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
@@ -361,8 +417,9 @@ app.MapPost("/api/v1/modules/install", async (HttpContext context, PosDbContext 
     var streams = files.Select(file => file.OpenReadStream()).ToArray();
     try
     {
+        var grantedEntitlements = licenses.GetGrantedEntitlements(DateTimeOffset.UtcNow);
         var plan = ModuleInstallationPlanner.CreatePlan(streams, requestedIds[0]!, moduleHostApiVersion,
-            trustStore.Current.VerifierPublicKeys, new HashSet<string>(StringComparer.Ordinal));
+            trustStore.Current.VerifierPublicKeys, grantedEntitlements);
         var compatibility = new List<object>();
         foreach (var module in plan.InstallationOrder)
         {
@@ -384,7 +441,7 @@ app.MapPost("/api/v1/modules/install", async (HttpContext context, PosDbContext 
         var orderedPackages = plan.InstallationOrder.Select(entry => packagesById.TryGetValue(entry.Id, out var package) && package.Version == entry.Version
             ? package : throw new InvalidOperationException("No se pudo asociar el paquete firmado con su plan.")).ToArray();
         var request = new ModuleInstallationRequest(plan, orderedPackages, connectionString, postgresPath,
-            backupPath, storagePath, moduleHostApiVersion, trustStore.Current, new HashSet<string>(StringComparer.Ordinal));
+            backupPath, storagePath, moduleHostApiVersion, trustStore.Current, grantedEntitlements);
         await using var installationLease = await moduleMaintenanceGate.EnterInstallationAsync(cancellationToken);
         var coordinator = new ModuleInstallationCoordinator(
             new ModuleInstallationBackupAdapter(new ModuleDatabaseBackupService(new ProcessPostgresToolRunner())),
@@ -485,6 +542,7 @@ app.MapPost("/api/v1/modules/{moduleId}/deactivate", async (string moduleId, Htt
     return Results.Ok(new { moduleId, status = "Disabled", dataPreserved = true, restartRequired = false });
 });
 app.MapPost("/api/v1/terminals/pair", async (HttpContext context, PosDbContext db, AuthenticationService auth,
+    PosLicenseManager licenses,
     TerminalPairRequest request, CancellationToken cancellationToken) =>
 {
     if (!context.Request.IsHttps) return Results.BadRequest(new { error = "https_required_for_terminal_pairing" });
@@ -492,7 +550,17 @@ app.MapPost("/api/v1/terminals/pair", async (HttpContext context, PosDbContext d
     var administratorId = await auth.VerifyAdministratorPinAsync(request.AdministratorUsername, request.AdministratorPin, cancellationToken);
     if (administratorId is null) return Results.Json(new { error = "administrator_credentials_invalid" }, statusCode: StatusCodes.Status403Forbidden);
 
+    await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
     var terminal = await db.PairedTerminals.SingleOrDefaultAsync(x => x.TerminalId == request.TerminalId, cancellationToken);
+    if (enforceLicensing)
+    {
+        var license = licenses.GetStatus(DateTimeOffset.UtcNow);
+        if (license.State is not ("Active" or "Grace") || license.MaxTerminals is not { } maxTerminals)
+            return Results.Json(new { error = "pos_license_required" }, statusCode: StatusCodes.Status423Locked);
+        var activeTerminalCount = await db.PairedTerminals.CountAsync(x => x.Active && x.TerminalId != request.TerminalId, cancellationToken);
+        if (!Pos.Domain.Licensing.PosLicensePolicy.CanPairTerminal(activeTerminalCount, terminal?.Active == true, maxTerminals))
+            return Results.Conflict(new { error = "license_terminal_limit_reached", maxTerminals, activeTerminalCount });
+    }
     var credential = TerminalPairingCredential.Create();
     if (terminal is null)
     {
@@ -510,7 +578,29 @@ app.MapPost("/api/v1/terminals/pair", async (HttpContext context, PosDbContext d
     db.AuditEvents.Add(new AuditRecord { Id = Guid.NewGuid(), ActorId = administratorId.Value, TerminalId = request.TerminalId,
         Action = "terminal.paired", Payload = JsonSerializer.Serialize(new { terminalId = request.TerminalId }), OccurredAtUtc = pairedAt });
     await db.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
     return Results.Ok(new { terminalCredential = credential });
+});
+app.MapPost("/api/v1/terminals/{terminalId:guid}/unpair", async (Guid terminalId, HttpContext context,
+    PosDbContext db, AuthenticationService auth, TerminalUnpairRequest request, CancellationToken cancellationToken) =>
+{
+    if (!context.Request.IsHttps) return Results.BadRequest(new { error = "https_required_for_terminal_unpairing" });
+    if (terminalId == Guid.Empty) return Results.BadRequest(new { error = "terminal_id_required" });
+    var administratorId = await auth.VerifyAdministratorPinAsync(request.AdministratorUsername, request.AdministratorPin, cancellationToken);
+    if (administratorId is null) return Results.Json(new { error = "administrator_credentials_invalid" }, statusCode: StatusCodes.Status403Forbidden);
+
+    var terminal = await db.PairedTerminals.SingleOrDefaultAsync(x => x.TerminalId == terminalId, cancellationToken);
+    if (terminal is null) return Results.NotFound();
+    if (!terminal.Active) return Results.NoContent();
+
+    var now = DateTime.UtcNow;
+    terminal.Active = false;
+    var sessions = await db.AccessSessions.Where(x => x.TerminalId == terminalId && x.RevokedAtUtc == null).ToListAsync(cancellationToken);
+    foreach (var session in sessions) session.RevokedAtUtc = now;
+    db.AuditEvents.Add(new AuditRecord { Id = Guid.NewGuid(), ActorId = administratorId.Value, TerminalId = terminalId,
+        Action = "terminal.unpaired", Payload = JsonSerializer.Serialize(new { terminalId }), OccurredAtUtc = now });
+    await db.SaveChangesAsync(cancellationToken);
+    return Results.NoContent();
 });
 app.MapPost("/api/v1/setup/first-operator", async (HttpContext context, PosDbContext db, AuthenticationService auth,
     CreateOperatorRequest request, CancellationToken cancellationToken) =>
@@ -886,7 +976,9 @@ app.MapPost("/api/v1/cart-workspaces/paused/{workspaceId:guid}/discard", async (
     catch (CartWorkspaceException exception) { return CartWorkspaceFailure(exception); }
 });
 
-app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService auth, SupervisorAuthorizationStore approvals, SalesService sales, ConfirmSaleRequest request, CancellationToken cancellationToken) =>
+app.MapPost("/api/v1/sales", async (HttpContext context, PosDbContext db, AuthenticationService auth,
+    SupervisorAuthorizationStore approvals, PosLicenseManager licenses, SalesService sales,
+    ConfirmSaleRequest request, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
@@ -905,6 +997,24 @@ app.MapPost("/api/v1/sales", async (HttpContext context, AuthenticationService a
     if (request.Checkout.Payments.Any(x => IsCreditMethod(x.Method)) &&
         !await AuthorizePermissionAsync(context, auth, approvals, access, Permission.CreateCreditSale, cancellationToken)) return PermissionFailure(context);
     var key = context.Request.Headers["Idempotency-Key"].ToString();
+    if (enforceLicensing)
+    {
+        var license = licenses.GetStatus(DateTimeOffset.UtcNow);
+        if (license.State is not ("Active" or "Grace"))
+        {
+            var workspaceQuery = db.CartWorkspaces.AsNoTracking()
+                .Where(workspace => workspace.TerminalId == access.TerminalId && workspace.Status == "Active");
+            if (request.WorkspaceId is { } workspaceId)
+                workspaceQuery = workspaceQuery.Where(workspace => workspace.Id == workspaceId);
+            var workspaceCreatedAtUtc = await workspaceQuery.Select(workspace => (DateTime?)workspace.CreatedAtUtc)
+                .SingleOrDefaultAsync(cancellationToken);
+            var existingIdempotencyKey = !string.IsNullOrWhiteSpace(key) &&
+                await db.IdempotencyRecords.AnyAsync(record => record.TerminalId == access.TerminalId && record.Key == key, cancellationToken);
+            if (!PosLicenseCheckoutPolicy.CanCompleteLockedCheckout(license.State, license.ExpiresAtUtc,
+                    workspaceCreatedAtUtc, workspaceCreatedAtUtc is not null, existingIdempotencyKey))
+                return Results.Json(new { error = "pos_license_locked", licenseState = license.State }, statusCode: StatusCodes.Status423Locked);
+        }
+    }
     try
     {
         var result = await sales.ConfirmAsync(access.OperatorId, access.TerminalId, request.CashSessionId, key, request.Checkout,
@@ -1282,6 +1392,20 @@ static string ResolveConfiguredModulePath(string? configuredPath, string setting
     return Path.GetFullPath(path);
 }
 
+static string ResolveLicenseDataPath(string? configuredPath, bool windowsServiceMode)
+{
+    var dataRoot = Environment.GetFolderPath(windowsServiceMode
+        ? Environment.SpecialFolder.CommonApplicationData
+        : Environment.SpecialFolder.LocalApplicationData);
+    var path = string.IsNullOrWhiteSpace(configuredPath)
+        ? Path.Combine(string.IsNullOrWhiteSpace(dataRoot) ? AppContext.BaseDirectory : dataRoot,
+            "BalanzaPro", "PosServer", "Licensing")
+        : Environment.ExpandEnvironmentVariables(configuredPath);
+    if (!Path.IsPathFullyQualified(path))
+        throw new InvalidOperationException("Licensing:DataPath debe ser una ruta absoluta.");
+    return Path.GetFullPath(path);
+}
+
 static Permission? ResolveModulePermission(string permission) => permission switch
 {
     "Reports.View" => Permission.ViewReports,
@@ -1304,6 +1428,8 @@ static Permission? ResolveModulePermission(string permission) => permission swit
 public sealed record CreateOperatorRequest(string? Username, string? Pin);
 public sealed record OperatorCreateRequest(string? Username, string? Pin, string? Role);
 public sealed record LoginRequest(string? Username, string? Pin, Guid TerminalId, string? ClientVersion);
+public sealed record PosLicenseImportRequest(string? DocumentBase64);
+public sealed record TerminalUnpairRequest(string? AdministratorUsername, string? AdministratorPin);
 public sealed record TerminalPairRequest(Guid TerminalId, string? AdministratorUsername, string? AdministratorPin);
 public sealed record SupervisorAuthorizationRequest(string? AdministratorUsername, string? AdministratorPin, string? Permission, Guid OperationId, string? Operation, string? RequestFingerprint);
 public sealed record OpenCashSessionRequest(decimal? OpeningBalance = null, string? Currency = null, decimal? OpeningBalanceUsd = null, decimal? OpeningBalanceVes = null);

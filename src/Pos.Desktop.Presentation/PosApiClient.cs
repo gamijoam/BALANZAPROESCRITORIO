@@ -499,6 +499,29 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
             ?? throw new InvalidDataException("El servicio devolvió un estado vacío de permisos para módulos.");
     }
 
+    public async Task<LicenseStatusClient> GetLicenseStatusAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/license/status");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<LicenseStatusClient>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servidor devolvió un estado de licencia vacío.");
+    }
+
+    public async Task<LicenseStatusClient> ImportLicenseAsync(byte[] document, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (document.Length is 0 or > 64 * 1024)
+            throw new ArgumentException("El archivo de licencia está vacío o supera 64 KiB.", nameof(document));
+
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/license/import");
+        request.Content = JsonContent.Create(new { documentBase64 = Convert.ToBase64String(document) }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<LicenseStatusClient>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servidor devolvió un estado de licencia vacío.");
+    }
+
     public async Task<byte[]> DownloadDesktopModulePackageAsync(string moduleId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(moduleId) || moduleId.Any(character => !(char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '-')))

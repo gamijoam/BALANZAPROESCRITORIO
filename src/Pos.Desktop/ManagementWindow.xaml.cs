@@ -21,6 +21,7 @@ public partial class ManagementWindow : Window
     private int _salesDetailTotalCount;
     private string[] _modulePackagePaths = [];
     private ModuleInstallationPlanClientResult? _validatedModulePlan;
+    private bool _managementReady;
     public ManagementWindow(PosViewModel viewModel, string initialSection = "Tasa",
         Func<CancellationToken, Task>? restartLocalServiceAsync = null)
     {
@@ -34,16 +35,100 @@ public partial class ManagementWindow : Window
             "Operadores" => 2,
             "Auditoría" => 3,
             "Módulos" => 4,
+            "Licencia" or "Licensing" => 5,
             _ => 0
         };
         FromDate.SelectedDate = DateTime.Today.AddDays(-30); ToDate.SelectedDate = DateTime.Today;
         Loaded += async (_, _) =>
         {
+            _managementReady = true;
             UpdateReportFilterVisibility();
             await LoadRatesAsync(); await LoadOperatorsAsync(); await LoadAuditAsync();
             if (initialSection == "Reportes") await LoadDefaultReportsAsync();
             if (initialSection == "Módulos") await LoadInstalledModulesAsync();
+            if (initialSection is "Licencia" or "Licensing") await LoadLicenseStatusAsync();
         };
+    }
+
+    private async void ManagementTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_managementReady && ReferenceEquals(sender, ManagementTabs) && ReferenceEquals(ManagementTabs.SelectedItem, LicenseTab))
+            await LoadLicenseStatusAsync();
+    }
+
+    private async Task LoadLicenseStatusAsync()
+    {
+        try
+        {
+            var license = await _viewModel.GetLicenseStatusAsync();
+            LicenseStateText.Text = license.StateLabel;
+            LicenseCustomerText.Text = $"Comercio: {license.CustomerName ?? "—"}";
+            LicensePlanText.Text = $"Plan: {license.Plan ?? "—"}{(license.LicenseId is null ? string.Empty : $" · licencia {license.LicenseId}")}";
+            LicenseExpiryText.Text = license.ExpiresAtUtc is { } expiry
+                ? $"Vence: {expiry.ToLocalTime():dd/MM/yyyy HH:mm} · hora local"
+                : "Vencimiento: —";
+            LicenseTerminalLimitText.Text = license.MaxTerminals is { } maximum
+                ? $"Terminales permitidas: {maximum}"
+                : "Terminales permitidas: —";
+            LicenseEntitlementsText.Text = license.Entitlements.Count == 0
+                ? "Módulos autorizados: ninguno"
+                : $"Módulos autorizados: {string.Join(", ", license.Entitlements)}";
+            LicenseInstallationText.Text = $"ID de instalación: {license.InstallationId:D}";
+            LicenseStatus.Text = license.Diagnostic ?? (license.State is "Active" or "Grace"
+                ? "La licencia está almacenada y validada localmente."
+                : "Importa una licencia emitida para este ID de instalación.");
+            LicenseStateText.Foreground = license.State switch
+            {
+                "Active" => System.Windows.Media.Brushes.DarkGreen,
+                "Grace" => System.Windows.Media.Brushes.DarkOrange,
+                "Locked" or "Invalid" => System.Windows.Media.Brushes.DarkRed,
+                _ => System.Windows.Media.Brushes.DarkSlateGray
+            };
+        }
+        catch (Exception exception)
+        {
+            LicenseStatus.Text = PosUserMessage.ForException(exception);
+        }
+    }
+
+    private async void RefreshLicense_Click(object sender, RoutedEventArgs e)
+        => await LoadLicenseStatusAsync();
+
+    private async void ImportLicense_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Selecciona la licencia firmada del POS",
+            Filter = "Licencia BalanzaPro (*.poslic)|*.poslic|Todos los archivos (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var info = new FileInfo(dialog.FileName);
+            if (info.Length is <= 0 or > 64 * 1024)
+            {
+                LicenseStatus.Text = "El archivo está vacío o supera el límite de 64 KiB.";
+                return;
+            }
+
+            ImportLicenseButton.IsEnabled = false;
+            LicenseStatus.Text = "Verificando firma e instalación en el servidor…";
+            var document = await File.ReadAllBytesAsync(dialog.FileName);
+            var status = await _viewModel.ImportLicenseAsync(document);
+            await LoadLicenseStatusAsync();
+            LicenseStatus.Text = $"Licencia {status.LicenseId ?? string.Empty} importada y verificada en el servidor.";
+        }
+        catch (Exception exception)
+        {
+            LicenseStatus.Text = PosUserMessage.ForException(exception);
+        }
+        finally
+        {
+            ImportLicenseButton.IsEnabled = true;
+        }
     }
 
     private async Task LoadDefaultReportsAsync()
