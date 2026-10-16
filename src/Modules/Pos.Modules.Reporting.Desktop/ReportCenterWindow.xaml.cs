@@ -18,6 +18,7 @@ public partial class ReportCenterWindow : Window
     private PosDesktopReportSourceInstance? _selectedSource;
     private IReadOnlyList<IReadOnlyDictionary<string, object?>> _rows = [];
     private IReadOnlyList<SavedReportViewInfo> _savedViews = [];
+    private ReportSheetTemplate? _activeSheetTemplate;
     private readonly Dictionary<DataGridColumn, string> _columnIds = [];
     private bool _loading;
     private bool _uiReady;
@@ -54,6 +55,7 @@ public partial class ReportCenterWindow : Window
     {
         if (_loading || ReportPicker.SelectedItem is not PosDesktopReportSourceInstance selected) return;
         _selectedSource = selected;
+        _activeSheetTemplate = null;
         _loading = true;
         try
         {
@@ -84,6 +86,7 @@ public partial class ReportCenterWindow : Window
         try
         {
             ApplyColumnLayout(view.Columns);
+            _activeSheetTemplate = view.Sheet;
             ViewNameBox.Text = view.Name;
             if (view.Filters.TryGetValue("from", out var from) && DateTime.TryParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedFrom))
                 FromDate.SelectedDate = parsedFrom;
@@ -239,22 +242,8 @@ public partial class ReportCenterWindow : Window
         if (_selectedSource is null || _context.ReportApiClient is null) return;
         var name = ViewNameBox.Text.Trim();
         if (name.Length == 0) { StatusText.Text = "Escribe un nombre para guardar la vista."; ViewNameBox.Focus(); return; }
-        var layout = ReportGrid.Columns.Select(column => new ReportColumnLayout(_columnIds[column],
-            column.Visibility == Visibility.Visible, column.DisplayIndex)).OrderBy(item => item.DisplayOrder).ToArray();
-        var filters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (FromDate.SelectedDate is { } from) filters["from"] = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        if (ToDate.SelectedDate is { } to) filters["to"] = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        if (CurrencyPicker.SelectedItem is ComboBoxItem { Content: string selectedCurrency } && selectedCurrency != "Todas") filters["currency"] = selectedCurrency;
-        if (!string.IsNullOrWhiteSpace(SearchBox.Text)) filters["search"] = SearchBox.Text.Trim();
-        try
-        {
-            var saved = await _context.ReportApiClient.SaveReportViewAsync(_selectedSource.Source.Id,
-                new SavedReportViewDefinition(name, layout, filters));
-            StatusText.Text = $"Vista '{saved.Name}' guardada para tu usuario.";
-            await LoadSavedViewsAsync();
-            SavedViewsPicker.SelectedItem = _savedViews.FirstOrDefault(item => item.Id == saved.Id);
-        }
-        catch (Exception exception) { StatusText.Text = $"No se pudo guardar la vista: {PosUserMessage.ForException(exception)}"; }
+        _activeSheetTemplate = SynchronizeSheetColumns(_activeSheetTemplate);
+        await PersistViewAsync(name, _activeSheetTemplate, "vista");
     }
 
     private async void DeleteView_Click(object sender, RoutedEventArgs e)
@@ -287,16 +276,82 @@ public partial class ReportCenterWindow : Window
         StatusText.Text = $"Excel exportado con {rows.Count:N0} filas y {columns.Count} columnas.";
     }
 
-    private void PreviewSheet_Click(object sender, RoutedEventArgs e)
+    private async void PreviewSheet_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedSource is null) return;
-        var columns = VisibleColumns();
-        if (columns.Count == 0)
+        try
         {
-            StatusText.Text = "Activa al menos una columna para preparar la hoja del reporte.";
-            return;
-        }
+            var templateName = !string.IsNullOrWhiteSpace(ViewNameBox.Text)
+                ? ViewNameBox.Text.Trim()
+                : SavedViewsPicker.SelectedItem is SavedReportViewInfo savedView
+                    ? savedView.Name
+                    : $"Mi hoja - {_selectedSource.Source.Title}";
+            var designer = new ReportSheetDesignerWindow(_selectedSource.Source.Title, BuildFilterSummary(),
+                _selectedSource.Source.Columns, VisibleRows(), _activeSheetTemplate ?? CreateSheetTemplateFromGrid(), templateName)
+            {
+                Owner = this
+            };
+            if (designer.ShowDialog() != true) return;
 
+            _activeSheetTemplate = designer.SheetTemplate;
+            if (designer.SaveRequested)
+            {
+                ViewNameBox.Text = designer.TemplateName;
+                await PersistViewAsync(designer.TemplateName, designer.SheetTemplate, "plantilla");
+                return;
+            }
+
+            var preview = new ReportPreviewWindow(_selectedSource.Source.Title, BuildFilterSummary(),
+                _selectedSource.Source.Columns, VisibleRows(), designer.SheetTemplate)
+            {
+                Owner = this
+            };
+            preview.ShowDialog();
+        }
+        catch (Exception exception)
+        {
+            var cause = exception.GetBaseException();
+            StatusText.Text = $"No se pudo abrir el diseñador de hojas ({cause.GetType().Name}): {cause.Message}";
+        }
+    }
+
+    private async Task PersistViewAsync(string name, ReportSheetTemplate? sheet, string itemName)
+    {
+        if (_selectedSource is null || _context.ReportApiClient is null) return;
+        var layout = sheet is null
+            ? CurrentGridLayout()
+            : sheet.Columns.Select(column => new ReportColumnLayout(column.ColumnId, column.Visible, column.DisplayOrder)).ToArray();
+        try
+        {
+            var saved = await _context.ReportApiClient.SaveReportViewAsync(_selectedSource.Source.Id,
+                new SavedReportViewDefinition(name, layout, CurrentFilters()) { Sheet = sheet });
+            StatusText.Text = $"La {itemName} '{saved.Name}' quedó guardada para tu usuario.";
+            await LoadSavedViewsAsync();
+            SavedViewsPicker.SelectedItem = _savedViews.FirstOrDefault(item => item.Id == saved.Id);
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"No se pudo guardar la {itemName}: {PosUserMessage.ForException(exception)}";
+        }
+    }
+
+    private IReadOnlyList<ReportColumnLayout> CurrentGridLayout()
+        => ReportGrid.Columns.Select(column => new ReportColumnLayout(_columnIds[column],
+            column.Visibility == Visibility.Visible, column.DisplayIndex)).OrderBy(item => item.DisplayOrder).ToArray();
+
+    private IReadOnlyDictionary<string, string> CurrentFilters()
+    {
+        var filters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (FromDate.SelectedDate is { } from) filters["from"] = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (ToDate.SelectedDate is { } to) filters["to"] = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (CurrencyPicker.SelectedItem is ComboBoxItem { Content: string selectedCurrency } && selectedCurrency != "Todas") filters["currency"] = selectedCurrency;
+        if (!string.IsNullOrWhiteSpace(SearchBox.Text)) filters["search"] = SearchBox.Text.Trim();
+        return filters;
+    }
+
+    private string BuildFilterSummary()
+    {
+        if (_selectedSource is null) return string.Empty;
         var filters = new List<string>();
         if (_selectedSource.Source.SupportsDateRange)
         {
@@ -307,24 +362,35 @@ public partial class ReportCenterWindow : Window
         if (CurrencyPicker.SelectedItem is ComboBoxItem { Content: string currency } && currency != "Todas")
             filters.Add($"Moneda: {currency}");
         if (!string.IsNullOrWhiteSpace(SearchBox.Text)) filters.Add($"Búsqueda: {SearchBox.Text.Trim()}");
+        return string.Join("   ·   ", filters);
+    }
 
-        try
+    private ReportSheetTemplate? SynchronizeSheetColumns(ReportSheetTemplate? sheet)
+    {
+        if (sheet is null || _selectedSource is null) return sheet;
+        var layouts = CurrentGridLayout().ToDictionary(item => item.ColumnId, StringComparer.Ordinal);
+        var columns = _selectedSource.Source.Columns.Select((definition, index) =>
         {
-            var preview = new ReportPreviewWindow(
-                _selectedSource.Source.Title,
-                string.Join("   ·   ", filters),
-                columns,
-                VisibleRows())
-            {
-                Owner = this
-            };
-            preview.ShowDialog();
-        }
-        catch (Exception exception)
+            var old = sheet.Columns.FirstOrDefault(item => item.ColumnId == definition.Id);
+            var layout = layouts.GetValueOrDefault(definition.Id);
+            return new ReportSheetColumn(definition.Id, old?.Header ?? definition.Header,
+                layout?.Visible ?? old?.Visible ?? definition.VisibleByDefault,
+                layout?.DisplayOrder ?? old?.DisplayOrder ?? index, old?.Width ?? 0);
+        }).ToArray();
+        return sheet with { Columns = columns };
+    }
+
+    private ReportSheetTemplate CreateSheetTemplateFromGrid()
+    {
+        if (_selectedSource is null) return new ReportSheetTemplate();
+        var selected = CurrentGridLayout().ToDictionary(item => item.ColumnId, StringComparer.Ordinal);
+        return new ReportSheetTemplate
         {
-            var cause = exception.GetBaseException();
-            StatusText.Text = $"No se pudo preparar la vista de hoja ({cause.GetType().Name}): {cause.Message}";
-        }
+            Title = _selectedSource.Source.Title,
+            Columns = _selectedSource.Source.Columns.Select((column, index) => new ReportSheetColumn(column.Id,
+                column.Header, selected.GetValueOrDefault(column.Id)?.Visible ?? column.VisibleByDefault,
+                selected.GetValueOrDefault(column.Id)?.DisplayOrder ?? index)).ToArray()
+        };
     }
 
     private IReadOnlyList<PosDesktopReportColumn> VisibleColumns()

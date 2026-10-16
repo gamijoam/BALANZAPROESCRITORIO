@@ -421,6 +421,9 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasMaxLength(96)
                         .HasColumnType("character varying(96)");
 
+                    b.Property<string>("SheetJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 

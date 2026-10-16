@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Pos.Shared.Contracts;
 
 namespace Pos.Application.Reporting;
@@ -25,6 +26,31 @@ public static partial class ReportViewPolicy
                 string.IsNullOrWhiteSpace(item.Key) || item.Key.Length > 64 || item.Key.Any(char.IsControl) ||
                 item.Value is null || item.Value.Length > 256 || item.Value.Any(char.IsControl)))
             return "Los filtros guardados superan el límite permitido o contienen datos inválidos.";
+        if (view.Sheet is { } sheet && !IsValidSheet(sheet))
+            return "El diseño de la hoja contiene opciones inválidas o supera los límites permitidos.";
         return null;
+    }
+
+    private static bool IsValidSheet(ReportSheetTemplate sheet)
+    {
+        if (sheet.Version != 1 || string.IsNullOrWhiteSpace(sheet.CommerceName) || sheet.CommerceName.Length > 120 ||
+            sheet.CommerceName.Any(char.IsControl) || string.IsNullOrWhiteSpace(sheet.Title) || sheet.Title.Length > 120 ||
+            sheet.Title.Any(char.IsControl) || sheet.Subtitle?.Length > 250 || sheet.Subtitle?.Any(char.IsControl) == true ||
+            sheet.FooterText?.Length > 300 || sheet.FooterText?.Any(char.IsControl) == true ||
+            sheet.Columns is null || sheet.Columns.Count > 100 || sheet.SumColumnIds is null || sheet.SumColumnIds.Count > 40 ||
+            sheet.Accent is not ("blue" or "green" or "charcoal") ||
+            sheet.PageSize is not ("letter" or "legal" or "a4") ||
+            sheet.Orientation is not ("landscape" or "portrait")) return false;
+
+        if (sheet.Columns.Any(column => string.IsNullOrWhiteSpace(column.ColumnId) || column.ColumnId.Length > 96 ||
+                column.ColumnId.Any(char.IsControl) || string.IsNullOrWhiteSpace(column.Header) || column.Header.Length > 96 ||
+                column.Header.Any(char.IsControl) || column.DisplayOrder < 0 || column.Width is < 0 or > 1200) ||
+            sheet.Columns.Select(column => column.ColumnId).Distinct(StringComparer.Ordinal).Count() != sheet.Columns.Count ||
+            sheet.Columns.Select(column => column.DisplayOrder).Distinct().Count() != sheet.Columns.Count ||
+            sheet.SumColumnIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 96 || id.Any(char.IsControl)) ||
+            sheet.SumColumnIds.Distinct(StringComparer.Ordinal).Count() != sheet.SumColumnIds.Count ||
+            sheet.GroupByColumnId is { } groupId && (groupId.Length > 96 || groupId.Any(char.IsControl))) return false;
+
+        return JsonSerializer.SerializeToUtf8Bytes(sheet).Length <= 64 * 1024;
     }
 }

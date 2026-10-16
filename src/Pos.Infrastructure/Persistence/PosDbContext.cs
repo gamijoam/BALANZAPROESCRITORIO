@@ -191,6 +191,7 @@ public sealed class PosDbContext(DbContextOptions<PosDbContext> options) : DbCon
             e.ToTable("operator_report_views"); e.HasKey(x => x.Id);
             e.Property(x => x.ReportId).HasMaxLength(96).IsRequired(); e.Property(x => x.Name).HasMaxLength(80).IsRequired();
             e.Property(x => x.ColumnsJson).HasColumnType("jsonb").IsRequired(); e.Property(x => x.FiltersJson).HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.SheetJson).HasColumnType("jsonb");
             e.HasIndex(x => new { x.OperatorId, x.ReportId, x.Name }).IsUnique();
             e.HasOne<OperatorUserRecord>().WithMany().HasForeignKey(x => x.OperatorId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -259,7 +260,7 @@ public sealed class SaleReturnPaymentRecord { public Guid Id { get; set; } publi
 public sealed class ReturnIdempotencyRecord { public Guid Id { get; set; } public Guid TerminalId { get; set; } public string Key { get; set; } = ""; public string PayloadHash { get; set; } = ""; public Guid SaleReturnId { get; set; } public DateTime CreatedAtUtc { get; set; } }
 public sealed class PairedTerminalRecord { public Guid TerminalId { get; set; } public string CredentialHash { get; set; } = ""; public Guid PairedByOperatorId { get; set; } public DateTime PairedAtUtc { get; set; } public bool Active { get; set; } = true; }
 public sealed class TerminalClientVersionRecord { public Guid TerminalId { get; set; } public string? ClientVersion { get; set; } public DateTime LastReportedAtUtc { get; set; } }
-public sealed class OperatorReportViewRecord { public Guid Id { get; set; } public Guid OperatorId { get; set; } public string ReportId { get; set; } = ""; public string Name { get; set; } = ""; public string ColumnsJson { get; set; } = "[]"; public string FiltersJson { get; set; } = "{}"; public DateTime UpdatedAtUtc { get; set; } }
+public sealed class OperatorReportViewRecord { public Guid Id { get; set; } public Guid OperatorId { get; set; } public string ReportId { get; set; } = ""; public string Name { get; set; } = ""; public string ColumnsJson { get; set; } = "[]"; public string FiltersJson { get; set; } = "{}"; public string? SheetJson { get; set; } public DateTime UpdatedAtUtc { get; set; } }
 public sealed class PurchaseReceiptEffectRecord { public Guid ReceiptId { get; set; } public string PayloadHash { get; set; } = ""; public Guid ActorId { get; set; } public Guid TerminalId { get; set; } public DateTime AppliedAtUtc { get; set; } public DateTime? ReversedAtUtc { get; set; } public Guid? ReversedByActorId { get; set; } public Guid? ReversedByTerminalId { get; set; } }
 public sealed class PurchaseReceiptEffectLineRecord { public Guid ReceiptId { get; set; } public Guid ProductId { get; set; } public decimal Quantity { get; set; } public decimal PriorStockQuantity { get; set; } public decimal? PriorUnitCost { get; set; } public decimal? UnitCostAfter { get; set; } public decimal QuantityAfterReceipt { get; set; } public Guid? WarehouseId { get; set; } public Guid MovementId { get; set; } }
 public sealed class CartWorkspaceRecord

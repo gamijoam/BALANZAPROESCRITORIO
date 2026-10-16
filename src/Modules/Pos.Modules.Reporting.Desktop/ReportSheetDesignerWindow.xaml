@@ -1,0 +1,159 @@
+<Window x:Class="Pos.Modules.Reporting.Desktop.ReportSheetDesignerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Pos.Modules.Reporting.Desktop"
+        Title="Diseñar hoja del reporte" Width="1500" Height="920" MinWidth="1100" MinHeight="700"
+        WindowState="Maximized" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="White" BorderBrush="#D5DFEB" BorderThickness="1"
+                CornerRadius="6" Padding="12" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Text="DISEÑADOR DE HOJAS" Foreground="#173F78" FontSize="21" FontWeight="Bold"/>
+                    <TextBlock Text="Personaliza el formato y revisa los datos antes de imprimir." Foreground="#63758B" Margin="0,3,0,0"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Plantilla" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,7,0"/>
+                    <TextBox x:Name="TemplateNameBox" Width="200" Height="34" MaxLength="80" Padding="7" VerticalContentAlignment="Center"
+                             AutomationProperties.Name="Nombre de la plantilla"/>
+                    <Button Content="Guardar plantilla" Height="34" Padding="14,0" Margin="8,0,0,0"
+                            Click="SaveTemplate_Click" AutomationProperties.Name="Guardar plantilla de reporte"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="White" BorderBrush="#D5DFEB" BorderThickness="1"
+                    CornerRadius="6" Padding="12" Margin="0,0,10,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <TextBlock Text="FORMATO" Foreground="#173F78" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock Text="Nombre del comercio" FontWeight="SemiBold"/>
+                        <TextBox x:Name="CommerceNameBox" MaxLength="120" Margin="0,4,0,8" Padding="6" TextChanged="TemplateText_Changed"/>
+                        <TextBlock Text="Título" FontWeight="SemiBold"/>
+                        <TextBox x:Name="TitleBox" MaxLength="120" Margin="0,4,0,8" Padding="6" TextChanged="TemplateText_Changed"/>
+                        <TextBlock Text="Subtítulo" FontWeight="SemiBold"/>
+                        <TextBox x:Name="SubtitleBox" MaxLength="250" Margin="0,4,0,8" Padding="6" TextChanged="TemplateText_Changed"/>
+                        <CheckBox x:Name="ShowGeneratedAtCheck" Content="Mostrar fecha de generación" Margin="0,2,0,4"
+                                  Checked="TemplateOption_Changed" Unchecked="TemplateOption_Changed"/>
+                        <CheckBox x:Name="ShowFiltersCheck" Content="Mostrar filtros y período" Margin="0,2,0,8"
+                                  Checked="TemplateOption_Changed" Unchecked="TemplateOption_Changed"/>
+
+                        <TextBlock Text="Tamaño de papel" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="PageSizePicker" Height="30" Margin="0,4,0,8" SelectionChanged="TemplateOption_Changed">
+                            <ComboBoxItem Content="A4" Tag="a4"/>
+                            <ComboBoxItem Content="Carta" Tag="letter"/>
+                            <ComboBoxItem Content="Oficio" Tag="legal"/>
+                        </ComboBox>
+                        <TextBlock Text="Orientación" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="OrientationPicker" Height="30" Margin="0,4,0,8" SelectionChanged="TemplateOption_Changed">
+                            <ComboBoxItem Content="Horizontal" Tag="landscape"/>
+                            <ComboBoxItem Content="Vertical" Tag="portrait"/>
+                        </ComboBox>
+                        <TextBlock Text="Color de encabezados" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="AccentPicker" Height="30" Margin="0,4,0,10" SelectionChanged="TemplateOption_Changed">
+                            <ComboBoxItem Content="Azul BALANZAPRO" Tag="blue"/>
+                            <ComboBoxItem Content="Verde" Tag="green"/>
+                            <ComboBoxItem Content="Gris oscuro" Tag="charcoal"/>
+                        </ComboBox>
+
+                        <TextBlock Text="Agrupar por" Foreground="#173F78" FontWeight="Bold" Margin="0,4,0,4"/>
+                        <ComboBox x:Name="GroupByPicker" Height="30" Margin="0,0,0,8" SelectionChanged="TemplateOption_Changed"/>
+                        <TextBlock Text="Sumar columnas numéricas" Foreground="#173F78" FontWeight="Bold"/>
+                        <StackPanel x:Name="SumColumnsPanel" Margin="0,3,0,8"/>
+
+                        <TextBlock Text="COLUMNAS DE LA HOJA" Foreground="#173F78" FontWeight="Bold" Margin="0,5,0,5"/>
+                        <DataGrid x:Name="ColumnsEditor" Height="245" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  CanUserDeleteRows="False" CanUserReorderColumns="False" HeadersVisibility="Column"
+                                  SelectionMode="Single" RowHeaderWidth="0" CellEditEnding="ColumnsEditor_CellEditEnding"
+                                  AutomationProperties.Name="Columnas configurables del reporte">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Header="Usar" Binding="{Binding Visible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="48"/>
+                                <DataGridTextColumn Header="Título" Binding="{Binding Header, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                <DataGridTextColumn Header="Ancho" Binding="{Binding Width, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="58"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,10">
+                            <Button Content="Subir" Padding="10,4" Margin="0,0,5,0" Click="MoveColumnUp_Click"/>
+                            <Button Content="Bajar" Padding="10,4" Click="MoveColumnDown_Click"/>
+                        </StackPanel>
+                        <TextBlock Text="Nota al pie" FontWeight="SemiBold"/>
+                        <TextBox x:Name="FooterTextBox" MaxLength="300" Margin="0,4,0,4" Padding="6" Height="54"
+                                 AcceptsReturn="True" TextWrapping="Wrap" TextChanged="TemplateText_Changed"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Border Grid.Column="1" Background="White" BorderBrush="#D5DFEB" BorderThickness="1" CornerRadius="6" Padding="18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock x:Name="PreviewCommerceText" Text="BALANZAPRO" Foreground="#173F78" FontSize="13" FontWeight="Bold"/>
+                        <TextBlock x:Name="PreviewTitleText" Text="Reporte" Foreground="#173F78" FontSize="24" FontWeight="Bold" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="PreviewSubtitleText" Foreground="#52677F" FontSize="13" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="PreviewDetailsText" Foreground="#63758B" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        <Border x:Name="PreviewAccentBar" Height="4" Background="#173F78" Margin="0,10,0,0"/>
+                    </StackPanel>
+                    <DataGrid x:Name="SheetPreviewGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" CanUserReorderColumns="False" CanUserSortColumns="False"
+                              HeadersVisibility="Column" RowHeaderWidth="0" FontSize="12" RowHeight="29"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#D5DFEB"
+                              AlternatingRowBackground="#F4F7FA" Background="White" BorderThickness="0"
+                              AutomationProperties.Name="Vista editable del reporte">
+                        <DataGrid.Resources>
+                            <Style TargetType="DataGridColumnHeader">
+                                <Setter Property="Background" Value="#173F78"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="Padding" Value="9,7"/>
+                                <Setter Property="BorderBrush" Value="#FFFFFF"/>
+                            </Style>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="MinHeight" Value="29"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.GroupHeader}">
+                                        <Setter Property="Background" Value="#DCE8F6"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="Foreground" Value="#173F78"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.Subtotal}">
+                                        <Setter Property="Background" Value="#EAF0F7"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.GrandTotal}">
+                                        <Setter Property="Background" Value="#DCE8F6"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="Foreground" Value="#173F78"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.Resources>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <DockPanel Grid.Row="2" Margin="2,9,2,0">
+            <TextBlock x:Name="DesignerStatusText" Foreground="#52677F" VerticalAlignment="Center"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="Cancelar" Padding="16,7" Margin="0,0,8,0" Click="Cancel_Click"/>
+                <Button Content="Ver hoja para imprimir" Padding="16,7" Click="PrintPreview_Click"
+                        AutomationProperties.Name="Abrir vista final de impresión"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>
