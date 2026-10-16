@@ -47,7 +47,7 @@ El formato del primer corte es un sobre JSON con `schemaVersion`, `keyId`, `payl
 
 **Estado 16 de octubre de 2026:** primera implementación disponible en `Pos.Licensing.Vps`. Ubuntu 24.04 puede alojarla como servicio systemd o como contenedor Docker detrás de Traefik. El POS consulta al inicio y cada cuatro horas; ante fallos de red reintenta cada quince minutos. Las suscripciones se guardan en un archivo JSON atómico, fuera del repositorio, y la llave privada solo existe en el VPS. La respuesta se verifica localmente con el anillo de llaves públicas antes de reemplazar la licencia.
 
-El primer corte no integra cobros con una pasarela: un administrador registra el período pagado en el VPS mediante el endpoint administrativo. Tras ese registro, la renovación del POS es automática. Ver `docs/operacion/licencias-vps.md` para instalar, respaldar y operar el servicio. La renovación queda inactiva hasta configurar el dominio HTTPS y `Licensing__RenewalEndpoint` en el Windows Server.
+El primer corte no integra cobros con una pasarela: un administrador registra el período pagado en el VPS mediante el endpoint administrativo. Tras ese registro, la renovación del POS es automática. El paquete oficial trae por defecto el endpoint HTTPS de `licencias.balanzapro.com`; la pestaña de licencia muestra si la consulta está configurada y si el bloqueo está activado. Ver `docs/operacion/licencias-vps.md` para instalar, respaldar y operar el servicio.
 - Renovar automáticamente incluso si el POS está en cierre seguro.
 
 ### 32D — Recuperación offline
@@ -70,7 +70,7 @@ El primer corte no integra cobros con una pasarela: un administrador registra el
 
 ## Límite del primer corte
 
-La renovación requiere que el servicio VPS esté desplegado, su endpoint se publique por HTTPS y que el servidor POS local tenga la llave pública y la dirección configuradas. El cumplimiento de licencias permanece desactivado por defecto hasta instalar una licencia válida.
+La renovación requiere que el servicio VPS esté desplegado por HTTPS y que el servidor POS local tenga la llave pública. El paquete oficial configura su endpoint de renovación. El cumplimiento de licencias permanece desactivado por defecto hasta habilitarlo después de instalar una licencia válida.
 
 ## Configuración de instalación
 

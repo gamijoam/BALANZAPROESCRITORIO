@@ -139,7 +139,7 @@ app.MapGet("/health/ready", async (PosDbContext db, CancellationToken cancellati
         ? Results.Ok(new { status = "ready", database = "postgresql" })
         : Results.Problem("Database is unavailable.", statusCode: StatusCodes.Status503ServiceUnavailable));
 app.MapGet("/api/v1/license/status", async (HttpContext context, AuthenticationService auth,
-    PosLicenseManager licenses, CancellationToken cancellationToken) =>
+    PosLicenseManager licenses, IConfiguration configuration, CancellationToken cancellationToken) =>
 {
     var token = ReadBearerToken(context);
     if (token is null) return Results.Unauthorized();
@@ -147,7 +147,12 @@ app.MapGet("/api/v1/license/status", async (HttpContext context, AuthenticationS
     if (access is null) return Results.Unauthorized();
     if (await auth.GetRoleAsync(access.OperatorId, cancellationToken) != Pos.Domain.Identity.OperatorRole.Administrator)
         return Results.StatusCode(StatusCodes.Status403Forbidden);
-    return Results.Ok(licenses.GetStatus(DateTimeOffset.UtcNow));
+    var status = licenses.GetStatus(DateTimeOffset.UtcNow) with
+    {
+        RenewalConfigured = !string.IsNullOrWhiteSpace(configuration["Licensing:RenewalEndpoint"]),
+        EnforcementEnabled = configuration.GetValue<bool>("Licensing:Enforce")
+    };
+    return Results.Ok(status);
 });
 app.MapGet("/api/v1/license/notice", async (HttpContext context, AuthenticationService auth,
     PosLicenseManager licenses, CancellationToken cancellationToken) =>

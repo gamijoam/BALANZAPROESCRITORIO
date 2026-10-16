@@ -86,6 +86,13 @@ public partial class ManagementWindow : Window
             LicenseStatus.Text = license.Diagnostic ?? (license.State is "Active" or "Grace"
                 ? "La licencia está almacenada y validada localmente."
                 : "Importa una licencia emitida para este ID de instalación.");
+            var renewalStatus = license.RenewalConfigured
+                ? "Renovación automática al iniciar y cada 4 horas: configurada."
+                : "Renovación automática: sin configurar; este POS no recibirá suspensiones remotas.";
+            var enforcementStatus = license.EnforcementEnabled
+                ? "Bloqueo por licencia: activo."
+                : "Bloqueo por licencia: desactivado.";
+            LicenseConnectionText.Text = $"{renewalStatus} {enforcementStatus} Sin Internet, conserva la vigencia local y los dos días de gracia.";
             LicenseStateText.Foreground = license.State switch
             {
                 "Active" => System.Windows.Media.Brushes.DarkGreen,
