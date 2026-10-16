@@ -224,6 +224,15 @@ public partial class ReportCenterWindow : Window
         }).ToArray();
         ReportGrid.ItemsSource = filtered;
         ApplyVisibleResultCount();
+        UpdateSummary();
+    }
+
+    private void UpdateSummary()
+    {
+        if (_selectedSource is null || SummaryItems is null || SummaryPanel is null) return;
+        var summary = ReportSummaryProjection.Build(_selectedSource.Source.Id, VisibleRows());
+        SummaryItems.ItemsSource = summary;
+        SummaryPanel.Visibility = summary.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplySearchAndCurrency();
@@ -286,8 +295,11 @@ public partial class ReportCenterWindow : Window
                 : SavedViewsPicker.SelectedItem is SavedReportViewInfo savedView
                     ? savedView.Name
                     : $"Mi hoja - {_selectedSource.Source.Title}";
+            var currentRows = VisibleRows();
+            var summary = ReportSummaryProjection.Build(_selectedSource.Source.Id, currentRows);
             var designer = new ReportSheetDesignerWindow(_selectedSource.Source.Title, BuildFilterSummary(),
-                _selectedSource.Source.Columns, VisibleRows(), _activeSheetTemplate ?? CreateSheetTemplateFromGrid(), templateName)
+                _selectedSource.Source.Columns, currentRows, _activeSheetTemplate ?? CreateSheetTemplateFromGrid(), templateName,
+                summary)
             {
                 Owner = this
             };
@@ -302,7 +314,7 @@ public partial class ReportCenterWindow : Window
             }
 
             var preview = new ReportPreviewWindow(_selectedSource.Source.Title, BuildFilterSummary(),
-                _selectedSource.Source.Columns, VisibleRows(), designer.SheetTemplate)
+                _selectedSource.Source.Columns, currentRows, designer.SheetTemplate, summary)
             {
                 Owner = this
             };

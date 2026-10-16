@@ -8,7 +8,7 @@ Este módulo agrega un visor de reportes WPF al POS anfitrión. Usa los endpoint
 - **1.0.2:** elimina el panel lateral, da el ancho completo a la tabla y traslada las columnas visibles a un botón emergente junto a las vistas personales. Abre el visor maximizado. No requiere migraciones ni actualización del POS anfitrión.
 - **1.1.0:** agrega saldos y movimientos paginados de cuentas por cobrar, y cobros/reintegros agrupados por caja, método y moneda. Usa `ViewReports`, requiere Desktop API 1.4 y no agrega migraciones.
 - **1.2.0:** agrega una vista paginada tipo hoja que respeta filtros, filas, orden y columnas visibles, con papel Carta/Oficio/A4 y orientación horizontal/vertical; permite imprimirla o guardarla como PDF mediante Microsoft Print to PDF en Windows. También incorpora el reporte de precios y márgenes actuales por nivel, calculado con el costo vigente cuando está registrado. No requiere migraciones ni actualización del POS anfitrión.
-- **1.3.0:** incorpora un diseñador de hojas con encabezado, columnas configurables, agrupaciones, sumatorias, estilos del comercio y plantillas personales. Requiere Desktop API 1.5 y la migración `ReportSheetTemplates`; el guardado usa la base local del POS y funciona sin Internet.
+- **1.3.0:** incorpora resúmenes automáticos por categoría y un diseñador de hojas con encabezado, columnas configurables, agrupaciones, sumatorias, estilos del comercio y plantillas personales. Requiere Desktop API 1.5 y la migración `ReportSheetTemplates`; el guardado usa la base local del POS y funciona sin Internet.
 
 ## Publicar el paquete firmado
 
@@ -22,7 +22,7 @@ El runner de firma del VPS guarda la clave privada fuera de GitHub y del equipo 
 
 Antes de instalar la versión 1.3.0, actualiza el POS anfitrión a Desktop API 1.5 para que aplique la migración `ReportSheetTemplates`. Las plantillas se guardan junto a las vistas personales del operador. El visor y las fuentes de reportes requieren `Reports.View` (mapeado al permiso de operador `ViewReports`); el catálogo de inventario requiere `Reports.Inventory` (mapeado a `ViewInventory`). Las fuentes del módulo Almacenes siguen requiriendo `Warehouse.View` o `Warehouse.Transfer`.
 
-Los cambios visibles al operador y los pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.2.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.2.0.md).
+Los resúmenes, cambios visibles y pasos de actualización están en [`docs/manuales/REPORTES-AVANZADOS-1.3.0.md`](../../../docs/manuales/REPORTES-AVANZADOS-1.3.0.md).
 
 ## Cómo agregar una fuente de reporte
 
@@ -32,7 +32,7 @@ El visor muestra únicamente fuentes de módulos activos y permisos autorizados.
 
 ## Vistas personales
 
-Las vistas guardadas almacenan únicamente visibilidad/orden de columnas y filtros. El servidor las asocia al operador autenticado; los nombres y configuraciones se comparten entre sus terminales. No guardes consultas, SQL o datos de resultados en la definición.
+Las vistas guardadas almacenan filtros, columnas y el diseño opcional de la hoja. El servidor las asocia al operador autenticado; los nombres y configuraciones se comparten entre sus terminales. No guardes consultas, SQL o datos de resultados en la definición.
 
 ## Verificaciones
 

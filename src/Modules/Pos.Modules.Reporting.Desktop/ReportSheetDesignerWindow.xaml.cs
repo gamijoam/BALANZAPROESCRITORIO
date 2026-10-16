@@ -16,6 +16,7 @@ public partial class ReportSheetDesignerWindow : Window
     private readonly string _filterSummary;
     private readonly IReadOnlyList<PosDesktopReportColumn> _definitions;
     private readonly IReadOnlyList<IReadOnlyDictionary<string, object?>> _sourceRows;
+    private readonly IReadOnlyList<ReportSummaryMetric> _summaryMetrics;
     private readonly ObservableCollection<ReportSheetColumnEditorItem> _columnItems = [];
     private bool _ready;
 
@@ -23,12 +24,14 @@ public partial class ReportSheetDesignerWindow : Window
         IReadOnlyList<PosDesktopReportColumn> definitions,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         ReportSheetTemplate? template = null,
-        string? templateName = null)
+        string? templateName = null,
+        IReadOnlyList<ReportSummaryMetric>? summaryMetrics = null)
     {
         InitializeComponent();
         _filterSummary = filterSummary;
         _definitions = definitions;
         _sourceRows = rows;
+        _summaryMetrics = summaryMetrics ?? [];
 
         template ??= DefaultTemplate(reportTitle, definitions);
         TemplateNameBox.Text = templateName ?? $"Mi hoja - {reportTitle}";
@@ -38,6 +41,7 @@ public partial class ReportSheetDesignerWindow : Window
         FooterTextBox.Text = template.FooterText ?? string.Empty;
         ShowGeneratedAtCheck.IsChecked = template.ShowGeneratedAt;
         ShowFiltersCheck.IsChecked = template.ShowFilters;
+        ShowSummaryCheck.IsChecked = template.ShowSummary;
         SelectTag(PageSizePicker, template.PageSize);
         SelectTag(OrientationPicker, template.Orientation);
         SelectTag(AccentPicker, template.Accent);
@@ -139,6 +143,10 @@ public partial class ReportSheetDesignerWindow : Window
             template.ShowFilters && !string.IsNullOrWhiteSpace(_filterSummary) ? _filterSummary : null,
             $"{_sourceRows.Count:N0} filas"
         }.Where(value => value is not null));
+        PreviewSummaryItems.ItemsSource = _summaryMetrics;
+        PreviewSummaryItems.Visibility = template.ShowSummary && _summaryMetrics.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         var accent = AccentBrush(template.Accent);
         PreviewCommerceText.Foreground = accent;
@@ -200,6 +208,7 @@ public partial class ReportSheetDesignerWindow : Window
             Subtitle = NullIfBlank(SubtitleBox.Text),
             ShowGeneratedAt = ShowGeneratedAtCheck.IsChecked == true,
             ShowFilters = ShowFiltersCheck.IsChecked == true,
+            ShowSummary = ShowSummaryCheck.IsChecked == true,
             GroupByColumnId = NullIfBlank(selectedGroup?.Tag?.ToString()),
             SumColumnIds = sumColumns,
             Columns = _columnItems.Select(item => new ReportSheetColumn(item.ColumnId,

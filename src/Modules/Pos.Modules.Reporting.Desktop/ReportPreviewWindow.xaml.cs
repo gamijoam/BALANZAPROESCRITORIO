@@ -15,6 +15,7 @@ public partial class ReportPreviewWindow : Window
     private readonly IReadOnlyList<PosDesktopReportColumn> _definitions;
     private readonly IReadOnlyList<IReadOnlyDictionary<string, object?>> _rows;
     private readonly ReportSheetTemplate _template;
+    private readonly IReadOnlyList<ReportSummaryMetric> _summaryMetrics;
     private bool _uiReady;
 
     public ReportPreviewWindow(
@@ -22,12 +23,14 @@ public partial class ReportPreviewWindow : Window
         string filterSummary,
         IReadOnlyList<PosDesktopReportColumn> columns,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
-        ReportSheetTemplate? template = null)
+        ReportSheetTemplate? template = null,
+        IReadOnlyList<ReportSummaryMetric>? summaryMetrics = null)
     {
         InitializeComponent();
         _filterSummary = filterSummary;
         _definitions = columns;
         _rows = rows;
+        _summaryMetrics = summaryMetrics ?? [];
         _template = template ?? new ReportSheetTemplate
         {
             Title = reportTitle,
@@ -78,7 +81,8 @@ public partial class ReportPreviewWindow : Window
     private void UpdateDocument()
     {
         var columns = ReportSheetProjection.VisibleColumns(_template, _definitions);
-        ReportDocumentViewer.Document = CreateDocument(_template, _filterSummary, columns, _rows, _definitions, SelectedPageSize());
+        ReportDocumentViewer.Document = CreateDocument(_template, _filterSummary, columns, _rows, _definitions,
+            _summaryMetrics, SelectedPageSize());
         ReportTitleText.Text = _template.Title;
         ReportCommerceText.Text = _template.CommerceName;
         ReportDetailsText.Text = BuildDetails();
@@ -115,6 +119,7 @@ public partial class ReportPreviewWindow : Window
         IReadOnlyList<PosDesktopReportColumn> columns,
         IReadOnlyList<IReadOnlyDictionary<string, object?>> sourceRows,
         IReadOnlyList<PosDesktopReportColumn> allDefinitions,
+        IReadOnlyList<ReportSummaryMetric> summaryMetrics,
         Size pageSize)
     {
         var pagePadding = new Thickness(34);
@@ -159,6 +164,66 @@ public partial class ReportPreviewWindow : Window
             Padding = new Thickness(0, 0, 0, 8),
             Margin = new Thickness(0, 0, 0, 10)
         });
+
+        if (template.ShowSummary && summaryMetrics.Count > 0)
+        {
+            document.Blocks.Add(new Paragraph(new Run("RESUMEN"))
+            {
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = accent,
+                Margin = new Thickness(0, 0, 0, 5)
+            });
+            var summaryTable = new Table
+            {
+                CellSpacing = 5,
+                BorderThickness = new Thickness(0)
+            };
+            for (var columnIndex = 0; columnIndex < 3; columnIndex++)
+                summaryTable.Columns.Add(new TableColumn { Width = new GridLength(1, GridUnitType.Star) });
+
+            var summaryRows = new TableRowGroup();
+            foreach (var metricRow in summaryMetrics.Chunk(3))
+            {
+                var row = new TableRow();
+                foreach (var metric in metricRow)
+                {
+                    var paragraph = new Paragraph
+                    {
+                        Margin = new Thickness(0),
+                        FontSize = 8,
+                        Foreground = new SolidColorBrush(Color.FromRgb(82, 103, 127))
+                    };
+                    paragraph.Inlines.Add(new Run(metric.Label) { FontWeight = FontWeights.SemiBold });
+                    paragraph.Inlines.Add(new LineBreak());
+                    paragraph.Inlines.Add(new Run(metric.Value)
+                    {
+                        FontSize = 14,
+                        FontWeight = FontWeights.Bold,
+                        Foreground = accent
+                    });
+                    paragraph.Inlines.Add(new LineBreak());
+                    if (!string.IsNullOrWhiteSpace(metric.Detail))
+                        paragraph.Inlines.Add(new Run(metric.Detail) { FontSize = 7 });
+                    row.Cells.Add(new TableCell(paragraph)
+                    {
+                        Background = LightAccentBrush(template.Accent),
+                        BorderBrush = new SolidColorBrush(Color.FromRgb(213, 223, 235)),
+                        BorderThickness = new Thickness(0.5),
+                        Padding = new Thickness(7, 6, 7, 6)
+                    });
+                }
+                for (var blankCount = metricRow.Length; blankCount < 3; blankCount++)
+                    row.Cells.Add(new TableCell(new Paragraph(new Run(" ")) { Margin = new Thickness(0) })
+                    {
+                        BorderThickness = new Thickness(0)
+                    });
+                summaryRows.Rows.Add(row);
+            }
+            summaryTable.RowGroups.Add(summaryRows);
+            document.Blocks.Add(summaryTable);
+            document.Blocks.Add(new Paragraph { Margin = new Thickness(0, 0, 0, 9) });
+        }
 
         if (columns.Count == 0)
         {
@@ -282,6 +347,13 @@ public partial class ReportPreviewWindow : Window
         "charcoal" => new SolidColorBrush(Color.FromRgb(57, 66, 78)),
         _ => new SolidColorBrush(Color.FromRgb(23, 63, 120))
     };
+
+    private static Brush LightAccentBrush(string accent)
+    {
+        var color = ((SolidColorBrush)AccentBrush(accent)).Color;
+        static byte Blend(byte component) => (byte)Math.Round(component * 0.1 + 255 * 0.9);
+        return new SolidColorBrush(Color.FromRgb(Blend(color.R), Blend(color.G), Blend(color.B)));
+    }
 
     private static void SelectTag(ComboBox picker, string tag)
         => picker.SelectedItem = picker.Items.OfType<ComboBoxItem>()
