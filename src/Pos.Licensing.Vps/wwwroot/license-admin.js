@@ -232,15 +232,16 @@
   document.querySelector("#login-form").addEventListener("submit", async event => {
     event.preventDefault();
     loginError.textContent = "";
-    const form = new FormData(event.currentTarget);
-    const buttonControl = event.currentTarget.querySelector("button");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const buttonControl = formElement.querySelector("button");
     buttonControl.disabled = true;
     try {
       const response = await request("/admin/api/session", {
         method: "POST",
         body: { username: form.get("username"), password: form.get("password"), totpCode: form.get("totpCode") },
       });
-      event.currentTarget.reset();
+      formElement.reset();
       showDashboard(form.get("username"), response.csrfToken);
       await loadAll();
     } catch (error) {
@@ -258,8 +259,9 @@
 
   document.querySelector("#create-form").addEventListener("submit", async event => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const buttonControl = event.currentTarget.querySelector("button");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const buttonControl = formElement.querySelector("button");
     buttonControl.disabled = true;
     try {
       const entitlements = [...new Set(String(form.get("entitlements")).split(",").map(value => value.trim()).filter(Boolean))];
@@ -277,7 +279,7 @@
       });
       downloadBase64(`${created.licenseId}.poslic`, created.documentBase64);
       setMessage(`Suscripción ${created.licenseId} creada. Importa este archivo .poslic una vez en el POS.`, "success");
-      event.currentTarget.reset();
+      formElement.reset();
       await loadAll();
     } catch (error) { showError(error); }
     finally { buttonControl.disabled = false; }
@@ -285,9 +287,10 @@
 
   document.querySelector("#recovery-form").addEventListener("submit", async event => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const file = form.get("requestFile");
-    const buttonControl = event.currentTarget.querySelector("button");
+    const buttonControl = formElement.querySelector("button");
     if (!file || file.size <= 0 || file.size > 16 * 1024) {
       showError(new Error("El archivo .posreq está vacío o supera 16 KiB."));
       return;
@@ -302,7 +305,7 @@
       });
       downloadBase64(`${result.requestId}.posunlock`, result.documentBase64);
       setMessage(`Desbloqueo temporal firmado hasta ${formatDate(result.expiresAtUtc)}. Cópialo a esa PC e impórtalo; no puede prolongarse con el mismo archivo.`, "success");
-      event.currentTarget.reset();
+      formElement.reset();
       await loadAudit();
     } catch (error) { showError(error); }
     finally { buttonControl.disabled = false; }
