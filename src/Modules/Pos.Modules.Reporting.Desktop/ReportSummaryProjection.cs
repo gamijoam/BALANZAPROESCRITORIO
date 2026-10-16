@@ -23,6 +23,7 @@ internal static class ReportSummaryProjection
             "reports.cash.sessions" => CashSessions(data),
             "reports.cash.methods" => CashMethods(data),
             "reports.inventory.products" => Inventory(data, "existencia", "precio", "sku"),
+            "reports.inventory.valuation" => InventoryValuation(data),
             "warehouses.stock" => Inventory(data, "existencia", "precio", "sku"),
             "reports.inventory.price-margins" => PriceMargins(data),
             "reports.inventory.movements" => InventoryMovements(data),
@@ -190,6 +191,22 @@ internal static class ReportSummaryProjection
             result.Add(new($"Margen {group.Key.Tier} {group.Key.Currency}", Percent(weightedMargin),
                 $"Promedio ponderado por precio · {Count(group.Count())} productos"));
         }
+        return result;
+    }
+
+    private static IReadOnlyList<ReportSummaryMetric> InventoryValuation(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var stocked = rows.Where(row => Number(row, "existencia") > 0m).ToArray();
+        var valued = stocked.Where(row => TryNumber(row, "valor_costo", out _)).ToArray();
+        var result = new List<ReportSummaryMetric>
+        {
+            new("Productos con existencia", Count(stocked.Length), "Productos activos o inactivos con unidades disponibles"),
+            new("Productos sin costo", Count(stocked.Count(row => !TryNumber(row, "valor_costo", out _))), "No se pueden incluir en la valoración"),
+            new("Unidades disponibles", Quantity(stocked.Sum(row => Number(row, "existencia"))), "Unidades físicas registradas en inventario")
+        };
+        foreach (var group in valued.GroupBy(Currency).OrderBy(group => group.Key, StringComparer.Ordinal))
+            result.Add(new($"Valor al costo {group.Key}", Money(group.Sum(row => Number(row, "valor_costo"))),
+                $"Costo unitario actual × existencia · {Count(group.Count())} productos con costo"));
         return result;
     }
 

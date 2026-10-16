@@ -54,6 +54,10 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
             LoadReceivableMovements, supportsDateRange: true));
         registry.RegisterReportSource(Source("reports.inventory.products", "Existencias por producto", "Reports.Inventory",
             [Text("sku", "Código"), Text("producto", "Producto"), Decimal("existencia", "Existencia"), Decimal("precio", "Precio"), Text("moneda", "Moneda")], LoadInventory));
+        registry.RegisterReportSource(Source("reports.inventory.valuation", "Valor del inventario al costo", "Reports.Inventory",
+            [Text("sku", "Código"), Text("producto", "Producto"), Text("estado_producto", "Estado"), Text("moneda", "Moneda"),
+             Decimal("existencia", "Existencia"), Decimal("costo_unitario", "Costo unitario actual"),
+             Decimal("valor_costo", "Valor al costo"), Text("estado_costo", "Estado del costo")], LoadInventoryValuation));
         registry.RegisterReportSource(Source("reports.inventory.price-margins", "Precios y márgenes actuales", "Reports.Inventory",
             [Text("sku", "Código"), Text("producto", "Producto"), Text("moneda", "Moneda"), Text("nivel", "Nivel de precio"),
              Text("estado", "Estado del cálculo"), Decimal("costo_unitario", "Costo unitario"), Decimal("precio", "Precio actual"),
@@ -237,6 +241,16 @@ public sealed class ReportingDesktopModule : IPosDesktopModule
         var products = await RequireReports(context).GetInventoryAsync(ct);
         return Rows(products.Select(item => Row(("sku", item.Sku), ("producto", item.Name), ("existencia", item.Quantity),
             ("precio", item.UnitPrice), ("moneda", item.Currency))));
+    }
+
+    private static async Task<PosDesktopReportResult> LoadInventoryValuation(PosDesktopModuleContext context,
+        PosDesktopReportQuery query, CancellationToken ct)
+    {
+        var products = await RequireReports(context).GetInventoryAsync(null, "all", "", "", null, ct);
+        return Rows(products.Select(item => Row(("producto_id", item.Id), ("sku", item.Sku), ("producto", item.Name),
+            ("estado_producto", item.Active ? "Activo" : "Inactivo"), ("moneda", item.Currency), ("existencia", item.Quantity),
+            ("costo_unitario", item.UnitCost), ("valor_costo", item.UnitCost.HasValue ? item.Quantity * item.UnitCost.Value : (decimal?)null),
+            ("estado_costo", item.UnitCost.HasValue ? "Costo disponible" : "Sin costo registrado"))));
     }
 
     private static async Task<PosDesktopReportResult> LoadProductPriceMargins(PosDesktopModuleContext context,
