@@ -23,6 +23,7 @@ public sealed record ReportSheetTemplate
     public string? Subtitle { get; init; }
     public bool ShowGeneratedAt { get; init; } = true;
     public bool ShowFilters { get; init; } = true;
+    public bool ShowSummary { get; init; } = true;
     public string? GroupByColumnId { get; init; }
     public IReadOnlyList<string> SumColumnIds { get; init; } = [];
     public IReadOnlyList<ReportSheetColumn> Columns { get; init; } = [];

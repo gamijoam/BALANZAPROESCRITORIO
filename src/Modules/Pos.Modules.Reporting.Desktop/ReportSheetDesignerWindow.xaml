@@ -49,6 +49,8 @@
                                   Checked="TemplateOption_Changed" Unchecked="TemplateOption_Changed"/>
                         <CheckBox x:Name="ShowFiltersCheck" Content="Mostrar filtros y período" Margin="0,2,0,8"
                                   Checked="TemplateOption_Changed" Unchecked="TemplateOption_Changed"/>
+                        <CheckBox x:Name="ShowSummaryCheck" Content="Mostrar resumen" Margin="0,2,0,8"
+                                  Checked="TemplateOption_Changed" Unchecked="TemplateOption_Changed"/>
 
                         <TextBlock Text="Tamaño de papel" FontWeight="SemiBold"/>
                         <ComboBox x:Name="PageSizePicker" Height="30" Margin="0,4,0,8" SelectionChanged="TemplateOption_Changed">
@@ -106,6 +108,23 @@
                         <TextBlock x:Name="PreviewTitleText" Text="Reporte" Foreground="#173F78" FontSize="24" FontWeight="Bold" Margin="0,3,0,0"/>
                         <TextBlock x:Name="PreviewSubtitleText" Foreground="#52677F" FontSize="13" Margin="0,3,0,0"/>
                         <TextBlock x:Name="PreviewDetailsText" Foreground="#63758B" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        <ItemsControl x:Name="PreviewSummaryItems" Margin="0,9,0,4" AutomationProperties.Name="Resumen personalizado del reporte">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="205" Background="#F4F7FA" BorderBrush="#D5DFEB" BorderThickness="1"
+                                            CornerRadius="4" Padding="9,6" Margin="0,0,7,6">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Label}" Foreground="#63758B" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Value}" Foreground="#173F78" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding Detail}" Foreground="#63758B" FontSize="9" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <Border x:Name="PreviewAccentBar" Height="4" Background="#173F78" Margin="0,10,0,0"/>
                     </StackPanel>
                     <DataGrid x:Name="SheetPreviewGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
