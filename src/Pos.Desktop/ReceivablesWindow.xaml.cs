@@ -12,6 +12,9 @@ public partial class ReceivablesWindow : Window
     public ReceivablesWindow(PosViewModel viewModel, CustomerInfo customer)
     {
         InitializeComponent();
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(1480, workArea.Width * 0.96);
+        MinWidth = Math.Min(1040, Width);
         _viewModel = viewModel;
         _customer = customer;
         CustomerTitle.Text = customer.Name;
