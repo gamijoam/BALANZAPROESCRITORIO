@@ -21,6 +21,7 @@ public partial class ManagementWindow : Window
     private int _salesDetailTotalCount;
     private string[] _modulePackagePaths = [];
     private ModuleInstallationPlanClientResult? _validatedModulePlan;
+    private Guid? _licenseInstallationId;
     private bool _managementReady;
     public ManagementWindow(PosViewModel viewModel, string initialSection = "Tasa",
         Func<CancellationToken, Task>? restartLocalServiceAsync = null)
@@ -73,7 +74,9 @@ public partial class ManagementWindow : Window
             LicenseEntitlementsText.Text = license.Entitlements.Count == 0
                 ? "Módulos autorizados: ninguno"
                 : $"Módulos autorizados: {string.Join(", ", license.Entitlements)}";
+            _licenseInstallationId = license.InstallationId;
             LicenseInstallationText.Text = $"ID de instalación: {license.InstallationId:D}";
+            CopyLicenseInstallationIdButton.IsEnabled = true;
             LicenseStatus.Text = license.Diagnostic ?? (license.State is "Active" or "Grace"
                 ? "La licencia está almacenada y validada localmente."
                 : "Importa una licencia emitida para este ID de instalación.");
@@ -93,6 +96,21 @@ public partial class ManagementWindow : Window
 
     private async void RefreshLicense_Click(object sender, RoutedEventArgs e)
         => await LoadLicenseStatusAsync();
+
+    private void CopyLicenseInstallationId_Click(object sender, RoutedEventArgs e)
+    {
+        if (_licenseInstallationId is not { } installationId) return;
+
+        try
+        {
+            Clipboard.SetText(installationId.ToString("D"));
+            LicenseStatus.Text = "ID de instalación copiado al portapapeles.";
+        }
+        catch (Exception exception)
+        {
+            LicenseStatus.Text = PosUserMessage.ForException(exception);
+        }
+    }
 
     private async void ImportLicense_Click(object sender, RoutedEventArgs e)
     {
