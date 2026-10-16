@@ -1,5 +1,5 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.CustomersWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Clientes y créditos" Width="1120" Height="680" MinWidth="980" MinHeight="580" WindowStartupLocation="CenterOwner" Background="#EEF2F7" PreviewKeyDown="Window_PreviewKeyDown">
+        Title="Clientes y créditos" Width="1280" Height="740" MinWidth="1120" MinHeight="640" WindowStartupLocation="CenterOwner" Background="#EEF2F7" PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="CustomerFooterButton" TargetType="Button">
             <Setter Property="Height" Value="40"/>

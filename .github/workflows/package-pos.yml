@@ -1,0 +1,91 @@
+name: Empaquetar POS para Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'pos-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Compilar y empaquetar win-x64
+    runs-on: windows-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publicar servidor, escritorio y actualizador
+        shell: pwsh
+        run: .\scripts\Publish-LocalPos.ps1
+
+      - name: Crear suma de comprobación del paquete de Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+        shell: pwsh
+        run: |
+          $archive = 'artifacts\local-pos-win-x64.zip'
+          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  local-pos-win-x64.zip" | Set-Content -LiteralPath 'artifacts\local-pos-win-x64.zip.sha256' -Encoding ascii
+
+      - name: Subir paquete descargable para probar
+        uses: actions/upload-artifact@v4
+        with:
+          name: BALANZAPRO-POS-win-x64-${{ github.sha }}
+          path: artifacts/local-pos/**
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preparar archivos de Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-release-files
+          path: |
+            artifacts/local-pos-win-x64.zip
+            artifacts/local-pos-win-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release:
+    name: Publicar Release versionada
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/pos-v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar el paquete de Release
+        uses: actions/download-artifact@v4
+        with:
+          name: pos-release-files
+          path: release
+
+      - name: Crear o actualizar el Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" \
+              release/local-pos-win-x64.zip \
+              release/local-pos-win-x64.zip.sha256 \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" \
+              release/local-pos-win-x64.zip \
+              release/local-pos-win-x64.zip.sha256 \
+              --verify-tag \
+              --title "BALANZAPRO POS $tag" \
+              --generate-notes \
+              --repo "$GITHUB_REPOSITORY"
+          fi
