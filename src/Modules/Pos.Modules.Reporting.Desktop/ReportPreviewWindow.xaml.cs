@@ -91,14 +91,15 @@ public partial class ReportPreviewWindow : Window
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
         Size pageSize)
     {
+        var pagePadding = new Thickness(34);
         var document = new FlowDocument
         {
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = 9,
             PageWidth = pageSize.Width,
             PageHeight = pageSize.Height,
-            PagePadding = new Thickness(34),
-            ColumnWidth = double.PositiveInfinity,
+            PagePadding = pagePadding,
+            ColumnWidth = Math.Max(1, pageSize.Width - pagePadding.Left - pagePadding.Right),
             Background = Brushes.White
         };
 
