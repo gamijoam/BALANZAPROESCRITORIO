@@ -32,7 +32,7 @@ internal static class PosDesktopModuleLoader
             throw new InvalidDataException("La identidad, versión o publicador del paquete no coincide con el módulo anunciado por el servidor.");
         if (manifest.DesktopEntryAssembly is null || manifest.DesktopEntryType is null || manifest.DesktopApi is null)
             throw new InvalidDataException("El paquete no declara un punto de entrada de escritorio.");
-        var hostApi = new Version(1, 4, 0);
+        var hostApi = new Version(1, 5, 0);
         if (!manifest.DesktopApi.Accepts(hostApi))
             throw new InvalidDataException($"El módulo requiere Desktop API {manifest.DesktopApi.Min}–{manifest.DesktopApi.MaxExclusive}; este POS ofrece {hostApi}.");
 

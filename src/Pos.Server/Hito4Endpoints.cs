@@ -775,6 +775,7 @@ internal static class Hito4Endpoints
             }
             row.ColumnsJson = JsonSerializer.Serialize(request.View.Columns);
             row.FiltersJson = JsonSerializer.Serialize(request.View.Filters);
+            row.SheetJson = request.View.Sheet is null ? null : JsonSerializer.Serialize(request.View.Sheet);
             row.UpdatedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToSavedReportView(row));
@@ -860,10 +861,13 @@ internal static class Hito4Endpoints
     };
 
     private static SavedReportViewInfo ToSavedReportView(OperatorReportViewRecord row)
-        => new(row.Id, row.ReportId, row.Name,
+        => new SavedReportViewInfo(row.Id, row.ReportId, row.Name,
             JsonSerializer.Deserialize<IReadOnlyList<ReportColumnLayout>>(row.ColumnsJson) ?? [],
             JsonSerializer.Deserialize<IReadOnlyDictionary<string, string>>(row.FiltersJson) ?? new Dictionary<string, string>(),
-            row.UpdatedAtUtc);
+            row.UpdatedAtUtc)
+        {
+            Sheet = row.SheetJson is null ? null : JsonSerializer.Deserialize<ReportSheetTemplate>(row.SheetJson)
+        };
 
     private static string ProductImageRoot()
     {

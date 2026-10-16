@@ -33,7 +33,7 @@
                 <ComboBox x:Name="CurrencyPicker" Width="105" Height="34" SelectedIndex="0" AutomationProperties.Name="Filtrar por moneda" SelectionChanged="CurrencyPicker_SelectionChanged">
                     <ComboBoxItem Content="Todas"/><ComboBoxItem Content="USD"/><ComboBoxItem Content="VES"/>
                 </ComboBox>
-                <TextBox x:Name="SearchBox" Width="190" Height="34" Padding="7" Margin="12,0,0,0" VerticalContentAlignment="Center"
+                <TextBox x:Name="SearchBox" Width="190" Height="34" MaxLength="256" Padding="7" Margin="12,0,0,0" VerticalContentAlignment="Center"
                          ToolTip="Buscar en los resultados cargados" AutomationProperties.Name="Buscar en el reporte" TextChanged="SearchBox_TextChanged"/>
                 <Button Content="Actualizar" Width="100" Height="34" Margin="8,0,0,0" Click="Refresh_Click" AutomationProperties.Name="Actualizar reporte"/>
                 <Button Content="CSV" Width="68" Height="34" Margin="8,0,0,0" Click="ExportCsv_Click" AutomationProperties.Name="Exportar CSV"/>
@@ -49,7 +49,7 @@
                 <Button Content="Guardar vista" Height="32" Margin="6,0,0,0" Padding="12,0" Click="SaveView_Click" AutomationProperties.Name="Guardar vista personal"/>
                 <Button x:Name="DeleteViewButton" Content="Eliminar" Height="32" Margin="6,0,0,0" Padding="12,0" Click="DeleteView_Click" IsEnabled="False" AutomationProperties.Name="Eliminar vista guardada"/>
                 <ToggleButton x:Name="ColumnPickerToggle" Content="Columnas" Height="32" Margin="12,0,0,0" Padding="12,0" Checked="ColumnPickerToggle_Changed" Unchecked="ColumnPickerToggle_Changed" AutomationProperties.Name="Elegir columnas visibles"/>
-                <Button Content="Vista de hoja" Height="32" Margin="6,0,0,0" Padding="12,0" Click="PreviewSheet_Click" ToolTip="Previsualizar e imprimir el reporte o guardarlo como PDF" AutomationProperties.Name="Vista de hoja e impresión"/>
+                <Button Content="Diseñar hoja" Height="32" Margin="6,0,0,0" Padding="12,0" Click="PreviewSheet_Click" ToolTip="Personalizar el formato, guardar una plantilla e imprimir" AutomationProperties.Name="Diseñar hoja del reporte"/>
                 <TextBlock Text="Puedes cambiar el orden arrastrando los encabezados." Foreground="#63758B" VerticalAlignment="Center" Margin="12,0,2,0"/>
             </DockPanel>
         </Border>
