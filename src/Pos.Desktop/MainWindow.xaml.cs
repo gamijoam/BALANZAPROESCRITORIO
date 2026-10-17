@@ -541,12 +541,22 @@ public partial class MainWindow : Window
         _viewModel.RemoveProduct(line);
     }
 
-    private void EditCartLine_Click(object sender, RoutedEventArgs e)
+    private async void EditCartLine_Click(object sender, RoutedEventArgs e)
     {
         if (!_viewModel.CanEditCart || (sender as FrameworkElement)?.DataContext is not CartLineViewModel line) return;
+        if (line.AvailableSaleUnits.Count <= 1)
+        {
+            try { await _viewModel.RefreshCartLineSaleUnitsAsync(line); }
+            catch (Exception ex) { _viewModel.SetStatus(PosUserMessage.ForException(ex)); }
+        }
         var dialog = new CartLineEditWindow(line) { Owner = this };
         if (dialog.ShowDialog() == true)
-            _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+        {
+            if (ReferenceEquals(dialog.SaleUnit, line.SaleUnit))
+                _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+            else
+                _viewModel.EditCartLine(line, dialog.SaleUnit, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+        }
         RefocusScanner();
     }
 

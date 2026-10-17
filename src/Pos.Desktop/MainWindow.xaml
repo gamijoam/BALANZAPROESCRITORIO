@@ -269,8 +269,8 @@
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Button Content="Editar" MinWidth="50" Height="30" Padding="3,2" Margin="0,0,3,0" Background="#2858A2" Foreground="White"
                                             IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            Click="EditCartLine_Click" AutomationProperties.Name="Elegir Precio 1, Precio 2 o Precio 3 para esta línea"
-                                            ToolTip="Cambiar el nivel de precio de este artículo."/>
+                                            Click="EditCartLine_Click" AutomationProperties.Name="Editar la presentación, cantidad o precio de esta línea"
+                                            ToolTip="Cambiar Unidad, Par, Cartón u otra forma de venta; también ajustar cantidad y precio."/>
                                     <Button Content="Quitar" MinWidth="56" Height="30" Padding="3,2" Background="#A52F3B" Foreground="White"
                                             IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                             Click="RemoveCartLine_Click" AutomationProperties.Name="Eliminar artículo de esta fila"
