@@ -75,7 +75,7 @@
                                     <TextBlock Text="Ajustar existencia" FontWeight="SemiBold" Foreground="#132D4F"/>
                                     <Grid Margin="0,6,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <StackPanel><TextBlock x:Name="StockAdjustmentAmountLabel" Text="Cantidad (+/−)" FontSize="11" FontWeight="SemiBold"/><TextBox x:Name="StockAdjustmentAmountBox" Text="1" Height="38" Padding="7" AutomationProperties.Name="Cantidad a sumar o descontar"/></StackPanel>
-                                        <StackPanel Grid.Column="1" Margin="8,0"><TextBlock Text="Motivo (opcional)" FontSize="11" FontWeight="SemiBold"/><TextBox x:Name="StockAdjustmentReasonBox" Height="38" Padding="7" AutomationProperties.Name="Motivo del ajuste de existencia"/></StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="8,0"><TextBlock Text="Motivo (opcional)" FontSize="11" FontWeight="SemiBold" ToolTip="Si lo dejas vacío, se guardará como “Ajuste manual de inventario”."/><TextBox x:Name="StockAdjustmentReasonBox" Height="38" Padding="7" AutomationProperties.Name="Motivo opcional del ajuste de existencia" ToolTip="Si lo dejas vacío, se guardará como “Ajuste manual de inventario”."/></StackPanel>
                                         <Button x:Name="ApplyStockAdjustmentButton" Grid.Column="2" Content="Aplicar" Height="38" Padding="14,4" Margin="4,18,0,0" Click="ApplyStockAdjustment_Click" Style="{StaticResource PosWindow.PrimaryButton}"/>
                                     </Grid>
                                 </StackPanel>

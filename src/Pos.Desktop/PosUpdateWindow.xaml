@@ -11,6 +11,7 @@
         <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#D2DEEC" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,12,0,0">
             <StackPanel>
                 <TextBlock x:Name="StatusText" Text="Consulta las versiones disponibles o elige un archivo local." Foreground="#344B67" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                <ProgressBar x:Name="UpdateProgressBar" Height="18" Minimum="0" Maximum="100" Visibility="Collapsed" Margin="0,0,0,10" AutomationProperties.Name="Progreso de actualización del POS"/>
                 <WrapPanel HorizontalAlignment="Right">
                     <Button x:Name="CheckButton" Content="Buscar actualizaciones" Padding="14,8" Margin="0,0,8,0" Click="Check_Click"/>
                     <Button x:Name="LocalButton" Content="Elegir ZIP sin Internet" Padding="14,8" Margin="0,0,8,0" Click="Local_Click"/>

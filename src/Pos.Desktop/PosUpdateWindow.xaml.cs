@@ -81,14 +81,20 @@ public partial class PosUpdateWindow : Window
         try
         {
             Directory.CreateDirectory(work);
-            StatusText.Text = selected is null ? "Leyendo archivo local…" : "Descargando versión oficial…";
+            var progress = new Progress<UpdateDownloadProgress>(value => ShowTransferProgress(
+                selected is null ? "Copiando paquete local" : "Descargando actualización", value));
+            UpdateProgressBar.Visibility = Visibility.Visible;
+            UpdateProgressBar.IsIndeterminate = false;
+            UpdateProgressBar.Value = 0;
             if (selected is null)
             {
-                if (new FileInfo(_localArchive!).Length > 2L * 1024 * 1024 * 1024)
+                var localFile = new FileInfo(_localArchive!);
+                if (localFile.Length > 2L * 1024 * 1024 * 1024)
                     throw new InvalidDataException("El ZIP seleccionado supera el tamaño permitido.");
-                await Task.Run(() => File.Copy(_localArchive!, archivePath));
+                await CopyLocalArchiveAsync(_localArchive!, archivePath, localFile.Length, progress);
             }
-            else await UpdateReleaseCatalog.DownloadAsync(selected, archivePath, 2L * 1024 * 1024 * 1024);
+            else await UpdateReleaseCatalog.DownloadAsync(selected, archivePath, 2L * 1024 * 1024 * 1024, progress: progress);
+            UpdateProgressBar.IsIndeterminate = true;
             StatusText.Text = "Comprobando la firma y el contenido…";
             var keyPath = Path.Combine(_installationRoot, "trusted-publishers", "pos-publisher-vps-2026.pem");
             if (!File.Exists(keyPath)) throw new InvalidDataException("Esta instalación no contiene la clave pública de actualización. Instala primero un paquete reciente con Actualizar POS.cmd.");
@@ -96,6 +102,9 @@ public partial class PosUpdateWindow : Window
             var version = await Task.Run(() => PosUpdateArchiveVerifier.VerifyAndExtract(archivePath, key, extracted, selected?.Version));
             if (Version.Parse(version) <= _currentVersion)
                 throw new InvalidDataException("El paquete seleccionado no es más reciente que la versión instalada.");
+            UpdateProgressBar.IsIndeterminate = false;
+            UpdateProgressBar.Value = 100;
+            StatusText.Text = $"Versión {version} descargada y verificada. Preparando la instalación…";
             File.Delete(archivePath);
             var answer = MessageBox.Show(this,
                 $"La versión {version} está lista. El POS se cerrará, respaldará los datos en el servidor y se volverá a abrir al terminar. ¿Continuar?",
@@ -106,6 +115,7 @@ public partial class PosUpdateWindow : Window
         }
         catch (Exception ex)
         {
+            UpdateProgressBar.IsIndeterminate = false;
             StatusText.Text = $"No se pudo preparar la actualización: {ex.Message}";
         }
         finally
@@ -123,6 +133,36 @@ public partial class PosUpdateWindow : Window
         LocalButton.IsEnabled = !busy;
         InstallButton.IsEnabled = !busy && (_localArchive is not null || VersionsList.SelectedItem is UpdateRelease);
     }
+
+    private void ShowTransferProgress(string action, UpdateDownloadProgress progress)
+    {
+        if (progress.TotalBytes <= 0) return;
+        var percentage = Math.Clamp(progress.BytesReceived * 100d / progress.TotalBytes, 0d, 100d);
+        UpdateProgressBar.IsIndeterminate = false;
+        UpdateProgressBar.Value = percentage;
+        StatusText.Text = $"{action}: {percentage:0}% ({FormatBytes(progress.BytesReceived)} de {FormatBytes(progress.TotalBytes)}).";
+    }
+
+    private static async Task CopyLocalArchiveAsync(string source, string destination, long expectedBytes,
+        IProgress<UpdateDownloadProgress> progress, CancellationToken cancellationToken = default)
+    {
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, useAsync: true);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: true);
+        var buffer = new byte[1024 * 1024];
+        long total = 0;
+        int count;
+        while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            total += count;
+            if (total > 2L * 1024 * 1024 * 1024) throw new InvalidDataException("El ZIP seleccionado supera el tamaño permitido.");
+            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+            progress.Report(new UpdateDownloadProgress(total, expectedBytes));
+        }
+        if (total != expectedBytes) throw new InvalidDataException("La copia del ZIP local quedó incompleta.");
+    }
+
+    private static string FormatBytes(long bytes)
+        => bytes >= 1024L * 1024 * 1024 ? $"{bytes / 1024d / 1024d / 1024d:0.0} GB" : $"{bytes / 1024d / 1024d:0.0} MB";
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 

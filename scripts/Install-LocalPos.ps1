@@ -1,11 +1,24 @@
 [CmdletBinding()]
 param(
     [string]$PackageDirectory,
+    [string]$ProgressFile,
     [switch]$ScheduleDailyBackup,
     [ValidatePattern('^(?:[01]\d|2[0-3]):[0-5]\d$')][string]$BackupTime = '20:00'
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($ProgressFile)) {
+    $ProgressFile = $env:BALANZAPRO_POS_UPDATE_PROGRESS_FILE
+}
+function Set-PosUpdateProgress {
+    param([Parameter(Mandatory)][string]$Message)
+    if ([string]::IsNullOrWhiteSpace($ProgressFile)) { return }
+    $payload = [ordered]@{ state = 'installing'; message = $Message; updatedAtUtc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+    $temporary = "$ProgressFile.tmp"
+    [IO.File]::WriteAllText($temporary, $payload, [Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $ProgressFile -Force
+}
+Set-PosUpdateProgress 'Validando el paquete y la configuración del POS…'
 if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
     $scriptParent = Split-Path -Parent $PSScriptRoot
     if ((Test-Path (Join-Path $scriptParent 'server\Pos.Server.exe')) -and (Test-Path (Join-Path $scriptParent 'desktop\Pos.Desktop.exe'))) {
@@ -199,6 +212,7 @@ if ($installationMode -eq 'Server') {
     }
 }
 Assert-LocalPosDesktopClosed
+Set-PosUpdateProgress 'Preparando los archivos nuevos…'
 
 $installedServiceInfo = Get-CimInstance Win32_Service -Filter "Name='BalanzaProPosServer'" -ErrorAction SilentlyContinue
 if ($null -ne $installedServiceInfo) {
@@ -229,6 +243,7 @@ $stageScripts = Join-Path $stage 'scripts'
 if ($installationMode -ne 'ClientTerminal') {
     # Check PostgreSQL authentication and create the backup while the local service remains available.
     # If pg_dump cannot connect, the POS is left running and the native PostgreSQL reason is reported.
+    Set-PosUpdateProgress 'Creando un respaldo de la base de datos…'
     $backupScript = Join-Path $packageScripts 'Backup-LocalDatabase.ps1'
     & $backupScript -KeepLast 10
     $managedService = Get-Service -Name 'BalanzaProPosServer' -ErrorAction SilentlyContinue
@@ -263,6 +278,7 @@ if ($installationMode -ne 'ClientTerminal') {
     $oldPairing = $env:PosSecurity__RequireTerminalPairing
     $oldCertificatePath = $env:ASPNETCORE_Kestrel__Certificates__Default__Path
     $oldCertificatePassword = $env:ASPNETCORE_Kestrel__Certificates__Default__Password
+    Set-PosUpdateProgress 'Aplicando la actualización de la base de datos…'
     try {
         $env:ConnectionStrings__Pos = "Host=$($database.Host);Port=$($database.Port);Database=$($database.Database);Username=$($database.Username);Password=$($database.Password)"
         $env:ASPNETCORE_ENVIRONMENT = 'Production'
@@ -295,6 +311,7 @@ if ($installationMode -ne 'ClientTerminal') {
 }
 
 try {
+    Set-PosUpdateProgress 'Instalando los archivos actualizados…'
     Sync-PosInstallationFiles -Source $stage -Destination $target -BackupDirectory $previous
     Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 } catch {
@@ -308,6 +325,7 @@ $targetScripts = Join-Path $target 'scripts'
 
 $installedService = Get-Service -Name 'BalanzaProPosServer' -ErrorAction SilentlyContinue
 if ($installationMode -ne 'ClientTerminal' -and $null -ne $installedService) {
+    Set-PosUpdateProgress 'Configurando y reiniciando el servidor POS…'
     $serviceManager = Join-Path $targetScripts 'Manage-PosWindowsService.ps1'
     if (-not (Test-Path -LiteralPath $serviceManager -PathType Leaf)) {
         throw 'No se encontró la herramienta para actualizar la configuración protegida del servicio POS.'
@@ -333,6 +351,7 @@ if ($installationMode -ne 'ClientTerminal' -and $null -ne $installedService) {
     Write-Output 'El servicio POS está ejecutándose con la configuración de licencia actualizada.'
 }
 
+Set-PosUpdateProgress 'Actualizando los accesos directos…'
 $shell = New-Object -ComObject WScript.Shell
 $desktopExecutable = Join-Path $target 'desktop\Pos.Desktop.exe'
 $desktopLauncher = Join-Path $target 'Iniciar POS.cmd'
@@ -353,6 +372,7 @@ foreach ($shortcutPath in $shortcutPaths) {
 
 Write-Output "Punto de venta instalado para el usuario actual en '$target'. Usa el acceso directo 'Punto de venta' para abrirlo."
 Write-Output 'Para crear el primer usuario, ejecuta Initialize-LocalPosOperator.ps1 desde la carpeta scripts de la instalación.'
+Set-PosUpdateProgress 'Abriendo el punto de venta actualizado…'
 Start-Process -FilePath $desktopLauncher -WorkingDirectory $target
 Write-Output 'Actualización terminada. Se abrió la versión nueva; el servidor aplicará y verificará el esquema antes de mostrar el inicio de sesión.'
 if ($ScheduleDailyBackup) {
