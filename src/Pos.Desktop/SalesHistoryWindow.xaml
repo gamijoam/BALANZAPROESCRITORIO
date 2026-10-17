@@ -70,7 +70,7 @@
                     <DataGrid x:Name="PreviewLinesGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" RowHeaderWidth="0" HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Código" Binding="{Binding Sku}" Width="150"/>
-                            <DataGridTextColumn Header="Artículo" Binding="{Binding Description}" Width="*" MinWidth="180"/>
+                            <DataGridTextColumn Header="Artículo" Binding="{Binding DisplayDescription}" Width="*" MinWidth="180"/>
                             <DataGridTextColumn Header="Cantidad" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="100"/>
                             <DataGridTextColumn Header="Devuelto" Binding="{Binding ReturnedQuantity, StringFormat={}{0:0.###}}" Width="100"/>
                             <DataGridTextColumn Header="Importe" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="130"/>

@@ -18,6 +18,37 @@ internal static class Hito4Endpoints
 {
     public static void MapHito4(this WebApplication app)
     {
+        app.MapGet("/api/v1/product-units", async (HttpContext context, PosDbContext db, AuthenticationService auth, CancellationToken ct) =>
+        {
+            if (await AuthorizedAsync(context, auth, Permission.ViewInventory, ct) is null) return PermissionFailure(context);
+            var units = await db.ProductUnits.AsNoTracking().Where(x => x.Active).OrderBy(x => x.Name)
+                .Select(x => new { x.Id, x.Name, x.Abbreviation, x.AllowsFractionalQuantities, x.IsSystem, x.Active }).ToListAsync(ct);
+            return Results.Ok(units);
+        });
+
+        app.MapPost("/api/v1/product-units", async (HttpContext context, PosDbContext db, AuthenticationService auth, CreateProductUnitRequest request, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
+            if (access is null) return PermissionFailure(context);
+            var name = (request.Name ?? string.Empty).Trim();
+            var abbreviation = (request.Abbreviation ?? string.Empty).Trim();
+            if (name.Length is < 2 or > 48 || abbreviation.Length is < 1 or > 12)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["unit"] = ["El nombre debe tener entre 2 y 48 caracteres y la abreviatura entre 1 y 12."] });
+            if (await db.ProductUnits.AnyAsync(x => x.Name.ToLower() == name.ToLower() || x.Abbreviation.ToLower() == abbreviation.ToLower(), ct))
+                return Results.Conflict(new { error = "product_unit_already_exists" });
+            var now = DateTime.UtcNow;
+            var unit = new ProductUnitRecord { Id = Guid.NewGuid(), Name = name, Abbreviation = abbreviation,
+                AllowsFractionalQuantities = request.AllowsFractionalQuantities, CreatedAtUtc = now };
+            db.ProductUnits.Add(unit);
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product_unit.created",
+                new { unit.Id, unit.Name, unit.Abbreviation, unit.AllowsFractionalQuantities }, now));
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            { return Results.Conflict(new { error = "product_unit_already_exists" }); }
+            return Results.Created($"/api/v1/product-units/{unit.Id}", new { unit.Id, unit.Name, unit.Abbreviation,
+                unit.AllowsFractionalQuantities, unit.IsSystem, unit.Active });
+        });
+
         app.MapPost("/api/v1/products", async (HttpContext context, PosDbContext db, AuthenticationService auth, CreateProductRequest request, CancellationToken ct) =>
         {
             var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
@@ -28,27 +59,37 @@ internal static class Hito4Endpoints
             try { taxTreatment = request.TaxTreatment is null ? Pos.Domain.Catalog.TaxTreatment.Unclassified : Pos.Domain.Catalog.TaxTreatment.FromCode(request.TaxTreatment); }
             catch (ArgumentException) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["taxTreatment"] = ["Selecciona un tratamiento fiscal válido."] }); }
             if (sku.Length is < 1 or > 64 || name.Length is < 2 or > 200 || currency is null || request.UnitPrice < 0m ||
-                decimal.Round(request.UnitPrice, 4) != request.UnitPrice || request.Price2 is < 0m || request.Price3 is < 0m ||
+                decimal.Round(request.UnitPrice, 4) != request.UnitPrice || request.Price2 is <= 0m || request.Price3 is <= 0m ||
                 request.Price2 is decimal price2 && decimal.Round(price2, 4) != price2 ||
                 request.Price3 is decimal price3 && decimal.Round(price3, 4) != price3 ||
                 request.InitialStock < 0m || decimal.Round(request.InitialStock, 3) != request.InitialStock ||
                 request.MinimumStock < 0m || decimal.Round(request.MinimumStock, 3) != request.MinimumStock)
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["SKU, name, currency, price or opening stock is invalid."] });
+            var baseUnitId = request.BaseUnitId ?? ProductUnitDefaults.Each;
+            var baseUnit = await db.ProductUnits.AsNoTracking().SingleOrDefaultAsync(x => x.Id == baseUnitId && x.Active, ct);
+            if (baseUnit is null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["baseUnitId"] = ["Selecciona una unidad base válida."] });
+            if (!baseUnit.AllowsFractionalQuantities &&
+                (decimal.Round(request.InitialStock, 0) != request.InitialStock || decimal.Round(request.MinimumStock, 0) != request.MinimumStock))
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["stock"] = ["La unidad base seleccionada solo permite existencias enteras."] });
             var id = Guid.NewGuid(); var now = DateTime.UtcNow;
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             db.Products.Add(new ProductRecord { Id = id, Sku = sku, Name = name, UnitPrice = request.UnitPrice,
                 Price2 = request.Price2, Price3 = request.Price3, MinimumStock = request.MinimumStock,
-                TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
+                BaseUnitId = baseUnitId, TaxTreatment = taxTreatment.Code, Currency = currency, CreatedAtUtc = now });
             db.Stocks.Add(new StockRecord { ProductId = id, Quantity = request.InitialStock });
             if (request.InitialStock > 0m)
                 db.StockMovements.Add(new StockMovementRecord { Id = Guid.NewGuid(), ProductId = id, QuantityDelta = request.InitialStock, Reason = "Existencia inicial", ActorId = access.OperatorId, TerminalId = access.TerminalId, OccurredAtUtc = now });
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.created", new { id, sku, name, request.UnitPrice,
-                request.Price2, request.Price3, request.MinimumStock, taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
+                request.Price2, request.Price3, request.MinimumStock, baseUnitId, baseUnit = baseUnit.Name,
+                taxTreatment = taxTreatment.Code, currency, request.InitialStock }, now));
             try { await db.SaveChangesAsync(ct); await WarehouseStockBridge.AddProductToWarehousesAsync(db, id, ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
             await tx.CommitAsync(ct);
             return Results.Created($"/api/v1/products/{id}", new { id, sku, name, request.UnitPrice, request.Price2, request.Price3,
+                baseUnitId, baseUnitName = baseUnit.Name, baseUnitAbbreviation = baseUnit.Abbreviation,
+                baseUnitAllowsFractional = baseUnit.AllowsFractionalQuantities,
                 request.MinimumStock, taxTreatment = taxTreatment.Code, currency, request.InitialStock, hasImage = false });
         });
 
@@ -83,19 +124,78 @@ internal static class Hito4Endpoints
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["product"] = ["El SKU debe tener entre 1 y 64 caracteres y el nombre entre 2 y 200."] });
             var product = await db.Products.SingleOrDefaultAsync(x => x.Id == productId, ct);
             if (product is null) return Results.NotFound();
+            if (request.MinimumStock.HasValue)
+            {
+                var baseUnit = await db.ProductUnits.AsNoTracking().SingleAsync(x => x.Id == product.BaseUnitId, ct);
+                if (!baseUnit.AllowsFractionalQuantities && decimal.Round(request.MinimumStock.Value, 0) != request.MinimumStock.Value)
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["minimumStock"] = ["El mínimo debe ser entero para esta unidad base."] });
+            }
+            if (request.BaseUnitId.HasValue && !await db.ProductUnits.AnyAsync(x => x.Id == request.BaseUnitId.Value && x.Active, ct))
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["baseUnitId"] = ["Selecciona una unidad base válida."] });
+            if (request.BaseUnitId.HasValue && request.BaseUnitId.Value != product.BaseUnitId)
+                return Results.Conflict(new { error = "product_base_unit_immutable", message = "La unidad base se define al crear el producto para conservar la integridad del inventario y las ventas históricas." });
             var oldSku = product.Sku;
             var oldName = product.Name;
             var oldMinimumStock = product.MinimumStock;
+            var oldBaseUnitId = product.BaseUnitId;
             product.Sku = sku;
             product.Name = name;
             if (request.MinimumStock.HasValue) product.MinimumStock = request.MinimumStock.Value;
+            if (request.BaseUnitId.HasValue) product.BaseUnitId = request.BaseUnitId.Value;
             var now = DateTime.UtcNow;
             db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.details_changed",
-                new { productId, oldSku, sku, oldName, name, oldMinimumStock, minimumStock = product.MinimumStock }, now));
+                new { productId, oldSku, sku, oldName, name, oldMinimumStock, minimumStock = product.MinimumStock, oldBaseUnitId, baseUnitId = product.BaseUnitId }, now));
             try { await db.SaveChangesAsync(ct); }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
             { return Results.Conflict(new { error = "sku_already_exists" }); }
             return Results.Ok(new { productId, product.Sku, product.Name, product.MinimumStock });
+        });
+
+        app.MapGet("/api/v1/products/{productId:guid}/details", async (Guid productId, HttpContext context, PosDbContext db,
+            AuthenticationService auth, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ViewInventory, ct);
+            if (access is null) return PermissionFailure(context);
+            var product = await db.Products.AsNoTracking().SingleOrDefaultAsync(x => x.Id == productId, ct);
+            if (product is null) return Results.NotFound();
+            var baseUnit = await db.ProductUnits.AsNoTracking().SingleAsync(x => x.Id == product.BaseUnitId, ct);
+            var presentationRows = await (from presentation in db.ProductPresentations.AsNoTracking()
+                join unit in db.ProductUnits.AsNoTracking() on presentation.UnitId equals unit.Id
+                where presentation.ProductId == productId
+                orderby presentation.Active descending, presentation.Label
+                select new { presentation.Id, presentation.UnitId, presentation.Label, UnitName = unit.Name,
+                    UnitAbbreviation = unit.Abbreviation, presentation.ConversionFactor, presentation.Price1, presentation.Price2,
+                    presentation.Price3, presentation.Barcode, AllowsFractionalQuantities = unit.AllowsFractionalQuantities,
+                    presentation.Active }).ToListAsync(ct);
+            var quantity = await db.Stocks.AsNoTracking().Where(x => x.ProductId == productId)
+                .Select(x => x.Quantity).SingleOrDefaultAsync(ct);
+            return Results.Ok(new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3,
+                product.Currency, Quantity = quantity, product.UnitCost, product.MinimumStock, product.TaxTreatment, product.Active,
+                HasImage = product.ImageFileName != null, BaseUnitId = baseUnit.Id, BaseUnitName = baseUnit.Name,
+                BaseUnitAbbreviation = baseUnit.Abbreviation, BaseUnitAllowsFractionalQuantities = baseUnit.AllowsFractionalQuantities,
+                Presentations = presentationRows });
+        });
+
+        app.MapPost("/api/v1/products/{productId:guid}/presentations", (Guid productId, HttpContext context, PosDbContext db,
+            AuthenticationService auth, ProductPresentationRequest request, CancellationToken ct)
+            => SavePresentationAsync(productId, null, context, db, auth, request, ct));
+        app.MapPut("/api/v1/products/{productId:guid}/presentations/{presentationId:guid}", (Guid productId, Guid presentationId,
+            HttpContext context, PosDbContext db, AuthenticationService auth, ProductPresentationRequest request, CancellationToken ct)
+            => SavePresentationAsync(productId, presentationId, context, db, auth, request, ct));
+        app.MapDelete("/api/v1/products/{productId:guid}/presentations/{presentationId:guid}", async (Guid productId, Guid presentationId,
+            HttpContext context, PosDbContext db, AuthenticationService auth, CancellationToken ct) =>
+        {
+            var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
+            if (access is null) return PermissionFailure(context);
+            var presentation = await db.ProductPresentations.SingleOrDefaultAsync(x => x.Id == presentationId && x.ProductId == productId, ct);
+            if (presentation is null) return Results.NotFound();
+            if (!presentation.Active) return Results.NoContent();
+            presentation.Active = false;
+            presentation.UpdatedAtUtc = DateTime.UtcNow;
+            db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId, "product.presentation_deactivated",
+                new { productId, presentationId, presentation.Label }, presentation.UpdatedAtUtc));
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
         });
 
         app.MapPost("/api/v1/products/{productId:guid}/image", async (Guid productId, HttpContext context, PosDbContext db,
@@ -674,6 +774,7 @@ internal static class Hito4Endpoints
                 lines = lines.Where(x => x.SaleId == s.Id).Select(x => new
                 {
                     x.Id, x.Sku, x.Description, x.Quantity, x.UnitPrice, x.LineTotal, x.OriginalCurrency, x.OriginalUnitPrice,
+                    x.PresentationName, x.ConversionFactor, x.InventoryQuantity,
                     x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount, x.UnitCost, x.CostCurrency, x.AppliedExchangeRate,
                     returnedQuantity = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Quantity),
                     returnedAmount = returnedLines.Where(r => r.SaleLineId == x.Id).Sum(r => r.Amount),
@@ -818,6 +919,54 @@ internal static class Hito4Endpoints
         });
     }
 
+    private static async Task<IResult> SavePresentationAsync(Guid productId, Guid? presentationId, HttpContext context,
+        PosDbContext db, AuthenticationService auth, ProductPresentationRequest request, CancellationToken ct)
+    {
+        var access = await AuthorizedAsync(context, auth, Permission.ManageCatalog, ct);
+        if (access is null) return PermissionFailure(context);
+        var product = await db.Products.SingleOrDefaultAsync(x => x.Id == productId, ct);
+        if (product is null) return Results.NotFound();
+        var label = (request.Label ?? string.Empty).Trim();
+        var barcode = string.IsNullOrWhiteSpace(request.Barcode) ? null : request.Barcode.Trim();
+        if (label.Length is < 2 or > 80 || request.ConversionFactor <= 0m || decimal.Round(request.ConversionFactor, 3) != request.ConversionFactor ||
+            !ValidPresentationPrice(request.Price1) || !ValidPresentationPrice(request.Price2) || !ValidPresentationPrice(request.Price3) ||
+            barcode?.Length > 80)
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["presentation"] = ["Revisa el nombre, factor, precios y código de barras de la presentación."] });
+        var unit = await db.ProductUnits.SingleOrDefaultAsync(x => x.Id == request.UnitId && x.Active, ct);
+        if (unit is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["unitId"] = ["Selecciona una unidad activa."] });
+        var baseUnit = await db.ProductUnits.AsNoTracking().SingleAsync(x => x.Id == product.BaseUnitId, ct);
+        if (!baseUnit.AllowsFractionalQuantities && decimal.Round(request.ConversionFactor, 0) != request.ConversionFactor)
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["conversionFactor"] = ["La unidad base no permite fracciones; usa un factor entero."] });
+        if (await db.ProductPresentations.AnyAsync(x => x.ProductId == productId && x.Id != presentationId && x.Label.ToLower() == label.ToLower(), ct))
+            return Results.Conflict(new { error = "product_presentation_label_already_exists" });
+        if (barcode is not null && await db.ProductPresentations.AnyAsync(x => x.Barcode == barcode && x.Id != presentationId, ct))
+            return Results.Conflict(new { error = "product_presentation_barcode_already_exists" });
+
+        var now = DateTime.UtcNow;
+        var row = presentationId.HasValue
+            ? await db.ProductPresentations.SingleOrDefaultAsync(x => x.Id == presentationId.Value && x.ProductId == productId, ct)
+            : null;
+        if (presentationId.HasValue && row is null) return Results.NotFound();
+        var previous = row is null ? null : new { row.UnitId, row.Label, row.ConversionFactor, row.Price1, row.Price2, row.Price3, row.Barcode, row.Active };
+        row ??= new ProductPresentationRecord { Id = Guid.NewGuid(), ProductId = productId, CreatedAtUtc = now };
+        row.UnitId = unit.Id; row.Label = label; row.ConversionFactor = request.ConversionFactor;
+        row.Price1 = request.Price1; row.Price2 = request.Price2; row.Price3 = request.Price3;
+        row.Barcode = barcode; row.Active = true; row.UpdatedAtUtc = now;
+        if (!presentationId.HasValue) db.ProductPresentations.Add(row);
+        db.AuditEvents.Add(Audit(access.OperatorId, access.TerminalId,
+            presentationId.HasValue ? "product.presentation_changed" : "product.presentation_created",
+            new { productId, previous, current = new { row.Id, row.UnitId, row.Label, row.ConversionFactor, row.Price1, row.Price2, row.Price3, row.Barcode, row.Active } }, now));
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        { return Results.Conflict(new { error = "product_presentation_conflict" }); }
+        return Results.Ok(new { row.Id, row.UnitId, row.Label, UnitName = unit.Name, UnitAbbreviation = unit.Abbreviation,
+            row.ConversionFactor, row.Price1, row.Price2, row.Price3, row.Barcode,
+            AllowsFractionalQuantities = unit.AllowsFractionalQuantities, row.Active });
+    }
+
+    private static bool ValidPresentationPrice(decimal? price)
+        => price is null || price > 0m && decimal.Round(price.Value, 4) == price.Value;
+
     private static async Task<AccessSessionRecord?> AuthorizedAsync(HttpContext context, AuthenticationService auth, Permission permission, CancellationToken ct)
     {
         var access = await GetAccessAsync(context, auth, ct);
@@ -896,8 +1045,11 @@ internal static class Hito4Endpoints
 }
 
 public sealed record CreateProductRequest(string? Sku, string? Name, decimal UnitPrice, string? Currency, decimal InitialStock,
-    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null, decimal MinimumStock = 0m);
-public sealed record UpdateProductRequest(string? Sku, string? Name, decimal? MinimumStock = null);
+    decimal? Price2 = null, decimal? Price3 = null, string? TaxTreatment = null, decimal MinimumStock = 0m, Guid? BaseUnitId = null);
+public sealed record UpdateProductRequest(string? Sku, string? Name, decimal? MinimumStock = null, Guid? BaseUnitId = null);
+public sealed record CreateProductUnitRequest(string? Name, string? Abbreviation, bool AllowsFractionalQuantities);
+public sealed record ProductPresentationRequest(Guid UnitId, string? Label, decimal ConversionFactor,
+    decimal? Price1 = null, decimal? Price2 = null, decimal? Price3 = null, string? Barcode = null);
 public sealed record ChangePriceRequest(decimal NewPrice, string? Reason, string? PriceTier = "Price1",
     decimal? ExpectedCurrentPrice = null, decimal? ExpectedUnitCost = null, bool ValidateSnapshot = false);
 public sealed record SetInitialInventoryCostRequest(decimal UnitCost, string? Reason);

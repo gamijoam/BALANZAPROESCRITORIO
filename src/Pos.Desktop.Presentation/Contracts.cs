@@ -6,6 +6,12 @@ namespace Pos.Desktop.Presentation;
 public sealed record ProductInfo(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage = false, decimal? StockQuantity = null,
     decimal? Price2 = null, decimal? Price3 = null, string TaxTreatment = "Unclassified", bool Active = true)
 {
+    public Guid BaseUnitId { get; init; }
+    public string BaseUnitName { get; init; } = "Unidad";
+    public string BaseUnitAbbreviation { get; init; } = "ud";
+    public bool BaseUnitAllowsFractional { get; init; } = true;
+    public Guid? SuggestedPresentationId { get; init; }
+    public IReadOnlyList<ProductSaleUnitInfo> SaleUnits { get; init; } = [];
     public string PriceLabel => $"{Currency} {UnitPrice:N2}";
     public bool IsTaxClassified => TaxTreatment is "Taxable16" or "Taxable8" or "Taxable0" or "Exempt";
     public string TaxTreatmentLabel => TaxTreatment switch
@@ -13,6 +19,28 @@ public sealed record ProductInfo(Guid Id, string Sku, string Name, decimal UnitP
         "Taxable16" => "Gravado 16 %", "Taxable8" => "Gravado 8 %", "Taxable0" => "Gravado 0 %", "Exempt" => "Exento", _ => "Pendiente de clasificar"
     };
 }
+public sealed record ProductUnitInfo(Guid Id, string Name, string Abbreviation, bool AllowsFractionalQuantities, bool IsSystem, bool Active)
+{
+    public string DisplayLabel => $"{Name} ({Abbreviation})";
+}
+public sealed record ProductPresentationInfo(Guid Id, Guid UnitId, string Label, string UnitName, string UnitAbbreviation,
+    decimal ConversionFactor, decimal? Price1, decimal? Price2, decimal? Price3, string? Barcode,
+    bool AllowsFractionalQuantities, bool Active = true)
+{
+    public string StatusLabel => Active ? "Activa" : "Inactiva";
+}
+public sealed record ProductSaleUnitInfo(Guid? PresentationId, Guid UnitId, string Label, string UnitName, string UnitAbbreviation,
+    decimal ConversionFactor, decimal? Price1, decimal? Price2, decimal? Price3, string? Barcode, bool AllowsFractionalQuantities)
+{
+    public string BaseUnitAbbreviation { get; init; } = "ud";
+    public string DisplayLabel => $"{Label} · descuenta {PosNumberFormat.FormatQuantity(ConversionFactor)} {BaseUnitAbbreviation}";
+}
+public sealed record ProductDetailsInfo(Guid Id, string Sku, string Name, decimal UnitPrice, decimal? Price2, decimal? Price3,
+    string Currency, decimal Quantity, decimal? UnitCost, decimal MinimumStock, string TaxTreatment, bool Active,
+    bool HasImage, Guid BaseUnitId, string BaseUnitName, string BaseUnitAbbreviation, bool BaseUnitAllowsFractionalQuantities,
+    IReadOnlyList<ProductPresentationInfo> Presentations);
+public sealed record ProductPresentationInput(Guid? Id, Guid UnitId, string Label, decimal ConversionFactor,
+    decimal? Price1, decimal? Price2, decimal? Price3, string? Barcode);
 public sealed record WarehouseClientInfo(Guid Id, string Code, string Name, bool IsActive, bool IsPrimary, decimal StockUnits);
 public sealed record WarehouseStockClientInfo(Guid ProductId, string Sku, string Name, decimal Quantity, decimal UnitPrice, string Currency);
 public sealed record WarehouseTransferClientInfo(Guid Id, string Status, Guid SourceWarehouseId, string Source, Guid DestinationWarehouseId, string Destination, DateTime CreatedAtUtc, long LineCount, decimal Quantity, decimal Variance)
@@ -97,6 +125,7 @@ public sealed record CashCloseInfo(decimal ExpectedBalance, decimal CountedBalan
 public sealed record CashMovementInput(decimal Amount, string Direction, string Reason, string Currency = "VES");
 public sealed record InventoryItemInfo(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, decimal Quantity, bool HasImage = false)
 {
+    public string QuantityLabel => $"{PosNumberFormat.FormatQuantity(Quantity)} {BaseUnitAbbreviation}";
     public string ImageStatusLabel => HasImage ? "Sí" : "No";
     public bool Active { get; init; } = true;
     public string ActiveStatusLabel => Active ? "Activo" : "Inactivo";
@@ -106,6 +135,10 @@ public sealed record InventoryItemInfo(Guid Id, string Sku, string Name, decimal
     public decimal MinimumStock { get; init; }
     public string UnitCostLabel => UnitCost.HasValue ? $"{Currency} {UnitCost.Value:N4}" : "Sin costo inicial";
     public string TaxTreatment { get; init; } = "Unclassified";
+    public Guid BaseUnitId { get; init; }
+    public string BaseUnitName { get; init; } = "Unidad";
+    public string BaseUnitAbbreviation { get; init; } = "ud";
+    public bool BaseUnitAllowsFractional { get; init; } = true;
     public string TaxTreatmentLabel => TaxTreatment switch
     {
         "Taxable16" => "Gravado 16 %", "Taxable8" => "Gravado 8 %", "Taxable0" => "Gravado 0 %", "Exempt" => "Exento", _ => "Pendiente de clasificar"
@@ -177,6 +210,12 @@ public sealed record SaleDetailRow(Guid Id, DateTime CreatedAtUtc, decimal Total
 public sealed record SaleDetailLine(string Sku, string Description, decimal Quantity, decimal UnitPrice, decimal LineTotal, string OriginalCurrency, decimal OriginalUnitPrice)
 {
     public Guid Id { get; init; }
+    public string PresentationName { get; init; } = "Unidad";
+    public decimal ConversionFactor { get; init; } = 1m;
+    public decimal InventoryQuantity { get; init; }
+    public string DisplayDescription => PresentationName is "" or "Unidad"
+        ? Description
+        : $"{Description} · {PresentationName} (x{PosNumberFormat.FormatQuantity(ConversionFactor)})";
     public string PriceTier { get; init; } = "Price1";
     public string TaxTreatment { get; init; } = "NotCaptured";
     public decimal TaxRate { get; init; }
@@ -254,7 +293,7 @@ public sealed record ReceivableInfo(Guid Id, string Name, string Currency, decim
     public decimal? BalanceVesEquivalent { get; init; }
     public decimal? CurrentUsdToVesRate { get; init; }
 }
-public sealed record SaleLineInput(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1");
+public sealed record SaleLineInput(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1", Guid? PresentationId = null);
 public sealed record SalePaymentInput(string Method, decimal Amount, string Currency);
 public sealed record SaleReceipt(Guid SaleId, DateTime IssuedAtUtc, string Currency, decimal Total, IReadOnlyList<ReceiptLine> Lines, IReadOnlyList<SalePaymentInput> Payments)
 {
@@ -264,6 +303,9 @@ public sealed record SaleReceipt(Guid SaleId, DateTime IssuedAtUtc, string Curre
 public sealed record ReceiptLine(string Sku, string Description, decimal Quantity, decimal UnitPrice, decimal Total, decimal OriginalUnitPrice, string OriginalCurrency, decimal? AppliedExchangeRate,
     string PriceTier = "Price1", string TaxTreatment = "NotCaptured", decimal TaxRate = 0m, decimal TaxAmount = 0m)
 {
+    public string PresentationName { get; init; } = "Unidad";
+    public decimal ConversionFactor { get; init; } = 1m;
+    public decimal InventoryQuantity { get; init; }
     public string TaxTreatmentLabel => TaxTreatment switch
     {
         "Taxable16" => "Gravado 16 %", "Taxable8" => "Gravado 8 %", "Taxable0" => "Gravado 0 %", "Exempt" => "Exento", _ => "Impuesto anterior no registrado"
@@ -353,11 +395,23 @@ public interface IPosApiClient : IPosModuleApiClient, IPosReportApiClient
         => GetInventoryAsync(cancellationToken);
     Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default);
     Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3, string taxTreatment,
-        string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
+        string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m, Guid? baseUnitId = null)
         => CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
+    Task<ProductDetailsInfo> GetProductDetailsAsync(Guid productId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta la ficha completa del producto.");
+    Task SaveProductDetailsAsync(Guid productId, string sku, string name, decimal minimumStock, Guid baseUnitId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no guarda la ficha del producto.");
+    Task<IReadOnlyList<ProductUnitInfo>> GetProductUnitsAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no consulta el catálogo de unidades.");
+    Task<ProductUnitInfo> CreateProductUnitAsync(string name, string abbreviation, bool allowsFractionalQuantities, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no crea unidades.");
+    Task<ProductPresentationInfo> SaveProductPresentationAsync(Guid productId, ProductPresentationInput presentation, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no guarda presentaciones de productos.");
+    Task DeactivateProductPresentationAsync(Guid productId, Guid presentationId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("El cliente no desactiva presentaciones de productos.");
     Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite clasificar el impuesto del producto.");
-    Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
+    Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null, Guid? baseUnitId = null)
         => throw new NotSupportedException("El cliente no permite editar productos.");
     Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
         => throw new NotSupportedException("El cliente no permite cambiar el estado del producto.");

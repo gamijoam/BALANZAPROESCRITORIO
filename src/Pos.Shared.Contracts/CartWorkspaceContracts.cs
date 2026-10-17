@@ -5,7 +5,8 @@ public sealed record CartWorkspaceLineInput(
     decimal Quantity,
     string PriceTier,
     decimal? UnitPriceOverride = null,
-    string? PriceOverrideReason = null);
+    string? PriceOverrideReason = null,
+    Guid? PresentationId = null);
 
 public sealed record CartWorkspaceSaveRequest(
     Guid? WorkspaceId,
@@ -34,7 +35,29 @@ public sealed record CartWorkspaceLineSnapshot(
     string CurrentCurrency,
     string CurrentTaxTreatment,
     string? CurrentSku = null,
-    string? CurrentName = null);
+    string? CurrentName = null,
+    Guid? PresentationId = null,
+    string PresentationName = "Unidad",
+    string PresentationUnitName = "Unidad",
+    string PresentationUnitAbbreviation = "ud",
+    Guid? PresentationUnitId = null,
+    decimal ConversionFactor = 1m,
+    decimal InventoryQuantity = 0m,
+    decimal CurrentSaleUnitPrice1 = 0m,
+    decimal? CurrentSaleUnitPrice2 = null,
+    decimal? CurrentSaleUnitPrice3 = null,
+    bool SaleUnitAllowsFractionalQuantities = true,
+    bool PresentationActive = true,
+    string CurrentPresentationName = "Unidad",
+    string CurrentPresentationUnitName = "Unidad",
+    string CurrentPresentationUnitAbbreviation = "ud",
+    Guid? CurrentPresentationUnitId = null,
+    decimal CurrentConversionFactor = 1m,
+    bool CurrentSaleUnitAllowsFractionalQuantities = true,
+    Guid? BaseUnitId = null,
+    string BaseUnitName = "Unidad",
+    string BaseUnitAbbreviation = "ud",
+    bool BaseUnitAllowsFractionalQuantities = true);
 
 public sealed record CartWorkspaceCustomerSnapshot(Guid Id, string Name, string? DocumentNumber,
     string? Phone, string Currency, decimal CreditLimit);

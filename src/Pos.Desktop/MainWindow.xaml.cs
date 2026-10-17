@@ -529,7 +529,7 @@ public partial class MainWindow : Window
         {
             var selection = new ProductSelectionWindow(_viewModel.SearchResults.ToArray(), query, id => _viewModel.GetProductImageAsync(id)) { Owner = this };
             if (selection.ShowDialog() == true && selection.SelectedProduct is not null)
-                _viewModel.AddProduct(selection.SelectedProduct);
+                _viewModel.AddProduct(selection.SelectedProduct, selection.SelectedSaleUnit);
         }
         SearchBox.Focus();
         SearchBox.SelectAll();

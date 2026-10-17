@@ -210,8 +210,9 @@ public sealed class CartWorkspaceService(PosDbContext db)
     {
         var savedLines = ReadLines(workspace.LinesJson);
         return workspace.CustomerId == customerId && savedLines.Count == requestedLines.Count &&
-            savedLines.OrderBy(x => x.ProductId).Zip(requestedLines.OrderBy(x => x.ProductId))
+            savedLines.OrderBy(x => x.ProductId).ThenBy(x => x.PresentationId).Zip(requestedLines.OrderBy(x => x.ProductId).ThenBy(x => x.PresentationId))
                 .All(pair => pair.First.ProductId == pair.Second.ProductId && pair.First.Quantity == pair.Second.Quantity &&
+                    pair.First.PresentationId == pair.Second.PresentationId &&
                     pair.First.PriceTier == pair.Second.PriceTier && pair.First.UnitPriceOverride == pair.Second.UnitPriceOverride &&
                     string.Equals(pair.First.PriceOverrideReason, pair.Second.PriceOverrideReason, StringComparison.Ordinal));
     }
@@ -219,16 +220,21 @@ public sealed class CartWorkspaceService(PosDbContext db)
     private async Task<List<CartWorkspaceLineSnapshot>> BuildLineSnapshotsAsync(IReadOnlyList<CartWorkspaceLineInput> inputs,
         string settlementCurrency, string currentJson, CancellationToken cancellationToken)
     {
-        var prior = ReadLines(currentJson).ToDictionary(x => x.ProductId);
-        var ids = inputs.Select(x => x.ProductId).ToArray();
+        var prior = ReadLines(currentJson).ToDictionary(x => (x.ProductId, x.PresentationId));
+        var ids = inputs.Select(x => x.ProductId).Distinct().ToArray();
         var products = await db.Products.AsNoTracking().Where(x => ids.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         var stocks = await db.Stocks.AsNoTracking().Where(x => ids.Contains(x.ProductId)).ToDictionaryAsync(x => x.ProductId, cancellationToken);
+        var presentationIds = inputs.Where(x => x.PresentationId.HasValue).Select(x => x.PresentationId!.Value).Distinct().ToArray();
+        var presentations = await db.ProductPresentations.AsNoTracking().Where(x => presentationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var unitIds = products.Values.Select(x => x.BaseUnitId).Concat(presentations.Values.Select(x => x.UnitId)).Distinct().ToArray();
+        var units = await db.ProductUnits.AsNoTracking().Where(x => unitIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         var rateRecord = await GetUsdToVesRateRecordAsync(cancellationToken);
         var rate = NormalizeUsdToVesRate(rateRecord);
         var result = new List<CartWorkspaceLineSnapshot>(inputs.Count);
         foreach (var line in inputs)
         {
-            prior.TryGetValue(line.ProductId, out var old);
+            prior.TryGetValue((line.ProductId, line.PresentationId), out var old);
             if (!products.TryGetValue(line.ProductId, out var product))
             {
                 if (old is null) throw new CartWorkspaceException("product_unavailable", HttpStatusCode.UnprocessableEntity);
@@ -237,13 +243,35 @@ public sealed class CartWorkspaceService(PosDbContext db)
                 continue;
             }
 
-            var listedPrice = line.PriceTier switch
+            var presentation = line.PresentationId.HasValue ? presentations.GetValueOrDefault(line.PresentationId.Value) : null;
+            if (line.PresentationId.HasValue && (presentation is null || presentation.ProductId != product.Id || !presentation.Active))
+                throw new CartWorkspaceException("product_presentation_unavailable", HttpStatusCode.UnprocessableEntity);
+            var unit = units.GetValueOrDefault(presentation?.UnitId ?? product.BaseUnitId)
+                ?? throw new CartWorkspaceException("product_unit_unavailable", HttpStatusCode.UnprocessableEntity);
+            var baseUnit = units.GetValueOrDefault(product.BaseUnitId)
+                ?? throw new CartWorkspaceException("product_unit_unavailable", HttpStatusCode.UnprocessableEntity);
+            if (!unit.AllowsFractionalQuantities && decimal.Round(line.Quantity, 0) != line.Quantity)
+                throw new CartWorkspaceException("fractional_quantity_not_allowed", HttpStatusCode.UnprocessableEntity);
+            var conversionFactor = presentation?.ConversionFactor ?? 1m;
+            var inventoryQuantity = line.Quantity * conversionFactor;
+            if (inventoryQuantity <= 0m || decimal.Round(inventoryQuantity, 3) != inventoryQuantity ||
+                !baseUnit.AllowsFractionalQuantities && decimal.Round(inventoryQuantity, 0) != inventoryQuantity)
+                throw new CartWorkspaceException("invalid_inventory_quantity", HttpStatusCode.UnprocessableEntity);
+            var baseTierPrice = line.PriceTier switch
             {
                 "Price1" => product.UnitPrice,
                 "Price2" => product.Price2,
                 "Price3" => product.Price3,
                 _ => null
             };
+            var presentationPrice = presentation is null ? null : line.PriceTier switch
+            {
+                "Price1" => presentation.Price1,
+                "Price2" => presentation.Price2,
+                "Price3" => presentation.Price3,
+                _ => null
+            };
+            var listedPrice = presentationPrice ?? (baseTierPrice.HasValue ? baseTierPrice.Value * conversionFactor : null);
             if (listedPrice is null && old is null) throw new CartWorkspaceException("price_tier_unconfigured", HttpStatusCode.UnprocessableEntity);
             var originalPrice = listedPrice ?? old!.SavedUnitPrice;
             decimal converted;
@@ -258,10 +286,18 @@ public sealed class CartWorkspaceService(PosDbContext db)
             var subtotal = decimal.Round(converted * line.Quantity, 2, MidpointRounding.AwayFromZero);
             var lineTotal = subtotal + decimal.Round(subtotal * taxRate, 2, MidpointRounding.AwayFromZero);
             var stock = stocks.GetValueOrDefault(product.Id)?.Quantity ?? 0m;
+            var salePrice1 = presentation?.Price1 ?? product.UnitPrice * conversionFactor;
+            var salePrice2 = presentation?.Price2 ?? (product.Price2.HasValue ? product.Price2.Value * conversionFactor : null);
+            var salePrice3 = presentation?.Price3 ?? (product.Price3.HasValue ? product.Price3.Value * conversionFactor : null);
+            var label = presentation?.Label ?? unit.Name;
             result.Add(new CartWorkspaceLineSnapshot(product.Id, old?.Sku ?? product.Sku, old?.Name ?? product.Name,
                 line.Quantity, line.PriceTier, line.UnitPriceOverride, line.PriceOverrideReason, converted, settlementCurrency,
                 taxRate, lineTotal, product.Active, stock, product.UnitPrice, product.Price2, product.Price3, product.Currency,
-                product.TaxTreatment, product.Sku, product.Name));
+                product.TaxTreatment, product.Sku, product.Name, line.PresentationId, label, unit.Name, unit.Abbreviation,
+                unit.Id, conversionFactor, inventoryQuantity, salePrice1, salePrice2, salePrice3,
+                unit.AllowsFractionalQuantities, presentation?.Active ?? true,
+                label, unit.Name, unit.Abbreviation, unit.Id, conversionFactor, unit.AllowsFractionalQuantities,
+                product.BaseUnitId, baseUnit.Name, baseUnit.Abbreviation, baseUnit.AllowsFractionalQuantities));
         }
         return result;
     }
@@ -272,11 +308,26 @@ public sealed class CartWorkspaceService(PosDbContext db)
         var ids = saved.Select(x => x.ProductId).Distinct().ToArray();
         var products = await db.Products.AsNoTracking().Where(x => ids.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         var stocks = await db.Stocks.AsNoTracking().Where(x => ids.Contains(x.ProductId)).ToDictionaryAsync(x => x.ProductId, cancellationToken);
+        var presentationIds = saved.Where(x => x.PresentationId.HasValue).Select(x => x.PresentationId!.Value).Distinct().ToArray();
+        var presentations = await db.ProductPresentations.AsNoTracking().Where(x => presentationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var unitIds = products.Values.Select(x => x.BaseUnitId).Concat(presentations.Values.Select(x => x.UnitId)).Distinct().ToArray();
+        var units = await db.ProductUnits.AsNoTracking().Where(x => unitIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         var lines = saved.Select(line =>
         {
             if (!products.TryGetValue(line.ProductId, out var product))
                 return line with { ProductActive = false, CurrentStock = 0m, CurrentPrice2 = null, CurrentPrice3 = null,
                     CurrentTaxTreatment = "Unclassified", CurrentSku = null, CurrentName = null };
+            var presentation = line.PresentationId.HasValue ? presentations.GetValueOrDefault(line.PresentationId.Value) : null;
+            var presentationActive = line.PresentationId is null || presentation?.Active == true;
+            var unitId = presentation?.UnitId ?? product.BaseUnitId;
+            var unit = units.GetValueOrDefault(unitId);
+            var baseUnit = units.GetValueOrDefault(product.BaseUnitId);
+            var factor = presentation?.ConversionFactor ?? (line.PresentationId is null ? 1m : line.ConversionFactor);
+            var salePrice1 = presentation?.Price1 ?? product.UnitPrice * factor;
+            var salePrice2 = presentation?.Price2 ?? (product.Price2.HasValue ? product.Price2.Value * factor : null);
+            var salePrice3 = presentation?.Price3 ?? (product.Price3.HasValue ? product.Price3.Value * factor : null);
+            var label = presentation?.Label ?? (line.PresentationId is null ? unit?.Name ?? line.PresentationName : line.PresentationName);
             return line with
             {
                 ProductActive = product.Active,
@@ -287,7 +338,21 @@ public sealed class CartWorkspaceService(PosDbContext db)
                 CurrentCurrency = product.Currency,
                 CurrentTaxTreatment = product.TaxTreatment,
                 CurrentSku = product.Sku,
-                CurrentName = product.Name
+                CurrentName = product.Name,
+                CurrentSaleUnitPrice1 = salePrice1,
+                CurrentSaleUnitPrice2 = salePrice2,
+                CurrentSaleUnitPrice3 = salePrice3,
+                PresentationActive = presentationActive,
+                CurrentPresentationName = label,
+                CurrentPresentationUnitName = unit?.Name ?? line.PresentationUnitName,
+                CurrentPresentationUnitAbbreviation = unit?.Abbreviation ?? line.PresentationUnitAbbreviation,
+                CurrentPresentationUnitId = unit?.Id ?? line.PresentationUnitId,
+                CurrentConversionFactor = factor,
+                CurrentSaleUnitAllowsFractionalQuantities = unit?.AllowsFractionalQuantities ?? line.SaleUnitAllowsFractionalQuantities,
+                BaseUnitId = baseUnit?.Id ?? line.BaseUnitId,
+                BaseUnitName = baseUnit?.Name ?? line.BaseUnitName,
+                BaseUnitAbbreviation = baseUnit?.Abbreviation ?? line.BaseUnitAbbreviation,
+                BaseUnitAllowsFractionalQuantities = baseUnit?.AllowsFractionalQuantities ?? line.BaseUnitAllowsFractionalQuantities
             };
         }).ToArray();
         var operatorName = await db.OperatorUsers.AsNoTracking().Where(x => x.Id == workspace.OperatorId)
@@ -305,10 +370,12 @@ public sealed class CartWorkspaceService(PosDbContext db)
             settlementCurrency,
             exchangeRateId = currentRateRecord?.Id,
             usdToVesRate = currentRate,
-            lines = lines.OrderBy(x => x.ProductId).Select(x => new
+            lines = lines.OrderBy(x => x.ProductId).ThenBy(x => x.PresentationId).Select(x => new
             {
                 x.ProductId, x.ProductActive, x.CurrentStock, x.CurrentPrice1, x.CurrentPrice2, x.CurrentPrice3,
-                x.CurrentCurrency, x.CurrentTaxTreatment
+                x.CurrentCurrency, x.CurrentTaxTreatment, x.PresentationActive, x.CurrentPresentationName,
+                x.CurrentConversionFactor, x.CurrentSaleUnitPrice1, x.CurrentSaleUnitPrice2, x.CurrentSaleUnitPrice3,
+                x.BaseUnitId, x.BaseUnitName, x.BaseUnitAbbreviation
             })
         }, JsonOptions));
         return new CartWorkspaceSnapshot(workspace.Id, workspace.Version, workspace.Status, workspace.CustomerId, workspace.Note,
@@ -350,7 +417,7 @@ public sealed class CartWorkspaceService(PosDbContext db)
         if (request is null || request.Lines is null || request.Lines.Count > 100 || request.Lines.Any(x => x is null))
             throw new CartWorkspaceException("invalid_workspace_shape", HttpStatusCode.BadRequest);
         ValidateMutation(request.MutationId);
-        if (request.ExpectedVersion < 0 || request.Lines.Select(x => x.ProductId).Distinct().Count() != request.Lines.Count)
+        if (request.ExpectedVersion < 0 || request.Lines.Select(x => (x.ProductId, x.PresentationId)).Distinct().Count() != request.Lines.Count)
             throw new CartWorkspaceException("invalid_workspace_lines", HttpStatusCode.BadRequest);
         foreach (var line in request.Lines)
         {

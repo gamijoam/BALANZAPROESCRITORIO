@@ -663,6 +663,11 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("BaseUnitId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValue(new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240001"));
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -716,7 +721,108 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasIndex("Sku")
                         .IsUnique();
 
+                    b.HasIndex("BaseUnitId");
+
                     b.ToTable("products", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ProductUnitRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Abbreviation")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<bool>("AllowsFractionalQuantities")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Abbreviation")
+                        .IsUnique();
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("product_units", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ProductPresentationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal>("ConversionFactor")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<decimal?>("Price1")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal?>("Price2")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal?>("Price3")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UnitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Barcode")
+                        .IsUnique()
+                        .HasFilter("\"Barcode\" IS NOT NULL");
+
+                    b.HasIndex("ProductId", "Label")
+                        .IsUnique();
+
+                    b.HasIndex("UnitId");
+
+                    b.ToTable("product_presentations", (string)null);
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectLineRecord", b =>
@@ -945,8 +1051,20 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<decimal>("ConversionFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasDefaultValue(1m);
+
                     b.Property<Guid?>("ExchangeRateId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("InventoryQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("LineTotal")
                         .HasPrecision(18, 4)
@@ -966,6 +1084,16 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasDefaultValue("Price1");
+
+                    b.Property<Guid?>("PresentationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PresentationName")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasDefaultValue("Unidad");
 
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
@@ -1008,6 +1136,8 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ExchangeRateId");
+
+                    b.HasIndex("PresentationId");
 
                     b.HasIndex("SaleId");
 
@@ -1368,6 +1498,30 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ProductRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.ProductUnitRecord", null)
+                        .WithMany()
+                        .HasForeignKey("BaseUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.ProductPresentationRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.ProductRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.ProductUnitRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.PurchaseReceiptEffectLineRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.PurchaseReceiptEffectRecord", null)
@@ -1405,6 +1559,11 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.HasOne("Pos.Infrastructure.Persistence.ExchangeRateRecord", null)
                         .WithMany()
                         .HasForeignKey("ExchangeRateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Pos.Infrastructure.Persistence.ProductPresentationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PresentationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Pos.Infrastructure.Persistence.SaleRecord", null)

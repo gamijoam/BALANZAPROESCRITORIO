@@ -54,9 +54,18 @@ public sealed class SalesService(PosDbContext db)
             ?? throw new CheckoutRejectedException("open_cash_session_required");
         var warehouseId = await WarehouseStockBridge.GetWarehouseForTerminalAsync(db, terminalId, cancellationToken);
         var ids = request.Lines.Select(x => x.ProductId).Distinct().ToArray();
-        if (ids.Length != request.Lines.Count) throw new CheckoutRejectedException("duplicate_product_line");
+        if (request.Lines.Select(x => (x.ProductId, x.PresentationId)).Distinct().Count() != request.Lines.Count)
+            throw new CheckoutRejectedException("duplicate_product_line");
         var products = await db.Products.Where(x => ids.Contains(x.Id) && x.Active).ToDictionaryAsync(x => x.Id, cancellationToken);
         if (products.Count != ids.Length) throw new CheckoutRejectedException("product_unavailable");
+        var presentationIds = request.Lines.Where(x => x.PresentationId.HasValue).Select(x => x.PresentationId!.Value).Distinct().ToArray();
+        var presentations = await db.ProductPresentations.Where(x => presentationIds.Contains(x.Id) && x.Active)
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        if (presentations.Count != presentationIds.Length || presentations.Values.Any(x => !ids.Contains(x.ProductId)))
+            throw new CheckoutRejectedException("product_presentation_unavailable");
+        var unitIds = products.Values.Select(x => x.BaseUnitId).Concat(presentations.Values.Select(x => x.UnitId)).Distinct().ToArray();
+        var units = await db.ProductUnits.Where(x => unitIds.Contains(x.Id) && x.Active).ToDictionaryAsync(x => x.Id, cancellationToken);
+        if (units.Count != unitIds.Length) throw new CheckoutRejectedException("product_unit_unavailable");
 
         var taxTreatments = new Dictionary<Guid, Pos.Domain.Catalog.TaxTreatment>();
         foreach (var product in products.Values)
@@ -90,14 +99,34 @@ public sealed class SalesService(PosDbContext db)
         {
             if (line.Quantity <= 0 || decimal.Round(line.Quantity, 3) != line.Quantity) throw new CheckoutRejectedException("invalid_quantity");
             var product = products[line.ProductId];
+            var presentation = line.PresentationId.HasValue ? presentations[line.PresentationId.Value] : null;
+            if (presentation is not null && presentation.ProductId != product.Id)
+                throw new CheckoutRejectedException("product_presentation_unavailable");
+            var unit = units[presentation?.UnitId ?? product.BaseUnitId];
+            var baseUnit = units[product.BaseUnitId];
+            if (!unit.AllowsFractionalQuantities && decimal.Round(line.Quantity, 0) != line.Quantity)
+                throw new CheckoutRejectedException("fractional_quantity_not_allowed");
+            var conversionFactor = presentation?.ConversionFactor ?? 1m;
+            var inventoryQuantity = line.Quantity * conversionFactor;
+            if (inventoryQuantity <= 0m || decimal.Round(inventoryQuantity, 3) != inventoryQuantity ||
+                !baseUnit.AllowsFractionalQuantities && decimal.Round(inventoryQuantity, 0) != inventoryQuantity)
+                throw new CheckoutRejectedException("invalid_inventory_quantity");
             var priceTier = ParsePriceTier(line.PriceTier);
-            var originalUnitPrice = priceTier switch
+            decimal? baseUnitPrice = priceTier switch
             {
                 Pos.Domain.Catalog.PriceTier.Price1 => product.UnitPrice,
-                Pos.Domain.Catalog.PriceTier.Price2 => product.Price2 ?? throw new CheckoutRejectedException("price_tier_unconfigured"),
-                Pos.Domain.Catalog.PriceTier.Price3 => product.Price3 ?? throw new CheckoutRejectedException("price_tier_unconfigured"),
+                Pos.Domain.Catalog.PriceTier.Price2 => product.Price2,
+                Pos.Domain.Catalog.PriceTier.Price3 => product.Price3,
                 _ => throw new CheckoutRejectedException("invalid_price_tier")
             };
+            var configuredPresentationPrice = presentation is null ? null : priceTier switch
+            {
+                Pos.Domain.Catalog.PriceTier.Price1 => presentation.Price1,
+                Pos.Domain.Catalog.PriceTier.Price2 => presentation.Price2,
+                Pos.Domain.Catalog.PriceTier.Price3 => presentation.Price3,
+                _ => null
+            };
+            var originalUnitPrice = configuredPresentationPrice ?? (baseUnitPrice ?? throw new CheckoutRejectedException("price_tier_unconfigured")) * conversionFactor;
             if (originalUnitPrice <= 0) throw new CheckoutRejectedException("invalid_product_price");
             var originalCurrency = product.Currency;
             var conversionRate = originalCurrency == currency ? 1m : originalCurrency == "USD" ? usdToVes : 1m / usdToVes;
@@ -110,13 +139,16 @@ public sealed class SalesService(PosDbContext db)
             var amount = subtotal + taxAmount;
             return new SaleLineRecord
             {
-                Id = Guid.NewGuid(), ProductId = product.Id, Sku = product.Sku, Description = product.Name,
+                Id = Guid.NewGuid(), PresentationId = presentation?.Id,
+                PresentationName = presentation?.Label ?? unit.Name, ConversionFactor = conversionFactor, InventoryQuantity = inventoryQuantity,
+                ProductId = product.Id, Sku = product.Sku, Description = product.Name,
                 Quantity = line.Quantity, UnitPrice = unitPrice, LineTotal = amount,
                 OriginalUnitPrice = originalUnitPrice, OriginalCurrency = originalCurrency,
                 ExchangeRateId = originalCurrency == currency ? null : appliedRate!.Id,
                 AppliedExchangeRate = originalCurrency == currency ? null : conversionRate,
                 PriceTier = priceTier.ToString(), TaxTreatment = taxTreatment.Code, TaxRate = taxTreatment.Rate, TaxAmount = taxAmount,
-                UnitCost = product.UnitCost, CostCurrency = product.UnitCost.HasValue ? product.Currency : null
+                UnitCost = product.UnitCost.HasValue ? product.UnitCost.Value * conversionFactor : null,
+                CostCurrency = product.UnitCost.HasValue ? product.Currency : null
             };
         }).ToArray();
         var total = lineSnapshots.Sum(x => x.LineTotal);
@@ -171,17 +203,17 @@ public sealed class SalesService(PosDbContext db)
             return concurrent.PayloadHash == payloadHash ? new SaleResult(concurrent.SaleId, true, null) : new SaleResult(Guid.Empty, false, "idempotency_conflict");
         }
 
-        foreach (var line in request.Lines)
+        foreach (var line in lineSnapshots)
         {
-            if (warehouseId.HasValue && !await WarehouseStockBridge.ConsumeAsync(db, warehouseId.Value, line.ProductId, line.Quantity, cancellationToken))
+            if (warehouseId.HasValue && !await WarehouseStockBridge.ConsumeAsync(db, warehouseId.Value, line.ProductId, line.InventoryQuantity, cancellationToken))
                 throw new CheckoutRejectedException("insufficient_stock");
-            var affected = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" - {line.Quantity}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {line.ProductId} AND \"Quantity\" >= {line.Quantity}", cancellationToken);
+            var affected = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" - {line.InventoryQuantity}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {line.ProductId} AND \"Quantity\" >= {line.InventoryQuantity}", cancellationToken);
             if (affected != 1) throw new CheckoutRejectedException("insufficient_stock");
             db.StockMovements.Add(new StockMovementRecord
             {
                 Id = Guid.NewGuid(),
                 ProductId = line.ProductId,
-                QuantityDelta = -line.Quantity,
+                QuantityDelta = -line.InventoryQuantity,
                 Reason = $"Venta {saleId:N}",
                 ActorId = operatorId,
                 TerminalId = terminalId,
@@ -221,9 +253,10 @@ public sealed class SalesService(PosDbContext db)
                 lines = lineSnapshots.Select(x => new
                 {
                     x.ProductId, x.OriginalUnitPrice, x.OriginalCurrency, x.UnitPrice, x.LineTotal,
+                    x.PresentationId, x.PresentationName, x.ConversionFactor, x.InventoryQuantity,
                     x.AppliedExchangeRate, x.ExchangeRateId, x.PriceTier, x.TaxTreatment, x.TaxRate, x.TaxAmount, x.UnitCost, x.CostCurrency,
-                    priceOverride = request.Lines.Single(input => input.ProductId == x.ProductId).UnitPriceOverride,
-                    priceOverrideReason = request.Lines.Single(input => input.ProductId == x.ProductId).PriceOverrideReason
+                    priceOverride = request.Lines.Single(input => input.ProductId == x.ProductId && input.PresentationId == x.PresentationId).UnitPriceOverride,
+                    priceOverrideReason = request.Lines.Single(input => input.ProductId == x.ProductId && input.PresentationId == x.PresentationId).PriceOverrideReason
                 })
             }), OccurredAtUtc = DateTime.UtcNow
         });
@@ -254,7 +287,7 @@ public sealed class SalesService(PosDbContext db)
             request.CustomerId,
             request.ExchangeRateId,
             request.ReceivableDueDate,
-            lines = request.Lines.OrderBy(x => x.ProductId).Select(x => new { x.ProductId, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier }),
+            lines = request.Lines.OrderBy(x => x.ProductId).ThenBy(x => x.PresentationId).Select(x => new { x.ProductId, x.PresentationId, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier }),
             payments = request.Payments.OrderBy(x => x.Currency, StringComparer.Ordinal).ThenBy(x => x.Method, StringComparer.Ordinal).ThenBy(x => x.Amount).Select(x => new { x.Method, x.Amount, x.Currency })
         };
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonical)))).ToLowerInvariant();
@@ -274,7 +307,7 @@ public sealed class SalesService(PosDbContext db)
 }
 
 public sealed record CheckoutRequest(IReadOnlyList<CheckoutLine> Lines, IReadOnlyList<CheckoutPayment> Payments, Guid? CustomerId = null, Guid? ExchangeRateId = null, DateOnly? ReceivableDueDate = null);
-public sealed record CheckoutLine(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1");
+public sealed record CheckoutLine(Guid ProductId, decimal Quantity, decimal? UnitPriceOverride = null, string? PriceOverrideReason = null, string PriceTier = "Price1", Guid? PresentationId = null);
 public sealed record CheckoutPayment(string Method, decimal Amount, string Currency);
 public sealed record SaleResult(Guid SaleId, bool Replayed, string? Error);
 public sealed class CheckoutRejectedException(string code) : Exception(code) { public string Code { get; } = code; }

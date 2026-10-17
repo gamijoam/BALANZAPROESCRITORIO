@@ -10,6 +10,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <TextBlock x:Name="TitleLabel" FontSize="22" FontWeight="Bold" Foreground="#173F78"/>
         <TextBlock Grid.Row="1" Text="Usa ↑ y ↓ para elegir un producto. Presiona Enter para agregarlo o Esc para cancelar."
@@ -109,7 +110,7 @@
                         <TextBlock Grid.Column="1" Text="{Binding Product.Sku}" FontWeight="Bold" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="8,0"/>
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="8,4">
                             <TextBlock Text="{Binding Product.Name}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="42"/>
-                            <TextBlock Text="{Binding Product.TaxTreatmentLabel}" Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/>
+                            <TextBlock Text="{Binding SaleUnitsSummary}" Foreground="#63758B" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                         <TextBlock Grid.Column="3" Text="{Binding Product.Currency}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" VerticalAlignment="Center" Margin="8,0"/>
                         <TextBlock Grid.Column="4" Text="{Binding StockLabel}" Foreground="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=Foreground}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0"/>
@@ -118,7 +119,17 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
-        <Grid Grid.Row="4" Margin="0,12,0,0">
+        <DockPanel Grid.Row="4" Margin="0,12,0,0" LastChildFill="True">
+            <TextBlock Text="Se vende como" FontWeight="SemiBold" Foreground="#173F78" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <ComboBox x:Name="PresentationBox" MinWidth="320" Height="38" SelectionChanged="PresentationBox_SelectionChanged" AutomationProperties.Name="Presentación para vender">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayLabel}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </DockPanel>
+        <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel VerticalAlignment="Center"><TextBlock Text="↑ / ↓  Mover    ·    Enter  Agregar    ·    Esc  Cancelar" Foreground="#63758B"/><TextBlock x:Name="SelectionStatusText" Foreground="#B43B42" FontWeight="SemiBold"/></StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
