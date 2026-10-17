@@ -611,13 +611,13 @@ public partial class FinanceWindow : Window
     private void SetDraftLineStatus(string message, bool isError = false)
     {
         DraftLineStatus.Text = message;
-        DraftLineStatus.Foreground = isError ? System.Windows.Media.Brushes.Firebrick : System.Windows.Media.Brushes.SlateGray;
+        DraftLineStatus.Foreground = isError ? System.Windows.Media.Brushes.Firebrick : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(82, 103, 127));
     }
 
     private void SetStatus(string message, bool isError = false)
     {
         FinanceStatus.Text = message;
-        FinanceStatus.Foreground = isError ? System.Windows.Media.Brushes.Firebrick : System.Windows.Media.Brushes.SlateGray;
+        FinanceStatus.Foreground = isError ? System.Windows.Media.Brushes.Firebrick : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(82, 103, 127));
     }
 
     private static bool TryDecimal(string? text, out decimal amount)

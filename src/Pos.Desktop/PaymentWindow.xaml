@@ -21,7 +21,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="MethodBorder" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="2" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="MethodBorder" Property="Background" Value="#3971C5"/></Trigger>
@@ -30,13 +30,16 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="MethodBorder" Property="Background" Value="#DCE4EF"/>
                                 <Setter TargetName="MethodBorder" Property="BorderBrush" Value="#C2CDDA"/>
-                                <Setter Property="Foreground" Value="#596A80"/>
+                                <Setter Property="Foreground" Value="#526174"/>
                                 <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="PaymentMethodText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
         </Style>
     </ResourceDictionary></Window.Resources>
     <Grid Margin="20">
@@ -66,19 +69,19 @@
                     <TextBlock Text="FORMAS DE PAGO" Foreground="#132D4F" FontSize="14" FontWeight="Bold" Margin="2,0,0,10"/>
                     <TextBlock Text="Atajos: Alt+1 a 5 · Ctrl+1 a 5" Foreground="#52677F" FontSize="10" Margin="2,0,0,7"/>
                     <Button x:Name="CashMethodButton" Tag="Efectivo" ToolTip="Alt+1: Efectivo. También Ctrl+1." TabIndex="0" AutomationProperties.Name="Agregar pago en efectivo, Alt más 1" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Efectivo" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+1" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Efectivo" Style="{StaticResource PaymentMethodText}" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+1" Style="{StaticResource PaymentMethodText}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
                     </Button>
                     <Button Tag="Punto de venta" ToolTip="Alt+2: Punto de venta. También Ctrl+2." TabIndex="1" AutomationProperties.Name="Agregar pago por punto de venta, Alt más 2" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Punto de venta" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+2" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Punto de venta" Style="{StaticResource PaymentMethodText}" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+2" Style="{StaticResource PaymentMethodText}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
                     </Button>
                     <Button Tag="Transferencia" ToolTip="Alt+3: Transferencia. También Ctrl+3." TabIndex="2" AutomationProperties.Name="Agregar pago por transferencia, Alt más 3" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Transferencia" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+3" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Transferencia" Style="{StaticResource PaymentMethodText}" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+3" Style="{StaticResource PaymentMethodText}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
                     </Button>
                     <Button Tag="Pago móvil" ToolTip="Alt+4: Pago móvil. También Ctrl+4." TabIndex="3" AutomationProperties.Name="Agregar pago móvil, Alt más 4" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Pago móvil" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+4" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Pago móvil" Style="{StaticResource PaymentMethodText}" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+4" Style="{StaticResource PaymentMethodText}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
                     </Button>
                     <Button Tag="Crédito" ToolTip="Alt+5: Crédito. También Ctrl+5." TabIndex="4" AutomationProperties.Name="Agregar pago a crédito, Alt más 5" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Crédito" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+5" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Crédito" Style="{StaticResource PaymentMethodText}" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+5" Style="{StaticResource PaymentMethodText}" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
                     </Button>
                 </StackPanel>
             </Border>

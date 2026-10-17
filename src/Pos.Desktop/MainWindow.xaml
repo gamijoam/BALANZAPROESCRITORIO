@@ -10,7 +10,7 @@
         PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded" Closing="Window_Closing" SizeChanged="Window_SizeChanged">
     <Window.Resources>
         <SolidColorBrush x:Key="Pos.Navy" Color="#102D50"/>
-        <SolidColorBrush x:Key="Pos.Primary" Color="#0063CC"/>
+        <SolidColorBrush x:Key="Pos.Primary" Color="#0867D5"/>
         <SolidColorBrush x:Key="Pos.PrimaryHover" Color="#0755A6"/>
         <SolidColorBrush x:Key="Pos.Success" Color="#15803D"/>
         <SolidColorBrush x:Key="Pos.SuccessHover" Color="#116B34"/>
@@ -18,7 +18,7 @@
         <SolidColorBrush x:Key="Pos.Background" Color="#F2F5F9"/>
         <SolidColorBrush x:Key="Pos.Surface" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Pos.Text" Color="#132D4F"/>
-        <SolidColorBrush x:Key="Pos.TextMuted" Color="#475569"/>
+        <SolidColorBrush x:Key="Pos.TextMuted" Color="#52677F"/>
         <SolidColorBrush x:Key="Pos.Border" Color="#D5DFEB"/>
         <SolidColorBrush x:Key="Pos.Selected" Color="#E6F1FF"/>
 
@@ -41,7 +41,8 @@
                         <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="7" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               RecognizesAccessKey="True"/>
                         </Border>
@@ -274,7 +275,7 @@
                                      KeyDown="SearchBox_KeyDown" FontSize="20" Padding="6,7" VerticalContentAlignment="Center"
                                      BorderThickness="0" Background="Transparent" ToolTip="Escanea un código o escribe el nombre y presiona Enter"
                                      AutomationProperties.Name="Escanear o buscar un producto"/>
-                            <TextBlock Text="Escanea un código o busca un producto" Foreground="#718096"
+                            <TextBlock Text="Escanea un código o busca un producto" Foreground="{StaticResource Pos.TextMuted}"
                                        FontSize="18" VerticalAlignment="Center" Margin="10,0,0,0"
                                        IsHitTestVisible="False">
                                 <TextBlock.Style>
@@ -326,7 +327,7 @@
                                                 <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1"
                                                         CornerRadius="7" Width="58" Height="58" ClipToBounds="True">
                                                     <Grid>
-                                                        <TextBlock Text="IMG" Foreground="#718096" FontSize="11" FontWeight="Bold"
+                                                        <TextBlock Text="IMG" Foreground="{StaticResource Pos.TextMuted}" FontSize="11" FontWeight="Bold"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                         <Image Stretch="Uniform" Margin="2" Tag="{Binding Product.Id}"/>
                                                     </Grid>
@@ -436,7 +437,7 @@
                         <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="7"
                                 Width="60" Height="60" ClipToBounds="True">
                             <Grid>
-                                <TextBlock x:Name="ProductPreviewPlaceholder" Text="IMG" Foreground="#718096" FontSize="11" FontWeight="Bold"
+                                <TextBlock x:Name="ProductPreviewPlaceholder" Text="IMG" Foreground="{StaticResource Pos.TextMuted}" FontSize="11" FontWeight="Bold"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 <Image x:Name="ProductPreviewImage" Stretch="Uniform" Margin="2" Visibility="Collapsed"/>
                             </Grid>
@@ -574,10 +575,10 @@
                             Command="{Binding ChargeCommand}" IsEnabled="{Binding CanCharge}" MinHeight="78" Margin="0,0,0,10"
                             AutomationProperties.Name="Cobrar venta, tecla F4" AutomationProperties.AutomationId="ChargeSaleWide">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="▣" FontSize="22" Margin="0,0,12,0"/>
+                            <TextBlock Text="▣" Foreground="White" FontSize="22" Margin="0,0,12,0"/>
                             <StackPanel>
-                                <TextBlock Text="Cobrar venta · F4" FontSize="19" FontWeight="Bold"/>
-                                <TextBlock Text="Elegir forma de pago" FontSize="13"/>
+                                <TextBlock Text="Cobrar venta · F4" Foreground="White" FontSize="19" FontWeight="Bold"/>
+                                <TextBlock Text="Elegir forma de pago" Foreground="White" FontSize="13"/>
                             </StackPanel>
                         </StackPanel>
                     </Button>
