@@ -354,7 +354,10 @@ if ($installationMode -ne 'ClientTerminal' -and $null -ne $installedService) {
 Set-PosUpdateProgress 'Actualizando los accesos directos…'
 $shell = New-Object -ComObject WScript.Shell
 $desktopExecutable = Join-Path $target 'desktop\Pos.Desktop.exe'
-$desktopLauncher = Join-Path $target 'Iniciar POS.cmd'
+$desktopLauncher = Join-Path $target 'Iniciar POS.vbs'
+if (-not (Test-Path -LiteralPath $desktopLauncher -PathType Leaf)) {
+    $desktopLauncher = Join-Path $target 'Iniciar POS.cmd'
+}
 $shortcutPaths = @(
     (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Punto de venta.lnk'),
     (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Punto de venta.lnk')
