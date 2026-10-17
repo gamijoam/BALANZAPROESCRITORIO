@@ -107,6 +107,14 @@
             <Setter Property="BorderBrush" Value="{StaticResource Pos.Border}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
         </Style>
+        <Style x:Key="Pos.RightAlignedColumnHeader" TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+        </Style>
+        <Style x:Key="Pos.CenteredColumnHeader" TargetType="DataGridColumnHeader"
+               BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
         <Style TargetType="DataGridCell">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -224,7 +232,7 @@
                     <RowDefinition Height="64"/>
                     <RowDefinition Height="42"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition x:Name="SelectedProductRow" Height="82"/>
+                    <RowDefinition x:Name="SelectedProductRow" Height="Auto"/>
                     <RowDefinition Height="32"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -345,33 +353,35 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Precio unit." Width="128" IsReadOnly="True">
+                                <DataGridTemplateColumn Header="Precio unit." Width="170" IsReadOnly="True"
+                                                        HeaderStyle="{StaticResource Pos.RightAlignedColumnHeader}">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                 <TextBlock Text="{Binding SettlementCurrency}" Foreground="{StaticResource Pos.TextMuted}"
-                                                           FontSize="12" HorizontalAlignment="Right"/>
+                                                           FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding UnitPrice, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"
-                                                           FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                                           FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Cantidad" Width="172" IsReadOnly="True">
+                                <DataGridTemplateColumn Header="Cantidad" Width="188" IsReadOnly="True"
+                                                        HeaderStyle="{StaticResource Pos.CenteredColumnHeader}">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Button Content="−" Width="42" Height="42" Padding="0" FontSize="24"
+                                                <Button Content="−" Width="38" Height="40" Padding="0" FontSize="23"
                                                         Command="{Binding DataContext.DecreaseLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                         CommandParameter="{Binding}"
                                                         IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                         AutomationProperties.Name="Disminuir cantidad"/>
-                                                <Border MinWidth="44" Height="42" Margin="5,0" BorderBrush="{StaticResource Pos.Border}"
+                                                <Border MinWidth="50" Height="40" Margin="5,0" BorderBrush="{StaticResource Pos.Border}"
                                                         BorderThickness="1" CornerRadius="5" Background="White">
                                                     <TextBlock Text="{Binding Quantity, StringFormat={}{0:0.###}}" Foreground="{StaticResource Pos.Text}"
                                                                FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
-                                                <Button Content="+" Width="42" Height="42" Padding="0" FontSize="22"
+                                                <Button Content="+" Width="38" Height="40" Padding="0" FontSize="21"
                                                         Style="{StaticResource Pos.PrimaryButton}"
                                                         Command="{Binding DataContext.IncreaseLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                         CommandParameter="{Binding}"
@@ -381,19 +391,21 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Importe" Width="126" IsReadOnly="True">
+                                <DataGridTemplateColumn Header="Importe" Width="170" IsReadOnly="True"
+                                                        HeaderStyle="{StaticResource Pos.RightAlignedColumnHeader}">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                 <TextBlock Text="{Binding SettlementCurrency}" Foreground="{StaticResource Pos.TextMuted}"
-                                                           FontSize="12" HorizontalAlignment="Right"/>
+                                                           FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding LineTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"
-                                                           FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                                           FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="NoWrap"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Header="Acciones" Width="104" IsReadOnly="True">
+                                <DataGridTemplateColumn Header="Acciones" Width="124" IsReadOnly="True"
+                                                        HeaderStyle="{StaticResource Pos.CenteredColumnHeader}">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -401,6 +413,7 @@
                                                         Style="{StaticResource Pos.PrimaryButton}"
                                                         IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                                         Click="EditCartLine_Click"
+                                                        ToolTip="La edición aparece en esta pantalla, sin abrir otra ventana."
                                                         AutomationProperties.Name="Editar la presentación, cantidad o precio de esta línea"/>
                                                 <Button Content="×" FontSize="23" Width="42" Height="42" Padding="0" Margin="4,0,0,0"
                                                         Style="{StaticResource Pos.DangerOutlineButton}"
@@ -430,43 +443,121 @@
                     </Grid>
                 </Border>
 
-                <Border x:Name="ProductPreviewPanel" Grid.Row="4" Background="White" BorderBrush="{StaticResource Pos.Border}"
-                        BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,8,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="7"
-                                Width="60" Height="60" ClipToBounds="True">
-                            <Grid>
-                                <TextBlock x:Name="ProductPreviewPlaceholder" Text="IMG" Foreground="{StaticResource Pos.TextMuted}" FontSize="11" FontWeight="Bold"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image x:Name="ProductPreviewImage" Stretch="Uniform" Margin="2" Visibility="Collapsed"/>
-                            </Grid>
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
-                            <TextBlock Text="Producto seleccionado" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"/>
-                            <TextBlock x:Name="ProductPreviewName" Text="Selecciona un producto" Foreground="{StaticResource Pos.Text}"
-                                       FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Text, ElementName=ProductPreviewName}"/>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="ProductPreviewSku" Foreground="{StaticResource Pos.TextMuted}" FontSize="13"
-                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, ElementName=ProductPreviewSku}"/>
-                                <TextBlock x:Name="ProductPreviewPrice" Foreground="{StaticResource Pos.Primary}" FontSize="15"
-                                           FontWeight="Bold" Margin="10,0,0,0"/>
+                <Grid Grid.Row="4" Margin="0,8,0,0">
+                    <Border x:Name="ProductPreviewPanel" Background="White" BorderBrush="{StaticResource Pos.Border}"
+                            BorderThickness="1" CornerRadius="8" Padding="10,7">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="7"
+                                    Width="60" Height="60" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="ProductPreviewPlaceholder" Text="IMG" Foreground="{StaticResource Pos.TextMuted}" FontSize="11" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Image x:Name="ProductPreviewImage" Stretch="Uniform" Margin="2" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
+                                <TextBlock Text="Producto seleccionado" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"/>
+                                <TextBlock x:Name="ProductPreviewName" Text="Selecciona un producto" Foreground="{StaticResource Pos.Text}"
+                                           FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Text, ElementName=ProductPreviewName}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="ProductPreviewSku" Foreground="{StaticResource Pos.TextMuted}" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, ElementName=ProductPreviewSku}"/>
+                                    <TextBlock x:Name="ProductPreviewPrice" Foreground="{StaticResource Pos.Primary}" FontSize="15"
+                                               FontWeight="Bold" Margin="10,0,0,0"/>
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="EditSelectedLineButton" Style="{StaticResource Pos.MenuButton}" Content="Editar línea"
-                                    Click="EditSelectedCartLine_Click" IsEnabled="{Binding CanEditSelectedLine}"
-                                    AutomationProperties.Name="Editar línea seleccionada"/>
-                            <Button x:Name="ChangeQuantityButton" Style="{StaticResource Pos.MenuButton}" Content="Cantidad · F8"
-                                    Margin="6,0,0,0" Click="ChangeSelectedQuantity_Click" IsEnabled="{Binding CanEditSelectedLine}"
-                                    AutomationProperties.Name="Cambiar cantidad de la línea seleccionada, tecla F8"/>
-                            <Button x:Name="RemoveSelectedLineButton" Style="{StaticResource Pos.DangerOutlineButton}" Content="Quitar · Supr"
-                                    Margin="6,0,0,0" Click="RemoveSelectedCartLine_Click" IsEnabled="{Binding CanEditSelectedLine}"
-                                    AutomationProperties.Name="Quitar la línea seleccionada, tecla Suprimir"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="ChangeQuantityButton" Style="{StaticResource Pos.MenuButton}" Content="Cantidad · F8"
+                                        Click="ChangeSelectedQuantity_Click" IsEnabled="{Binding CanEditSelectedLine}"
+                                        AutomationProperties.Name="Editar cantidad en la pantalla, tecla F8"/>
+                                <Button x:Name="RemoveSelectedLineButton" Style="{StaticResource Pos.DangerOutlineButton}" Content="Quitar · Supr"
+                                        Margin="6,0,0,0" Click="RemoveSelectedCartLine_Click" IsEnabled="{Binding CanEditSelectedLine}"
+                                        AutomationProperties.Name="Quitar la línea seleccionada, tecla Suprimir"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border x:Name="CartLineEditorPanel" Visibility="Collapsed" Background="White"
+                            BorderBrush="{StaticResource Pos.Primary}" BorderThickness="1.5" CornerRadius="8" Padding="12,10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Editar producto en la venta" Foreground="{StaticResource Pos.Text}"
+                                               FontSize="17" FontWeight="Bold"/>
+                                    <TextBlock x:Name="CartLineEditorProductLabel" Foreground="{StaticResource Pos.TextMuted}"
+                                               FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="Cancelar" MinWidth="100" Height="40" Click="CancelCartLineEdit_Click"
+                                            AutomationProperties.Name="Cancelar edición del artículo"/>
+                                    <Button x:Name="SaveCartLineEditButton" Grid.Column="1" Content="Guardar" MinWidth="120" Height="40"
+                                            Margin="8,0,0,0" Style="{StaticResource Pos.PrimaryButton}"
+                                            IsDefault="True" Click="SaveCartLineEdit_Click"
+                                            AutomationProperties.Name="Guardar cambios del artículo"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Grid.Row="1" Margin="-8,10,-8,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*"/>
+                                    <ColumnDefinition Width="0.8*"/>
+                                    <ColumnDefinition Width="1.3*"/>
+                                    <ColumnDefinition Width="1.3*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="8,0">
+                                    <TextBlock Text="Forma de venta" Foreground="{StaticResource Pos.TextMuted}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="CartLineSaleUnitBox" Height="38" DisplayMemberPath="DisplayLabel"
+                                              SelectionChanged="CartLineSaleUnit_SelectionChanged"
+                                              AutomationProperties.Name="Forma de venta del artículo"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="8,0">
+                                    <TextBlock Text="Cantidad" Foreground="{StaticResource Pos.TextMuted}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="CartLineQuantityBox" Height="38" Padding="8,5" FontSize="16"
+                                             VerticalContentAlignment="Center" AutomationProperties.Name="Cantidad del artículo"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="8,0">
+                                    <TextBlock Text="Nivel de precio" Foreground="{StaticResource Pos.TextMuted}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="CartLinePriceTierBox" Height="38" SelectionChanged="CartLinePriceTier_SelectionChanged"
+                                              AutomationProperties.Name="Nivel de precio del artículo"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Margin="8,0">
+                                    <TextBlock Text="Precio por presentación" Foreground="{StaticResource Pos.TextMuted}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="CartLinePriceBox" Height="38" Padding="8,5" FontSize="16"
+                                             VerticalContentAlignment="Center" AutomationProperties.Name="Precio por presentación"/>
+                                </StackPanel>
+                            </Grid>
+                            <Grid Grid.Row="2" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="2.8*"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                    <TextBlock Text="Motivo del precio especial (si cambias el precio)" Foreground="{StaticResource Pos.TextMuted}"
+                                               FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="CartLinePriceReasonBox" Height="38" Padding="8,5" VerticalContentAlignment="Center"
+                                             AutomationProperties.Name="Motivo del precio especial"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
+                                    <TextBlock x:Name="CartLineUnitHintLabel" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                               TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="CartLineCatalogPriceLabel" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="CartLineTaxLabel" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    <TextBlock Text="Un precio distinto al catálogo requiere autorización del administrador al cobrar."
+                                               Foreground="{StaticResource Pos.TextMuted}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock x:Name="CartLineEditErrorLabel" Grid.Row="3" Foreground="{StaticResource Pos.Danger}"
+                                       FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
+                        </Grid>
+                    </Border>
+                </Grid>
 
                 <Border Grid.Row="5" Background="#EAF0F6" CornerRadius="6" Padding="10,4" Margin="0,6,0,0">
                     <Grid>
