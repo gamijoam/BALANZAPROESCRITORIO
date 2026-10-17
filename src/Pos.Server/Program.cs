@@ -1220,9 +1220,11 @@ app.MapPost("/api/v1/inventory/{productId:guid}/adjustments", async (Guid produc
     var access = await auth.FindValidSessionAsync(token, cancellationToken);
     if (access is null) return Results.Unauthorized();
     if (!await AuthorizePermissionAsync(context, auth, approvals, access, Permission.AdjustStock, cancellationToken)) return PermissionFailure(context);
-    if (request.QuantityDelta == 0m || decimal.Round(request.QuantityDelta, 3) != request.QuantityDelta ||
-        string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 250)
-        return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = ["A nonzero quantity with at most three decimals and a reason up to 250 characters is required."] });
+    var adjustmentReason = string.IsNullOrWhiteSpace(request.Reason)
+        ? "Ajuste manual de inventario"
+        : request.Reason.Trim();
+    if (request.QuantityDelta == 0m || decimal.Round(request.QuantityDelta, 3) != request.QuantityDelta || adjustmentReason.Length > 250)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = ["Indica una cantidad distinta de cero con hasta tres decimales. El motivo puede tener máximo 250 caracteres."] });
     var productUnit = await (from product in db.Products.AsNoTracking()
         join unit in db.ProductUnits.AsNoTracking() on product.BaseUnitId equals unit.Id
         where product.Id == productId && product.Active
@@ -1232,7 +1234,7 @@ app.MapPost("/api/v1/inventory/{productId:guid}/adjustments", async (Guid produc
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = ["La unidad base de este producto solo permite ajustes enteros."] });
     if (!await db.Stocks.AnyAsync(x => x.ProductId == productId, cancellationToken)) return Results.Conflict(new { error = "stock_record_missing" });
     StockMovement movement;
-    try { movement = StockMovement.Create(productId, request.QuantityDelta, request.Reason, access.OperatorId, DateTimeOffset.UtcNow); }
+    try { movement = StockMovement.Create(productId, request.QuantityDelta, adjustmentReason, access.OperatorId, DateTimeOffset.UtcNow); }
     catch (ArgumentException exception) { return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = [exception.Message] }); }
     await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
     var affected = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" + {movement.QuantityDelta}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {productId} AND \"Quantity\" + {movement.QuantityDelta} >= 0", cancellationToken);

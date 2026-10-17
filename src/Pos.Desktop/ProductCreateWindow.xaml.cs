@@ -19,8 +19,8 @@ public partial class ProductCreateWindow : Window
     {
         InitializeComponent(); _viewModel = viewModel;
         var workArea = SystemParameters.WorkArea;
-        Width = Math.Min(1500, workArea.Width - 24);
-        Height = Math.Min(900, workArea.Height - 16);
+        Width = workArea.Width - 16;
+        Height = workArea.Height - 16;
         MinWidth = Math.Min(MinWidth, Width);
         MinHeight = Math.Min(MinHeight, Height);
         Loaded += async (_, _) => await LoadUnitsAsync();

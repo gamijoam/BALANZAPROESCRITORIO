@@ -26,7 +26,7 @@ public partial class SalesHistoryWindow : Window
     }
 
     private string CurrencyFilter => (CurrencyPicker.SelectedItem as ComboBoxItem)?.Content?.ToString() is { } value && value != "Todas" ? value : string.Empty;
-    private string PaymentMethodFilter => (PaymentMethodFilterBox.SelectedItem as ComboBoxItem)?.Content?.ToString() is { } value && value != "Todos los métodos" ? value : string.Empty;
+    private string PaymentMethodFilter => (PaymentMethodFilterBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? string.Empty;
     private string SaleStatusFilter => (SaleStatusFilterBox.SelectedItem as ComboBoxItem)?.Content?.ToString() is { } value && value != "Todos los estados" ? value : string.Empty;
     private SaleDetailRow? SelectedSale => (SalesGrid.SelectedItem as SalesHistoryListItem)?.Sale;
 

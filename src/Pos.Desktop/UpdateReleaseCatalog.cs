@@ -6,6 +6,7 @@ namespace Pos.Desktop;
 
 internal sealed record UpdateRelease(string Tag, string Version, string Title, string Notes, string AssetName,
     Uri DownloadUrl, long Size, string? ModuleId = null);
+internal sealed record UpdateDownloadProgress(long BytesReceived, long TotalBytes);
 
 internal static class UpdateReleaseCatalog
 {
@@ -62,7 +63,7 @@ internal static class UpdateReleaseCatalog
     }
 
     public static async Task DownloadAsync(UpdateRelease release, string destination, long maximumBytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, IProgress<UpdateDownloadProgress>? progress = null)
     {
         using var response = await Client.GetAsync(release.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -78,6 +79,7 @@ internal static class UpdateReleaseCatalog
             total += count;
             if (total > maximumBytes) throw new InvalidDataException("La descarga supera el tamaño permitido.");
             await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+            progress?.Report(new UpdateDownloadProgress(total, release.Size));
         }
         if (total != release.Size) throw new InvalidDataException("La descarga quedó incompleta.");
     }

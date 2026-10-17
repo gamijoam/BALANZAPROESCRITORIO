@@ -225,12 +225,14 @@ public partial class ProductDetailsWindow : Window
         ApplyStockAdjustmentButton.IsEnabled = false;
         try
         {
+            var reasonWasOmitted = string.IsNullOrWhiteSpace(StockAdjustmentReasonBox.Text);
             var quantity = await _viewModel.AdjustStockAsync(_productId, delta, StockAdjustmentReasonBox.Text.Trim());
             _hasChanges = true;
             StockAdjustmentAmountBox.Text = "1";
             StockAdjustmentReasonBox.Clear();
             await LoadAsync();
-            StatusLabel.Text = $"Existencia actualizada: {PosNumberFormat.FormatQuantity(quantity)} {_details.BaseUnitAbbreviation}.";
+            StatusLabel.Text = $"Existencia actualizada: {PosNumberFormat.FormatQuantity(quantity)} {_details.BaseUnitAbbreviation}." +
+                (reasonWasOmitted ? " Motivo en el historial: Ajuste manual de inventario." : string.Empty);
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
         finally { ApplyStockAdjustmentButton.IsEnabled = _details?.Active == true; }

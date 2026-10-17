@@ -96,9 +96,13 @@ public partial class MainWindow : Window
         {
             await _viewModel.FlushWorkspaceSyncAsync();
             var installationRoot = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))!.FullName;
-            var helper = Path.Combine(installationRoot, "scripts", "Install-DownloadedPosUpdate.ps1");
+            // Use the helper shipped in the verified package so first-time adopters also get
+            // the installation progress window before the permanent installation is replaced.
+            var helper = Path.Combine(package, "scripts", "Install-DownloadedPosUpdate.ps1");
+            if (!File.Exists(helper))
+                helper = Path.Combine(installationRoot, "scripts", "Install-DownloadedPosUpdate.ps1");
             if (!File.Exists(helper)) throw new FileNotFoundException("Falta el instalador de actualizaciones. Usa Actualizar POS.cmd una vez para instalar una versión reciente.", helper);
-            var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, WorkingDirectory = installationRoot };
+            var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, WorkingDirectory = installationRoot, WindowStyle = ProcessWindowStyle.Hidden };
             start.ArgumentList.Add("-NoProfile");
             start.ArgumentList.Add("-ExecutionPolicy");
             start.ArgumentList.Add("Bypass");

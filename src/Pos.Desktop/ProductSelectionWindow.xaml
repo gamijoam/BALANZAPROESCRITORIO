@@ -48,13 +48,6 @@
                                     <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter TargetName="RowBorder" Property="Background" Value="#0867D5"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Trigger>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="RowBorder" Property="Opacity" Value="0.9"/>
-                                    </Trigger>
                                     <DataTrigger Binding="{Binding Product.StockQuantity}" Value="0">
                                         <Setter Property="IsEnabled" Value="False"/>
                                         <Setter Property="Background" Value="#F1F5F9"/>
@@ -65,6 +58,13 @@
                                         <Setter Property="Background" Value="#F1F5F9"/>
                                         <Setter Property="Foreground" Value="#526174"/>
                                     </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#EEF5FC"/>
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter TargetName="RowBorder" Property="Background" Value="#102D50"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Setter.Value>
