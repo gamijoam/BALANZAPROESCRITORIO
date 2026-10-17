@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$licensePublicKeyUrl = 'https://licencias.balanzapro.com/api/v1/license/public-key'
 $packageDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts')).TrimEnd('\') + '\'
 if (-not $packageDirectory.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -77,6 +78,22 @@ New-Item -ItemType Directory -Path $scriptsOutput -Force | Out-Null
 foreach ($name in @('Pos-DatabaseSupport.ps1', 'Pos-InvariantDecimalSupport.ps1', 'Pos-JsonArraySupport.ps1', 'Configure-LocalDatabase.ps1', 'Backup-LocalDatabase.ps1', 'Restore-LocalDatabase.ps1', 'Register-LocalBackupTask.ps1', 'Start-LocalPos.ps1', 'Stop-ProcessByPort.ps1', 'Initialize-LocalPosOperator.ps1', 'Configure-InitialOperator.ps1', 'Install-LocalPos.ps1', 'Install-WarehouseModuleTrust.ps1', 'Install-ModulePublisherTrust.ps1', 'Manage-PosWindowsService.ps1', 'Import-LegacyReceivableOpeningBalances.ps1')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $scriptsOutput -Force
 }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-PosLicenseTrustKeys.ps1') -Destination $scriptsOutput -Force
+$licenseKeyRingPath = Join-Path $packageDirectory 'trusted-license-keys.json'
+if (Test-Path -LiteralPath $licenseKeyRingPath) { Remove-Item -LiteralPath $licenseKeyRingPath -Force }
+try {
+    $licenseKeyRingResponse = Invoke-WebRequest -Uri $licensePublicKeyUrl -TimeoutSec 30 -UseBasicParsing
+    if ($licenseKeyRingResponse.StatusCode -ne 200 -or [string]::IsNullOrWhiteSpace($licenseKeyRingResponse.Content)) {
+        throw 'El servidor no devolvió un anillo de llaves públicas.'
+    }
+    [IO.File]::WriteAllText($licenseKeyRingPath, $licenseKeyRingResponse.Content, [Text.UTF8Encoding]::new($false))
+    & (Join-Path $PSScriptRoot 'Install-PosLicenseTrustKeys.ps1') -PublicKeyRingPath $licenseKeyRingPath -ValidateOnly
+    if (-not $?) { throw 'El anillo recibido no pasó su validación.' }
+} catch {
+    Remove-Item -LiteralPath $licenseKeyRingPath -Force -ErrorAction SilentlyContinue
+    throw "No se pudo obtener y validar la llave pública de licencias desde '$licensePublicKeyUrl'. Se canceló el paquete para evitar distribuir una instalación que no permita activar licencias offline. Detalle: $($_.Exception.Message)"
+}
+Write-Output 'Llave pública de licencias incluida en el paquete para permitir la activación sin Internet.'
 $trustedPublisherDirectory = Join-Path $packageDirectory 'trusted-publishers'
 New-Item -ItemType Directory -Path $trustedPublisherDirectory -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $repoRoot 'security\module-publishers\pos-publisher-vps-2026.pem') `

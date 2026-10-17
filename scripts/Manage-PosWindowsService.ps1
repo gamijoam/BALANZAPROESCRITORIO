@@ -94,6 +94,20 @@ function Set-PosServiceConfiguration {
     New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
     & icacls.exe $dataRoot /inheritance:r /grant '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo proteger la carpeta de configuración del servicio.' }
+    $licenseKeyRingSource = Join-Path $packageRoot 'trusted-license-keys.json'
+    $licenseTrustInstaller = Join-Path $scriptRoot 'Install-PosLicenseTrustKeys.ps1'
+    $licenseDirectory = Join-Path $dataRoot 'Licensing'
+    $existingLicenseKeyRing = Join-Path $licenseDirectory 'trusted-license-keys.json'
+    if ((Test-Path -LiteralPath $licenseKeyRingSource -PathType Leaf) -and
+        (Test-Path -LiteralPath $licenseTrustInstaller -PathType Leaf)) {
+        & $licenseTrustInstaller -PublicKeyRingPath $licenseKeyRingSource -DestinationDirectory $licenseDirectory
+        if (-not $?) { throw 'No se pudieron preparar las llaves públicas de licencias para el servicio POS.' }
+        $installedLicenseKeyRing = Join-Path $licenseDirectory 'trusted-license-keys.json'
+        & icacls.exe $installedLicenseKeyRing /grant '*S-1-5-18:R' '*S-1-5-32-544:R' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'No se concedió lectura de la llave pública de licencias al servicio POS.' }
+    } elseif (-not (Test-Path -LiteralPath $existingLicenseKeyRing -PathType Leaf)) {
+        throw 'El paquete no incluye la llave pública de licencias y esta instalación aún no tiene una configurada. Actualiza el POS con un paquete oficial reciente antes de instalar el servicio.'
+    }
     . $supportPath
     $profile = Get-PosInstallationProfile
     if ($null -ne $profile -and [string]$profile.Mode -eq 'ClientTerminal') { throw 'Una terminal cliente no debe instalar un servidor POS local.' }
