@@ -393,7 +393,8 @@ public sealed class CartWorkspaceService(PosDbContext db)
     private async Task<ExchangeRateRecord?> GetUsdToVesRateRecordAsync(CancellationToken cancellationToken)
         => await db.ExchangeRates.AsNoTracking()
             .Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= DateTime.UtcNow)
-            .OrderByDescending(x => x.EffectiveAtUtc).ThenBy(x => x.FromCurrency == "USD" ? 0 : 1).FirstOrDefaultAsync(cancellationToken);
+            .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+            .ThenByDescending(x => x.EffectiveAtUtc).FirstOrDefaultAsync(cancellationToken);
 
     private static decimal? NormalizeUsdToVesRate(ExchangeRateRecord? rate)
         => rate is null ? null : rate.FromCurrency == "USD" ? rate.Rate : rate.Rate == 0m ? null : 1m / rate.Rate;

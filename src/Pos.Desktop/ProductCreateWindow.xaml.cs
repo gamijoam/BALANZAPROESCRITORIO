@@ -18,6 +18,11 @@ public partial class ProductCreateWindow : Window
     public ProductCreateWindow(PosViewModel viewModel)
     {
         InitializeComponent(); _viewModel = viewModel;
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(1500, workArea.Width - 24);
+        Height = Math.Min(900, workArea.Height - 16);
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
         Loaded += async (_, _) => await LoadUnitsAsync();
     }
 
@@ -117,7 +122,10 @@ public partial class ProductCreateWindow : Window
             var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.UriSource = new Uri(picker.FileName); image.EndInit(); image.Freeze();
             _imagePath = picker.FileName;
             ImageNameLabel.Text = file.Name;
-            ProductImagePreview.Source = image; ProductImagePreview.Visibility = Visibility.Visible; ErrorLabel.Text = string.Empty;
+            ProductImagePreview.Source = image;
+            ProductImagePreview.Visibility = Visibility.Visible;
+            ImagePlaceholder.Visibility = Visibility.Collapsed;
+            ErrorLabel.Text = string.Empty;
         }
         catch (Exception) { ErrorLabel.Text = "El archivo seleccionado no se puede mostrar como una imagen válida."; }
     }

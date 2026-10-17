@@ -22,6 +22,10 @@ public partial class MainWindow : Window
     private bool _exitConfirmed;
     private bool _exitSaveInProgress;
     private bool _licenseAccessBlocked;
+    private CartLineViewModel? _editingCartLine;
+    private ProductSaleUnitInfo? _editingCartSaleUnit;
+    private string _editingCartPriceTier = "Price1";
+    private bool _loadingCartLineEditor;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
     private readonly Dictionary<Guid, ImageSource?> _productImageCache = [];
@@ -68,14 +72,12 @@ public partial class MainWindow : Window
         if (sender is not FrameworkElement { Tag: string section }) return;
         switch (section)
         {
-            case "Venta": SaleTool_Click(sender, e); break;
             case "Historial": SalesHistoryTool_Click(sender, e); break;
             case "Caja": CashTool_Click(sender, e); break;
             case "Clientes": Customer_Click(sender, e); break;
             case "Inventario": InventoryTool_Click(sender, e); break;
             case "Sesion": OperatorSessionAction_Click(sender, e); break;
             case "Actualizar POS": UpdatePos_Click(sender, e); break;
-            case "Actualizar módulos": new ManagementWindow(_viewModel, "Módulos", _restartLocalServiceAsync) { Owner = this }.ShowDialog(); RefocusScanner(); break;
             default: ManagementTool_Click(sender, e); break;
         }
     }
@@ -132,13 +134,25 @@ public partial class MainWindow : Window
         SearchButton.Content = isCompact ? "Buscar" : "Buscar · F2";
         PausedSalesButton.Content = isCompact ? "Pausadas · F7" : "Ventas pausadas · F7";
         MenuButton.Content = isCompact ? "☰" : "☰  Menú";
-        EditSelectedLineButton.Content = isCompact ? "Editar" : "Editar línea";
         ChangeQuantityButton.Content = isCompact ? "Cantidad · F8" : "Cambiar cantidad · F8";
         CartGrid.RowStyle = (Style)FindResource(isCompact ? "Pos.CartCompactRow" : "Pos.CartRow");
+        if (CartGrid.Columns.Count >= 5)
+        {
+            CartGrid.Columns[1].Width = new DataGridLength(isCompact ? 145 : 170);
+            CartGrid.Columns[2].Width = new DataGridLength(isCompact ? 156 : 188);
+            CartGrid.Columns[3].Width = new DataGridLength(isCompact ? 145 : 170);
+            CartGrid.Columns[4].Width = new DataGridLength(isCompact ? 112 : 124);
+        }
 
         var hideProductDetails = ActualHeight < 650;
-        SelectedProductRow.Height = hideProductDetails ? new GridLength(0) : new GridLength(isCompact ? 74 : 82);
-        ProductPreviewPanel.Visibility = hideProductDetails ? Visibility.Collapsed : Visibility.Visible;
+        SelectedProductRow.Height = _editingCartLine is not null
+            ? GridLength.Auto
+            : hideProductDetails ? new GridLength(0) : new GridLength(isCompact ? 74 : 82);
+        ProductPreviewPanel.Visibility = hideProductDetails || _editingCartLine is not null ? Visibility.Collapsed : Visibility.Visible;
+        CartLineEditorPanel.Visibility = _editingCartLine is not null ? Visibility.Visible : Visibility.Collapsed;
+        CartGrid.IsEnabled = _editingCartLine is null;
+        SearchBox.IsEnabled = _editingCartLine is null;
+        SearchButton.IsEnabled = _editingCartLine is null;
         ShortcutHints.Text = isCompact
             ? "F1 Cliente · F2 Buscar · F4 Cobrar · F6 Pausar · F8 Cantidad · F12 Caja"
             : "F1 Cliente   ·   F2 Buscar   ·   F4 Cobrar   ·   F6 Pausar   ·   F8 Cantidad   ·   F12 Caja";
@@ -146,6 +160,11 @@ public partial class MainWindow : Window
 
     private async void PauseSale_Click(object sender, RoutedEventArgs e)
     {
+        if (_editingCartLine is not null)
+        {
+            CartLineEditErrorLabel.Text = "Guarda o cancela la edición antes de pausar la venta.";
+            return;
+        }
         if (!_viewModel.CanPauseSale)
         {
             MessageBox.Show(this, "Agrega artículos y resuelve cualquier operación pendiente antes de pausar la venta.",
@@ -174,6 +193,11 @@ public partial class MainWindow : Window
 
     private async void PausedSales_Click(object sender, RoutedEventArgs e)
     {
+        if (_editingCartLine is not null)
+        {
+            CartLineEditErrorLabel.Text = "Guarda o cancela la edición antes de abrir las ventas pausadas.";
+            return;
+        }
         if (!_viewModel.CanViewPausedSales)
         {
             MessageBox.Show(this, "Espera a que termine la operación actual antes de abrir las ventas pausadas.",
@@ -306,6 +330,8 @@ public partial class MainWindow : Window
     private void CartGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CartGrid.SelectedItem is not CartLineViewModel line) return;
+        if (_editingCartLine is not null && !ReferenceEquals(_editingCartLine, line))
+            CloseCartLineEditor(refocusScanner: false);
         _viewModel.SelectedCartLine = line;
         UpdateSelectedProductPreview(line);
     }
@@ -518,7 +544,12 @@ public partial class MainWindow : Window
 
     private async void OperatorSessionAction_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.IsBusy) return;
+        if (_viewModel.IsBusy)
+        {
+            MessageBox.Show(this, "Espera a que termine la operación actual antes de cambiar de operador.",
+                "Operación en curso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_viewModel.HasPendingCheckout)
         {
             MessageBox.Show(this, "Hay una venta pendiente de confirmar. Resuelve el resultado antes de cerrar la sesión.",
@@ -683,6 +714,11 @@ public partial class MainWindow : Window
 
     private async Task SearchAndRefocusAsync()
     {
+        if (_editingCartLine is not null)
+        {
+            CartLineEditErrorLabel.Text = "Guarda o cancela la edición antes de buscar otro producto.";
+            return;
+        }
         var query = SearchBox.Text.Trim();
         if (query.Length == 0)
         {
@@ -705,43 +741,195 @@ public partial class MainWindow : Window
     private void RemoveCartLine_Click(object sender, RoutedEventArgs e)
     {
         if (!_viewModel.CanEditCart || (sender as FrameworkElement)?.DataContext is not CartLineViewModel line) return;
+        if (ReferenceEquals(_editingCartLine, line)) CloseCartLineEditor(refocusScanner: false);
         _viewModel.RemoveProduct(line);
     }
 
     private async void EditCartLine_Click(object sender, RoutedEventArgs e)
     {
         if (!_viewModel.CanEditCart || (sender as FrameworkElement)?.DataContext is not CartLineViewModel line) return;
-        await EditCartLineAsync(line);
+        await OpenCartLineEditorAsync(line);
     }
 
-    private async void EditSelectedCartLine_Click(object sender, RoutedEventArgs e)
+    private async Task OpenCartLineEditorAsync(CartLineViewModel line, bool focusQuantity = false)
     {
-        var line = _viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel;
-        if (!_viewModel.CanEditCart || line is null) return;
-        await EditCartLineAsync(line);
-    }
+        if (!_viewModel.CanEditCart || !_viewModel.CartLines.Contains(line)) return;
+        if (ReferenceEquals(_editingCartLine, line))
+        {
+            if (focusQuantity) FocusInlineQuantity();
+            return;
+        }
 
-    private async Task EditCartLineAsync(CartLineViewModel line)
-    {
+        if (_editingCartLine is not null) CloseCartLineEditor(refocusScanner: false);
         if (line.AvailableSaleUnits.Count <= 1)
         {
             try { await _viewModel.RefreshCartLineSaleUnitsAsync(line); }
             catch (Exception ex) { _viewModel.SetStatus(PosUserMessage.ForException(ex)); }
         }
-        var dialog = new CartLineEditWindow(line) { Owner = this };
-        if (dialog.ShowDialog() == true)
+
+        _viewModel.SelectedCartLine = line;
+        CartGrid.SelectedItem = line;
+        CartGrid.ScrollIntoView(line);
+        _editingCartLine = line;
+        _loadingCartLineEditor = true;
+        CartLineEditorProductLabel.Text = $"{line.Product.Name} · Código {line.Product.Sku}";
+        CartLineSaleUnitBox.ItemsSource = line.AvailableSaleUnits;
+        _editingCartSaleUnit = line.AvailableSaleUnits.FirstOrDefault(unit => SameSaleUnit(unit, line.SaleUnit))
+            ?? line.AvailableSaleUnits.FirstOrDefault();
+        CartLineSaleUnitBox.SelectedItem = _editingCartSaleUnit;
+        CartLineQuantityBox.Text = PosNumberFormat.FormatQuantity(line.Quantity);
+        _editingCartPriceTier = line.PriceTier;
+        if (_editingCartSaleUnit is not null)
         {
-            var updated = ReferenceEquals(dialog.SaleUnit, line.SaleUnit)
-                ? _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason)
-                : _viewModel.EditCartLine(line, dialog.SaleUnit, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
-            if (updated)
-            {
-                _viewModel.SelectedCartLine = line;
-                CartGrid.SelectedItem = line;
-                UpdateSelectedProductPreview(line);
-            }
+            PopulateInlinePriceTiers(_editingCartSaleUnit, _editingCartPriceTier);
+            CartLinePriceBox.Text = line.UnitPrice.ToString("N2", PosNumberFormat.Culture);
+            CartLinePriceReasonBox.Text = line.PriceOverrideReason ?? string.Empty;
+            UpdateInlineCartLineHints();
         }
-        RefocusScanner();
+        CartLineEditErrorLabel.Text = string.Empty;
+        _loadingCartLineEditor = false;
+        ApplyResponsiveLayout();
+        if (focusQuantity) FocusInlineQuantity();
+        else CartLineSaleUnitBox.Focus();
+    }
+
+    private static bool SameSaleUnit(ProductSaleUnitInfo left, ProductSaleUnitInfo right)
+        => left.PresentationId == right.PresentationId && left.UnitId == right.UnitId;
+
+    private void PopulateInlinePriceTiers(ProductSaleUnitInfo saleUnit, string requestedTier)
+    {
+        CartLinePriceTierBox.Items.Clear();
+        var tiers = new List<string> { "Price1" };
+        if (saleUnit.Price2.HasValue) tiers.Add("Price2");
+        if (saleUnit.Price3.HasValue) tiers.Add("Price3");
+        foreach (var tier in tiers)
+        {
+            CartLinePriceTierBox.Items.Add(new ComboBoxItem
+            {
+                Content = tier switch { "Price1" => "Precio 1 · Principal", "Price2" => "Precio 2", _ => "Precio 3" },
+                Tag = tier
+            });
+        }
+
+        _editingCartPriceTier = tiers.Contains(requestedTier, StringComparer.Ordinal) ? requestedTier : "Price1";
+        CartLinePriceTierBox.SelectedItem = CartLinePriceTierBox.Items.Cast<ComboBoxItem>()
+            .First(item => Equals(item.Tag, _editingCartPriceTier));
+    }
+
+    private void CartLineSaleUnit_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingCartLineEditor || CartLineSaleUnitBox.SelectedItem is not ProductSaleUnitInfo saleUnit ||
+            _editingCartLine is null || _editingCartSaleUnit is not null && SameSaleUnit(saleUnit, _editingCartSaleUnit)) return;
+
+        _editingCartSaleUnit = saleUnit;
+        PopulateInlinePriceTiers(saleUnit, _editingCartPriceTier);
+        CartLinePriceBox.Text = _editingCartLine.CatalogUnitPriceFor(saleUnit, _editingCartPriceTier)
+            .ToString("N2", PosNumberFormat.Culture);
+        CartLinePriceReasonBox.Clear();
+        UpdateInlineCartLineHints();
+    }
+
+    private void CartLinePriceTier_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingCartLineEditor || CartLinePriceTierBox.SelectedItem is not ComboBoxItem { Tag: string tier } ||
+            _editingCartLine is null || _editingCartSaleUnit is null) return;
+
+        _editingCartPriceTier = tier;
+        CartLinePriceBox.Text = _editingCartLine.CatalogUnitPriceFor(_editingCartSaleUnit, tier)
+            .ToString("N2", PosNumberFormat.Culture);
+        CartLinePriceReasonBox.Clear();
+        UpdateInlineCartLineHints();
+    }
+
+    private void UpdateInlineCartLineHints()
+    {
+        if (_editingCartLine is null || _editingCartSaleUnit is null) return;
+        CartLineUnitHintLabel.Text = $"1 {_editingCartSaleUnit.Label} descuenta " +
+            $"{PosNumberFormat.FormatQuantity(_editingCartSaleUnit.ConversionFactor)} {_editingCartLine.Product.BaseUnitAbbreviation} del inventario.";
+        var catalogPrice = _editingCartLine.CatalogUnitPriceFor(_editingCartSaleUnit, _editingCartPriceTier);
+        CartLineCatalogPriceLabel.Text = $"Catálogo · {_editingCartPriceTier.Replace("Price", "Precio ")}: " +
+            $"{_editingCartLine.SettlementCurrency} {PosNumberFormat.FormatAmount(catalogPrice)}. El nivel se guarda con la venta.";
+        CartLineTaxLabel.Text = $"Impuesto: {_editingCartLine.Product.TaxTreatmentLabel} · {_editingCartLine.TaxRate:P0}. El importe lo incluye.";
+    }
+
+    private void SaveCartLineEdit_Click(object sender, RoutedEventArgs e)
+    {
+        CartLineEditErrorLabel.Text = string.Empty;
+        if (_editingCartLine is null || _editingCartSaleUnit is null ||
+            CartLinePriceTierBox.SelectedItem is not ComboBoxItem { Tag: string priceTier }) return;
+
+        if (!decimal.TryParse(CartLineQuantityBox.Text.Trim(), NumberStyles.Number, PosNumberFormat.Culture, out var quantity) ||
+            quantity <= 0m || decimal.Round(quantity, 3) != quantity ||
+            !_editingCartSaleUnit.AllowsFractionalQuantities && decimal.Round(quantity, 0) != quantity)
+        {
+            CartLineEditErrorLabel.Text = _editingCartSaleUnit.AllowsFractionalQuantities
+                ? "La cantidad debe ser mayor que cero y tener hasta tres decimales."
+                : $"La cantidad de {_editingCartSaleUnit.Label} debe ser un número entero.";
+            CartLineQuantityBox.Focus();
+            CartLineQuantityBox.SelectAll();
+            return;
+        }
+
+        if (!PosNumberFormat.TryParseAmount(CartLinePriceBox.Text, out var price) || price <= 0m || decimal.Round(price, 4) != price)
+        {
+            CartLineEditErrorLabel.Text = "El precio debe ser mayor que cero y tener hasta cuatro decimales.";
+            CartLinePriceBox.Focus();
+            CartLinePriceBox.SelectAll();
+            return;
+        }
+
+        var reason = CartLinePriceReasonBox.Text.Trim();
+        decimal? priceOverride;
+        string? priceOverrideReason;
+        if (price == _editingCartLine.CatalogUnitPriceFor(_editingCartSaleUnit, priceTier))
+        {
+            priceOverride = null;
+            priceOverrideReason = null;
+        }
+        else
+        {
+            if (reason.Length is < 3 or > 250)
+            {
+                CartLineEditErrorLabel.Text = "Indica un motivo de entre 3 y 250 caracteres para el precio especial.";
+                CartLinePriceReasonBox.Focus();
+                return;
+            }
+            priceOverride = price;
+            priceOverrideReason = reason;
+        }
+
+        if (!_viewModel.EditCartLine(_editingCartLine, _editingCartSaleUnit, quantity, priceTier, priceOverride, priceOverrideReason))
+        {
+            CartLineEditErrorLabel.Text = _viewModel.StatusMessage;
+            return;
+        }
+
+        CloseCartLineEditor(refocusScanner: true);
+        UpdateSelectedProductPreview(_viewModel.SelectedCartLine);
+    }
+
+    private void CancelCartLineEdit_Click(object sender, RoutedEventArgs e)
+        => CloseCartLineEditor(refocusScanner: true);
+
+    private void CloseCartLineEditor(bool refocusScanner)
+    {
+        _editingCartLine = null;
+        _editingCartSaleUnit = null;
+        _editingCartPriceTier = "Price1";
+        _loadingCartLineEditor = false;
+        CartLineEditErrorLabel.Text = string.Empty;
+        ApplyResponsiveLayout();
+        UpdateSelectedProductPreview(_viewModel.SelectedCartLine);
+        if (refocusScanner) RefocusScanner();
+    }
+
+    private void FocusInlineQuantity()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            CartLineQuantityBox.Focus();
+            CartLineQuantityBox.SelectAll();
+        }, DispatcherPriority.Input);
     }
 
     private void ChangeSelectedQuantity_Click(object sender, RoutedEventArgs e)
@@ -749,7 +937,10 @@ public partial class MainWindow : Window
 
     private void RemoveSelectedCartLine_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.CanEditCart) _viewModel.RemoveProduct(_viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel);
+        if (!_viewModel.CanEditCart) return;
+        var line = _viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel;
+        if (ReferenceEquals(_editingCartLine, line)) CloseCartLineEditor(refocusScanner: false);
+        _viewModel.RemoveProduct(line);
     }
 
     private void ModulesButton_Click(object sender, RoutedEventArgs e)
@@ -776,6 +967,19 @@ public partial class MainWindow : Window
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if (_editingCartLine is not null && e.Key == Key.Escape)
+        {
+            if (CartLineSaleUnitBox.IsDropDownOpen || CartLinePriceTierBox.IsDropDownOpen) return;
+            e.Handled = true;
+            CloseCartLineEditor(refocusScanner: true);
+            return;
+        }
+        if (_editingCartLine is not null && (e.Key is Key.F1 or Key.F2 or Key.F4 or Key.F6 or Key.F7 or Key.F12))
+        {
+            e.Handled = true;
+            CartLineEditErrorLabel.Text = "Guarda o cancela la edición antes de cambiar de acción.";
+            return;
+        }
         if (e.Key == Key.Escape && MainMenuPopup.IsOpen)
         {
             e.Handled = true;
@@ -848,7 +1052,7 @@ public partial class MainWindow : Window
         _viewModel.SelectedCartLine = line;
         CartGrid.SelectedItem = line;
         CartGrid.ScrollIntoView(line);
-        _ = EditCartLineAsync(line);
+        _ = OpenCartLineEditorAsync(line, focusQuantity: true);
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
@@ -900,13 +1104,6 @@ public partial class MainWindow : Window
         finally { RefocusScanner(); }
     }
 
-    private void SaleTool_Click(object sender, RoutedEventArgs e)
-    {
-        SearchBox.Focus();
-        SearchBox.SelectAll();
-        _viewModel.SetStatus("Venta actual. Escanea un código o escribe el nombre del producto.");
-    }
-
     private void SalesHistoryTool_Click(object sender, RoutedEventArgs e)
     {
         new SalesHistoryWindow(_viewModel, CreateReceiptPreviewWindow) { Owner = this }.ShowDialog();
@@ -923,24 +1120,8 @@ public partial class MainWindow : Window
     {
         foreach (var item in _moduleMenuItems) ModulesPopup.Items.Remove(item);
         _moduleMenuItems.Clear();
-        ModuleMenuEmpty.Visibility = Visibility.Visible;
-        AdminModulesMenuItem.Visibility = Visibility.Collapsed;
-        AdminModulesMenuItem.Header = "Administrar módulos";
-        try
-        {
-            var managementAccess = await _apiClient.GetModuleManagementAccessAsync(cancellationToken);
-            if (managementAccess.CanOpenManagement)
-            {
-                AdminModulesMenuItem.Visibility = Visibility.Visible;
-                if (managementAccess.RequiresAdministratorPin)
-                    AdminModulesMenuItem.Header = "Administrar módulos (requiere PIN)";
-            }
-        }
-        catch (NotSupportedException) { }
-        catch (Exception exception)
-        {
-            _viewModel.SetStatus($"No se pudo consultar el acceso a módulos: {PosUserMessage.ForException(exception)}");
-        }
+        ModulesButton.Visibility = Visibility.Collapsed;
+        ReportsButton.Visibility = Visibility.Collapsed;
 
         foreach (var loaded in _desktopModules) loaded.LoadContext.Unload();
         _desktopModules.Clear();
@@ -983,7 +1164,6 @@ public partial class MainWindow : Window
                 foreach (var menu in module.Registry.Menus)
                 {
                     if (!module.Context.GrantedPermissions.Contains(menu.RequiredPermission)) continue;
-                    ModuleMenuEmpty.Visibility = Visibility.Collapsed;
                     var menuItem = new MenuItem
                     {
                         Header = menu.Label,
@@ -992,7 +1172,7 @@ public partial class MainWindow : Window
                     System.Windows.Automation.AutomationProperties.SetName(menuItem, menu.Label);
                     System.Windows.Automation.AutomationProperties.SetAutomationId(menuItem, $"Module_{module.ModuleId}_{menu.Id}");
                     menuItem.Click += ModuleMenu_Click;
-                    ModulesPopup.Items.Insert(1 + _moduleMenuItems.Count, menuItem);
+                    ModulesPopup.Items.Insert(_moduleMenuItems.Count, menuItem);
                     _moduleMenuItems.Add(menuItem);
                 }
             }
@@ -1002,6 +1182,12 @@ public partial class MainWindow : Window
                 allModulesLoaded = false;
             }
         }
+
+        ModulesButton.Visibility = _moduleMenuItems.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ReportsButton.Visibility = _desktopModules.Any(loaded => loaded.Registry.ReportCenter is { } center &&
+            loaded.Context.GrantedPermissions.Contains(center.RequiredPermission))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         return allModulesLoaded;
     }
 
@@ -1120,6 +1306,11 @@ public partial class MainWindow : Window
 
     private async void ChargeRequested(object? sender, EventArgs e)
     {
+        if (_editingCartLine is not null)
+        {
+            CartLineEditErrorLabel.Text = "Guarda o cancela la edición antes de cobrar la venta.";
+            return;
+        }
         try
         {
         var pendingPayments = _viewModel.PendingPayments ?? [];
