@@ -1,5 +1,5 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.InventoryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inventario" Width="1540" Height="900" MinWidth="1080" MinHeight="650" WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI">
+        Title="Inventario" Width="1540" Height="900" MinWidth="1080" MinHeight="650" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI">
     <Window.Resources>
         <ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary>
     </Window.Resources>

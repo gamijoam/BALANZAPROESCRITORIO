@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Pos.Modules.Reporting.Desktop"
         Title="Diseñar hoja del reporte" Width="1500" Height="920" MinWidth="1100" MinHeight="700"
-        WindowState="Maximized" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
+        WindowState="Maximized" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}">
     <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -11,18 +11,18 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="White" BorderBrush="#D5DFEB" BorderThickness="1"
-                CornerRadius="6" Padding="12" Margin="0,0,0,10">
+        <Border Grid.Row="0" Background="#102D50" BorderBrush="#102D50" BorderThickness="1"
+                CornerRadius="9" Padding="12" Margin="0,0,0,10">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left">
-                    <TextBlock Text="DISEÑADOR DE HOJAS" Foreground="#173F78" FontSize="21" FontWeight="Bold"/>
-                    <TextBlock Text="Personaliza el formato y revisa los datos antes de imprimir." Foreground="#63758B" Margin="0,3,0,0"/>
+                    <TextBlock Text="Diseñador de hojas" Foreground="White" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="Personaliza el formato y revisa los datos antes de imprimir." Foreground="#D7E3F2" Margin="0,3,0,0"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Plantilla" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,7,0"/>
+                    <TextBlock Text="Plantilla" Foreground="White" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,7,0"/>
                     <TextBox x:Name="TemplateNameBox" Width="200" Height="34" MaxLength="80" Padding="7" VerticalContentAlignment="Center"
                              AutomationProperties.Name="Nombre de la plantilla"/>
-                    <Button Content="Guardar plantilla" Height="34" Padding="14,0" Margin="8,0,0,0"
+                    <Button Content="Guardar plantilla" Height="42" Padding="14,0" Margin="8,0,0,0" Style="{StaticResource PosWindow.SuccessButton}"
                             Click="SaveTemplate_Click" AutomationProperties.Name="Guardar plantilla de reporte"/>
                 </StackPanel>
             </DockPanel>
@@ -38,7 +38,7 @@
                     CornerRadius="6" Padding="12" Margin="0,0,10,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <TextBlock Text="FORMATO" Foreground="#173F78" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                        <TextBlock Text="FORMATO" Foreground="#132D4F" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
                         <TextBlock Text="Nombre del comercio" FontWeight="SemiBold"/>
                         <TextBox x:Name="CommerceNameBox" MaxLength="120" Margin="0,4,0,8" Padding="6" TextChanged="TemplateText_Changed"/>
                         <TextBlock Text="Título" FontWeight="SemiBold"/>
@@ -70,12 +70,12 @@
                             <ComboBoxItem Content="Gris oscuro" Tag="charcoal"/>
                         </ComboBox>
 
-                        <TextBlock Text="Agrupar por" Foreground="#173F78" FontWeight="Bold" Margin="0,4,0,4"/>
+                        <TextBlock Text="Agrupar por" Foreground="#132D4F" FontWeight="Bold" Margin="0,4,0,4"/>
                         <ComboBox x:Name="GroupByPicker" Height="30" Margin="0,0,0,8" SelectionChanged="TemplateOption_Changed"/>
-                        <TextBlock Text="Sumar columnas numéricas" Foreground="#173F78" FontWeight="Bold"/>
+                        <TextBlock Text="Sumar columnas numéricas" Foreground="#132D4F" FontWeight="Bold"/>
                         <StackPanel x:Name="SumColumnsPanel" Margin="0,3,0,8"/>
 
-                        <TextBlock Text="COLUMNAS DE LA HOJA" Foreground="#173F78" FontWeight="Bold" Margin="0,5,0,5"/>
+                        <TextBlock Text="COLUMNAS DE LA HOJA" Foreground="#132D4F" FontWeight="Bold" Margin="0,5,0,5"/>
                         <DataGrid x:Name="ColumnsEditor" Height="245" AutoGenerateColumns="False" CanUserAddRows="False"
                                   CanUserDeleteRows="False" CanUserReorderColumns="False" HeadersVisibility="Column"
                                   SelectionMode="Single" RowHeaderWidth="0" CellEditEnding="ColumnsEditor_CellEditEnding"
@@ -104,10 +104,10 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <StackPanel Margin="0,0,0,12">
-                        <TextBlock x:Name="PreviewCommerceText" Text="BALANZAPRO" Foreground="#173F78" FontSize="13" FontWeight="Bold"/>
-                        <TextBlock x:Name="PreviewTitleText" Text="Reporte" Foreground="#173F78" FontSize="24" FontWeight="Bold" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="PreviewCommerceText" Text="BALANZAPRO" Foreground="#132D4F" FontSize="13" FontWeight="Bold"/>
+                        <TextBlock x:Name="PreviewTitleText" Text="Reporte" Foreground="#132D4F" FontSize="24" FontWeight="Bold" Margin="0,3,0,0"/>
                         <TextBlock x:Name="PreviewSubtitleText" Foreground="#52677F" FontSize="13" Margin="0,3,0,0"/>
-                        <TextBlock x:Name="PreviewDetailsText" Foreground="#63758B" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="PreviewDetailsText" Foreground="#52677F" FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
                         <ItemsControl x:Name="PreviewSummaryItems" Margin="0,9,0,4" AutomationProperties.Name="Resumen personalizado del reporte">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -117,15 +117,15 @@
                                     <Border Width="205" Background="#F4F7FA" BorderBrush="#D5DFEB" BorderThickness="1"
                                             CornerRadius="4" Padding="9,6" Margin="0,0,7,6">
                                         <StackPanel>
-                                            <TextBlock Text="{Binding Label}" Foreground="#63758B" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding Value}" Foreground="#173F78" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
-                                            <TextBlock Text="{Binding Detail}" Foreground="#63758B" FontSize="9" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Label}" Foreground="#52677F" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Value}" Foreground="#132D4F" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
+                                            <TextBlock Text="{Binding Detail}" Foreground="#52677F" FontSize="9" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Border x:Name="PreviewAccentBar" Height="4" Background="#173F78" Margin="0,10,0,0"/>
+                        <Border x:Name="PreviewAccentBar" Height="4" Background="#132D4F" Margin="0,10,0,0"/>
                     </StackPanel>
                     <DataGrid x:Name="SheetPreviewGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
                               CanUserAddRows="False" CanUserReorderColumns="False" CanUserSortColumns="False"
@@ -134,20 +134,20 @@
                               AlternatingRowBackground="#F4F7FA" Background="White" BorderThickness="0"
                               AutomationProperties.Name="Vista editable del reporte">
                         <DataGrid.Resources>
-                            <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="Background" Value="#173F78"/>
+                            <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource PosWindow.BaseDataGridColumnHeader}">
+                                <Setter Property="Background" Value="#132D4F"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                                 <Setter Property="Padding" Value="9,7"/>
                                 <Setter Property="BorderBrush" Value="#FFFFFF"/>
                             </Style>
-                            <Style TargetType="DataGridRow">
+                            <Style TargetType="DataGridRow" BasedOn="{StaticResource PosWindow.BaseDataGridRow}">
                                 <Setter Property="MinHeight" Value="29"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.GroupHeader}">
                                         <Setter Property="Background" Value="#DCE8F6"/>
                                         <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="Foreground" Value="#173F78"/>
+                                        <Setter Property="Foreground" Value="#132D4F"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.Subtotal}">
                                         <Setter Property="Background" Value="#EAF0F7"/>
@@ -156,7 +156,7 @@
                                     <DataTrigger Binding="{Binding Kind}" Value="{x:Static local:ReportSheetRowKind.GrandTotal}">
                                         <Setter Property="Background" Value="#DCE8F6"/>
                                         <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="Foreground" Value="#173F78"/>
+                                        <Setter Property="Foreground" Value="#132D4F"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>

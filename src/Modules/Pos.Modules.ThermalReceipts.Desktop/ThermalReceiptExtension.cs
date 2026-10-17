@@ -2,6 +2,7 @@ using System.Printing;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
 using Pos.Desktop.Modules.Abstractions;
 using Pos.Desktop.Presentation;
 using Pos.Shared.Contracts;
@@ -66,10 +67,16 @@ internal sealed class ThermalReceiptPreviewWindow : Window
     {
         _context = context; _receipt = receipt;
         Title = "Vista previa del ticket"; Width = 500; Height = 720; MinWidth = 380; MinHeight = 500;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var dock = new DockPanel();
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8) };
-        var retry = new Button { Content = "Imprimir / reintentar", Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5) };
+        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = new SolidColorBrush(Color.FromRgb(242, 245, 249));
+        var layout = new Grid { Margin = new Thickness(16) };
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var heading = new Border { Background = new SolidColorBrush(Color.FromRgb(16, 45, 80)), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 10) };
+        heading.Child = new TextBlock { Text = "Vista previa del ticket", Foreground = Brushes.White, FontSize = 19, FontWeight = FontWeights.Bold };
+        Grid.SetRow(heading, 0); layout.Children.Add(heading);
+        var retry = new Button { Content = "Imprimir / reintentar", Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5),
+            Background = new SolidColorBrush(Color.FromRgb(8, 103, 213)), Foreground = Brushes.White };
         retry.Click += async (_, _) =>
         {
             var result = await new ThermalReceiptExtension().PrintAsync(_context, _receipt);
@@ -79,8 +86,11 @@ internal sealed class ThermalReceiptPreviewWindow : Window
         };
         var close = new Button { Content = "Cerrar", Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5) };
         close.Click += (_, _) => Close();
-        buttons.Children.Add(retry); buttons.Children.Add(close); DockPanel.SetDock(buttons, Dock.Bottom);
-        dock.Children.Add(buttons); dock.Children.Add(_viewer); Content = dock;
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
+        buttons.Children.Add(retry); buttons.Children.Add(close); Grid.SetRow(buttons, 2); layout.Children.Add(buttons);
+        var preview = new Border { Background = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(213, 223, 235)), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(10) };
+        _viewer.Margin = new Thickness(0); preview.Child = _viewer; Grid.SetRow(preview, 1); layout.Children.Add(preview);
+        Content = layout;
         Loaded += async (_, _) => await LoadAsync();
     }
 

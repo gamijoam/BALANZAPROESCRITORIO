@@ -1,11 +1,11 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.ProductPriceWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Cambiar precio" Width="470" Height="410" MinWidth="430" MinHeight="380" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI">
+        Title="Cambiar precio" Width="470" Height="410" MinWidth="430" MinHeight="380" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="16,12"><StackPanel><TextBlock x:Name="HeadingLabel" Text="Cambiar precio" Foreground="White" FontSize="22" FontWeight="Bold"/><TextBlock x:Name="ProductLabel" Foreground="#D7E3F2" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel></Border>
         <StackPanel Grid.Row="1" VerticalAlignment="Center">
             <TextBlock x:Name="PriceTierHeader" Text="Nivel del catálogo" FontWeight="SemiBold"/><ComboBox x:Name="PriceTierBox" Height="38" Margin="0,5,0,10" SelectionChanged="PriceTier_SelectionChanged" AutomationProperties.Name="Nivel de precio que se va a cambiar"/>
-            <TextBlock x:Name="CurrentPriceLabel" Foreground="#63758B" Margin="0,0,0,7" TextWrapping="Wrap"/>
+            <TextBlock x:Name="CurrentPriceLabel" Foreground="#52677F" Margin="0,0,0,7" TextWrapping="Wrap"/>
             <TextBlock x:Name="AmountLabel" Text="Nuevo precio" FontWeight="SemiBold"/><TextBox x:Name="PriceBox" Height="38" Padding="8" Margin="0,5,0,10" AutomationProperties.Name="Nuevo precio de catálogo"/>
             <TextBlock x:Name="ReasonLabel" Text="Motivo del cambio" FontWeight="SemiBold"/><TextBox x:Name="ReasonBox" Height="38" Padding="8" Margin="0,5,0,0" AutomationProperties.Name="Motivo del cambio de precio"/>
             <TextBlock x:Name="ModeHint" Foreground="#52677F" Margin="0,7,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>

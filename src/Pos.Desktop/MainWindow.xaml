@@ -6,7 +6,7 @@
         Icon="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro.ico"
         Height="900" Width="1536" MinHeight="500" MinWidth="800"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized" WindowStartupLocation="CenterScreen"
-        Background="#F2F5F9" UseLayoutRounding="True"
+        Background="{StaticResource PosWindow.Background}" UseLayoutRounding="True"
         PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded" Closing="Window_Closing" SizeChanged="Window_SizeChanged">
     <Window.Resources>
         <SolidColorBrush x:Key="Pos.Navy" Color="#102D50"/>
@@ -234,8 +234,8 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Border Background="#F0F4F8" CornerRadius="7" Width="44" Height="44" VerticalAlignment="Center">
                             <Grid>
-                                <Ellipse Width="14" Height="14" Fill="#173F78" VerticalAlignment="Top" Margin="0,7,0,0"/>
-                                <Border Width="24" Height="12" CornerRadius="7,7,4,4" Background="#173F78"
+                                <Ellipse Width="14" Height="14" Fill="#132D4F" VerticalAlignment="Top" Margin="0,7,0,0"/>
+                                <Border Width="24" Height="12" CornerRadius="7,7,4,4" Background="#132D4F"
                                         VerticalAlignment="Bottom" Margin="0,0,0,6"/>
                             </Grid>
                         </Border>

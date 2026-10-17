@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Registrar devolución" Height="620" Width="960" MinHeight="540" MinWidth="800"
-        WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI" FontSize="14">
+        WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI" FontSize="14">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -33,7 +33,7 @@
             <TextBox x:Name="ReasonBox" Height="38" Padding="8" MaxLength="250"/>
             <TextBlock Text="El sistema registrará el reintegro con los medios y monedas originales. Los reintegros bancarios o por terminal deben procesarse también en el proveedor de pago." TextWrapping="Wrap" Foreground="#52677F" Margin="0,8,0,0"/>
         </StackPanel>
-        <TextBlock x:Name="PreviewLabel" Grid.Row="4" Margin="0,12,0,8" FontSize="18" FontWeight="Bold" Foreground="#173F78"/>
+        <TextBlock x:Name="PreviewLabel" Grid.Row="4" Margin="0,12,0,8" FontSize="18" FontWeight="Bold" Foreground="#132D4F"/>
         <DockPanel Grid.Row="5" LastChildFill="False">
             <TextBlock x:Name="ErrorLabel" DockPanel.Dock="Left" VerticalAlignment="Center" Foreground="#B4232E" TextWrapping="Wrap" Width="530"/>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right">

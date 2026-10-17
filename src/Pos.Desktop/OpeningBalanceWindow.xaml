@@ -1,5 +1,5 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.OpeningBalanceWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Registrar saldo inicial" Width="520" Height="390" MinWidth="480" MinHeight="360" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F2F5F9">
+        Title="Registrar saldo inicial" Width="520" Height="390" MinWidth="480" MinHeight="360" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="{StaticResource PosWindow.Background}">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="22">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -11,7 +11,7 @@
         <StackPanel Grid.Row="3" Margin="0,14,0,0">
             <TextBlock Text="Motivo o fecha de corte" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,5"/>
             <TextBox x:Name="ReasonBox" Height="44" Padding="9" FontSize="15" MaxLength="250" VerticalContentAlignment="Center"/>
-            <TextBlock Text="Este registro aparecerá en el historial y quedará asociado al operador que lo cargue." FontSize="12" Foreground="#63758B" TextWrapping="Wrap" Margin="0,8,0,0"/>
+            <TextBlock Text="Este registro aparecerá en el historial y quedará asociado al operador que lo cargue." FontSize="12" Foreground="#52677F" TextWrapping="Wrap" Margin="0,8,0,0"/>
         </StackPanel>
         <DockPanel Grid.Row="4" LastChildFill="False" Margin="0,18,0,0">
             <TextBlock x:Name="StatusLabel" DockPanel.Dock="Left" Foreground="#B43B42" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>

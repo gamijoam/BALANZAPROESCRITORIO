@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Pos.Desktop"
         Title="Cobrar venta" Width="900" Height="640" MinWidth="760" MinHeight="560"
-        WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI"
         PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries>
         <Style x:Key="PaymentMethodButton" TargetType="Button">
@@ -11,7 +11,7 @@
             <Setter Property="Margin" Value="0,0,0,5"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Background" Value="#2858A2"/>
+            <Setter Property="Background" Value="#0867D5"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -63,7 +63,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="#E5ECF5" CornerRadius="7" Padding="12" Margin="0,0,12,0">
                 <StackPanel x:Name="PaymentMethodsPanel">
-                    <TextBlock Text="FORMAS DE PAGO" Foreground="#173F78" FontSize="14" FontWeight="Bold" Margin="2,0,0,10"/>
+                    <TextBlock Text="FORMAS DE PAGO" Foreground="#132D4F" FontSize="14" FontWeight="Bold" Margin="2,0,0,10"/>
                     <TextBlock Text="Atajos: Alt+1 a 5 · Ctrl+1 a 5" Foreground="#52677F" FontSize="10" Margin="2,0,0,7"/>
                     <Button x:Name="CashMethodButton" Tag="Efectivo" ToolTip="Alt+1: Efectivo. También Ctrl+1." TabIndex="0" AutomationProperties.Name="Agregar pago en efectivo, Alt más 1" Style="{StaticResource PaymentMethodButton}" Click="PaymentMethod_Click">
                         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="Efectivo" VerticalAlignment="Center"/><Border Grid.Column="1" Background="#1D467F" CornerRadius="3" Padding="4,2" Margin="4,0,0,0"><TextBlock Text="Alt+1" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/></Border></Grid>
@@ -96,14 +96,14 @@
                             <DataGridTemplateColumn Header="" Width="48"><DataGridTemplateColumn.CellTemplate><DataTemplate><Button Content="×" FontSize="17" Foreground="#B43B42" Click="RemovePayment_Click" ToolTip="Quitar pago" AutomationProperties.Name="Quitar este pago"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <Border x:Name="PaymentsPlaceholder" Background="#FAFBFD" BorderBrush="#D7DFEA" BorderThickness="1" IsHitTestVisible="False">
-                        <TextBlock Text="Selecciona un método de pago para agregar el primer pago." Foreground="#63758B" FontSize="15" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center" Margin="24"/>
+                    <Border x:Name="PaymentsPlaceholder" Background="#FAFBFD" BorderBrush="#D5DFEB" BorderThickness="1" IsHitTestVisible="False">
+                        <TextBlock Text="Selecciona un método de pago para agregar el primer pago." Foreground="#52677F" FontSize="15" TextAlignment="Center" TextWrapping="Wrap" VerticalAlignment="Center" Margin="24"/>
                     </Border>
                 </Grid>
                 <TextBlock Grid.Row="2" Text="Al elegir un método, el saldo pendiente se propone como monto. Puedes cambiar la moneda y el importe se convierte con la tasa vigente."
                            FontSize="12" Foreground="#52677F" Margin="0,8,0,0" TextWrapping="Wrap"/>
                 <StackPanel x:Name="ReceivableDueDatePanel" Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center" Visibility="Collapsed">
-                    <TextBlock Text="Vence el:" Foreground="#173F78" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,10,0"/>
+                    <TextBlock Text="Vence el:" Foreground="#132D4F" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,10,0"/>
                     <DatePicker x:Name="ReceivableDueDatePicker" Width="150" Height="32" SelectedDateFormat="Short" AutomationProperties.Name="Fecha de vencimiento del crédito"/>
                     <TextBlock Text="Se propone a 30 días; puedes cambiarla." Foreground="#52677F" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </StackPanel>
@@ -118,7 +118,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <TextBlock x:Name="OtherCurrencyDueTitle" Text="EQUIVALENTE USD" Foreground="#52677F" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right"/>
-                    <TextBlock x:Name="OtherCurrencyDueLabel" FontSize="17" FontWeight="Bold" Foreground="#2858A2" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="OtherCurrencyDueLabel" FontSize="17" FontWeight="Bold" Foreground="#0867D5" HorizontalAlignment="Right"/>
                 </StackPanel>
             </Grid>
         </Border>

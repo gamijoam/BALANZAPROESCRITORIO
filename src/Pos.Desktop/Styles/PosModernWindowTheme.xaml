@@ -12,6 +12,21 @@
     <SolidColorBrush x:Key="PosWindow.Border" Color="#D5DFEB"/>
     <SolidColorBrush x:Key="PosWindow.Selected" Color="#E6F1FF"/>
 
+    <Style TargetType="Window">
+        <Setter Property="Background" Value="{StaticResource PosWindow.Background}"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+    </Style>
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+    </Style>
+    <Style TargetType="Label">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
     <Style TargetType="Button">
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
@@ -56,6 +71,7 @@
     <Style x:Key="PosWindow.DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Foreground" Value="{StaticResource PosWindow.Danger}"/><Setter Property="BorderBrush" Value="#F0C8C8"/>
     </Style>
+    <Style x:Key="PosWindow.BaseButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"/>
 
     <Style TargetType="TextBox">
         <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="14"/>
@@ -64,6 +80,13 @@
         <Setter Property="Padding" Value="10,7"/><Setter Property="MinHeight" Value="40"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
+    <Style x:Key="PosWindow.BaseTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"/>
+    <Style TargetType="PasswordBox">
+        <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/><Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="#B8C8DB"/><Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,7"/><Setter Property="MinHeight" Value="40"/>
+    </Style>
     <Style TargetType="ComboBox">
         <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="14"/>
         <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/><Setter Property="Background" Value="White"/>
@@ -71,6 +94,7 @@
         <Setter Property="Padding" Value="8,5"/><Setter Property="MinHeight" Value="40"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
+    <Style x:Key="PosWindow.BaseComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}"/>
     <Style TargetType="DatePicker">
         <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="14"/>
         <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/><Setter Property="Background" Value="White"/>
@@ -92,6 +116,7 @@
         <Setter Property="FontWeight" Value="Bold"/><Setter Property="Padding" Value="12,10"/>
         <Setter Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/><Setter Property="BorderThickness" Value="0,0,0,1"/>
     </Style>
+    <Style x:Key="PosWindow.BaseDataGridColumnHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}"/>
     <Style TargetType="DataGridCell">
         <Setter Property="Padding" Value="8,5"/><Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -103,13 +128,70 @@
             <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource PosWindow.Selected}"/><Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/><Setter Property="BorderBrush" Value="{StaticResource PosWindow.Primary}"/><Setter Property="BorderThickness" Value="3,0,0,1"/></Trigger>
         </Style.Triggers>
     </Style>
+    <Style x:Key="PosWindow.BaseDataGridRow" TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}"/>
+    <Style x:Key="PosWindow.BaseDataGrid" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}"/>
     <Style TargetType="TabControl">
         <Setter Property="Background" Value="White"/><Setter Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="8"/>
     </Style>
     <Style TargetType="TabItem">
         <Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="14"/>
         <Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Padding" Value="16,10"/>
         <Setter Property="Foreground" Value="{StaticResource PosWindow.Muted}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="TabSurface" Background="Transparent" BorderBrush="Transparent"
+                            BorderThickness="1" CornerRadius="7" Padding="{TemplateBinding Padding}" Margin="2">
+                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="TabSurface" Property="Background" Value="{StaticResource PosWindow.Selected}"/>
+                            <Setter TargetName="TabSurface" Property="BorderBrush" Value="#B9D1EC"/>
+                            <Setter Property="Foreground" Value="{StaticResource PosWindow.Primary}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="TabSurface" Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#8996A5"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="GroupBox">
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="12"/>
+    </Style>
+    <Style TargetType="CheckBox">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style TargetType="RadioButton">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style TargetType="ListBox">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style TargetType="ListView">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="Foreground" Value="{StaticResource PosWindow.Text}"/>
+        <Setter Property="Background" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource PosWindow.Border}"/>
+        <Setter Property="BorderThickness" Value="1"/>
     </Style>
 </ResourceDictionary>
