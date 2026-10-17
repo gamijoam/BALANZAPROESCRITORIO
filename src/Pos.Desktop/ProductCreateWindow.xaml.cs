@@ -11,6 +11,7 @@ public partial class ProductCreateWindow : Window
 {
     private readonly PosViewModel _viewModel;
     private string? _imagePath;
+    private IReadOnlyList<ProductUnitInfo> _units = [];
     private bool _unitsLoaded;
     public Guid? CreatedProductId { get; private set; }
     public string CompletionMessage { get; private set; } = "Producto creado.";
@@ -25,8 +26,9 @@ public partial class ProductCreateWindow : Window
         try
         {
             var units = await _viewModel.GetProductUnitsAsync();
-            BaseUnitBox.ItemsSource = units;
-            BaseUnitBox.SelectedItem = units.FirstOrDefault(x => x.Name.Equals("Unidad", StringComparison.OrdinalIgnoreCase)) ?? units.FirstOrDefault();
+            _units = units;
+            BaseUnitBox.ItemsSource = _units;
+            BaseUnitBox.SelectedItem = _units.FirstOrDefault(x => x.Name.Equals("Unidad", StringComparison.OrdinalIgnoreCase)) ?? _units.FirstOrDefault();
             _unitsLoaded = true;
             UpdateUnitLabels();
         }
@@ -44,15 +46,15 @@ public partial class ProductCreateWindow : Window
 
     private async void CreateUnit_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ProductUnitCreateWindow { Owner = this };
+        var dialog = new ProductUnitCreateWindow(_units) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         try
         {
             var created = await _viewModel.CreateProductUnitAsync(dialog.UnitName, dialog.Abbreviation, dialog.AllowsFractional);
-            var units = await _viewModel.GetProductUnitsAsync();
-            BaseUnitBox.ItemsSource = units;
-            BaseUnitBox.SelectedItem = units.FirstOrDefault(x => x.Id == created.Id);
-            ErrorLabel.Text = $"Unidad {created.DisplayLabel} creada y seleccionada.";
+            _units = await _viewModel.GetProductUnitsAsync();
+            BaseUnitBox.ItemsSource = _units;
+            BaseUnitBox.SelectedItem = _units.FirstOrDefault(x => x.Id == created.Id);
+            ErrorLabel.Text = $"Unidad {created.Name} agregada.";
         }
         catch (Exception ex) { ErrorLabel.Text = PosUserMessage.ForException(ex); }
     }

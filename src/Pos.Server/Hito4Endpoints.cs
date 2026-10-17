@@ -163,7 +163,7 @@ internal static class Hito4Endpoints
                 join unit in db.ProductUnits.AsNoTracking() on presentation.UnitId equals unit.Id
                 where presentation.ProductId == productId
                 orderby presentation.Active descending, presentation.Label
-                select new { presentation.Id, presentation.UnitId, presentation.Label, UnitName = unit.Name,
+                select new { presentation.Id, presentation.UnitId, Label = unit.Name, UnitName = unit.Name,
                     UnitAbbreviation = unit.Abbreviation, presentation.ConversionFactor, presentation.Price1, presentation.Price2,
                     presentation.Price3, presentation.Barcode, AllowsFractionalQuantities = unit.AllowsFractionalQuantities,
                     presentation.Active }).ToListAsync(ct);
@@ -959,7 +959,7 @@ internal static class Hito4Endpoints
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         { return Results.Conflict(new { error = "product_presentation_conflict" }); }
-        return Results.Ok(new { row.Id, row.UnitId, row.Label, UnitName = unit.Name, UnitAbbreviation = unit.Abbreviation,
+        return Results.Ok(new { row.Id, row.UnitId, Label = unit.Name, UnitName = unit.Name, UnitAbbreviation = unit.Abbreviation,
             row.ConversionFactor, row.Price1, row.Price2, row.Price3, row.Barcode,
             AllowsFractionalQuantities = unit.AllowsFractionalQuantities, row.Active });
     }

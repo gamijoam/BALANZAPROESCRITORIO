@@ -187,10 +187,24 @@ public sealed class ProductSelectionEntry(ProductInfo product) : INotifyProperty
     }
     public string StockLabel => Product.StockQuantity is not { } quantity
         ? "No disponible"
-        : quantity <= 0m ? "0 · AGOTADO" : $"{PosNumberFormat.FormatQuantity(quantity)} {Product.BaseUnitAbbreviation}";
-    public string SaleUnitsSummary => $"Unidad base: {Product.BaseUnitName}" +
-        (Product.SaleUnits.Count <= 1 ? string.Empty : " · También: " + string.Join(", ", Product.SaleUnits.Where(x => x.PresentationId.HasValue)
-            .Select(x => $"{x.Label} (×{PosNumberFormat.FormatQuantity(x.ConversionFactor)} {Product.BaseUnitAbbreviation})")));
+        : quantity <= 0m ? "0 · AGOTADO" : QuantityWithUnit(quantity, Product.BaseUnitName);
+    public string SaleUnitsSummary => Product.SaleUnits.Count == 0
+        ? $"Se vende por: {Product.BaseUnitName}"
+        : $"Se vende como: {string.Join(" · ", Product.SaleUnits.GroupBy(x => x.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First().DisplayLabel))}";
+
+    private static string QuantityWithUnit(decimal quantity, string unitName)
+    {
+        if (quantity == 1m) return $"{PosNumberFormat.FormatQuantity(quantity)} {unitName}";
+        var name = unitName.Trim();
+        var plural = name.EndsWith('z') ? name[..^1] + "ces"
+            : name.EndsWith('s') ? name
+            : name.EndsWith("ión", StringComparison.OrdinalIgnoreCase) ? name[..^3] + "iones"
+            : name.EndsWith("ón", StringComparison.OrdinalIgnoreCase) ? name[..^2] + "ones"
+            : name.EndsWith('r') || name.EndsWith('d') || name.EndsWith('n') || name.EndsWith('j') ? name + "es"
+            : name + "s";
+        return $"{PosNumberFormat.FormatQuantity(quantity)} {plural}";
+    }
 
     public void SetImage(ImageSource? image, string placeholderText)
     {

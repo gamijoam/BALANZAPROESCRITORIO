@@ -468,8 +468,11 @@ public sealed class PosViewModel : INotifyPropertyChanged
             var needsReview = false;
             foreach (var saved in workspace.Lines)
             {
+                var presentationName = string.IsNullOrWhiteSpace(saved.CurrentPresentationUnitName)
+                    ? saved.CurrentPresentationName
+                    : saved.CurrentPresentationUnitName;
                 var currentSaleUnit = new ProductSaleUnitInfo(saved.PresentationId, saved.CurrentPresentationUnitId ?? saved.PresentationUnitId ?? Guid.Empty,
-                    saved.CurrentPresentationName, saved.CurrentPresentationUnitName, saved.CurrentPresentationUnitAbbreviation,
+                    presentationName, saved.CurrentPresentationUnitName, saved.CurrentPresentationUnitAbbreviation,
                     saved.CurrentConversionFactor, saved.CurrentSaleUnitPrice1 > 0m ? saved.CurrentSaleUnitPrice1 : saved.CurrentPrice1,
                     saved.CurrentSaleUnitPrice2 ?? saved.CurrentPrice2, saved.CurrentSaleUnitPrice3 ?? saved.CurrentPrice3,
                     null, saved.CurrentSaleUnitAllowsFractionalQuantities) { BaseUnitAbbreviation = saved.BaseUnitAbbreviation };

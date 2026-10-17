@@ -1148,7 +1148,8 @@ app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, Auth
         var baseUnit = baseUnits.GetValueOrDefault(product.BaseUnitId);
         var presentations = salePresentations.Where(x => x.ProductId == product.Id).Select(x => new
         {
-            presentationId = (Guid?)x.Id, x.UnitId, x.Label, x.UnitName, x.UnitAbbreviation, x.ConversionFactor,
+            presentationId = (Guid?)x.Id, x.UnitId, Label = x.UnitName, x.UnitName, x.UnitAbbreviation,
+            BaseUnitAbbreviation = baseUnit?.Abbreviation ?? "ud", x.ConversionFactor,
             Price1 = x.Price1 ?? product.UnitPrice * x.ConversionFactor,
             Price2 = x.Price2 ?? (product.Price2.HasValue ? product.Price2.Value * x.ConversionFactor : null),
             Price3 = x.Price3 ?? (product.Price3.HasValue ? product.Price3.Value * x.ConversionFactor : null),
@@ -1158,7 +1159,8 @@ app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, Auth
         {
             presentationId = (Guid?)null, UnitId = product.BaseUnitId,
             Label = baseUnit?.Name ?? "Unidad", UnitName = baseUnit?.Name ?? "Unidad",
-            UnitAbbreviation = baseUnit?.Abbreviation ?? "ud", ConversionFactor = 1m,
+            UnitAbbreviation = baseUnit?.Abbreviation ?? "ud", BaseUnitAbbreviation = baseUnit?.Abbreviation ?? "ud",
+            ConversionFactor = 1m,
             Price1 = product.UnitPrice, Price2 = product.Price2, Price3 = product.Price3,
             Barcode = (string?)null, AllowsFractionalQuantities = baseUnit?.AllowsFractionalQuantities ?? true
         });

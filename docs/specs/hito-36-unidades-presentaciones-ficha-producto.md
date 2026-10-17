@@ -17,12 +17,16 @@ Implementar el plan aprobado por el usuario para manejar unidades base y present
 9. Las ventas y cantidades históricas existentes no se reinterpretan. Los campos nuevos de sus líneas usan factor 1 y la unidad histórica genérica.
 10. El doble clic sobre una fila de Inventario abre la ficha completa. También existe una acción visible para abrirla sin doble clic.
 11. Los cambios de ficha y presentaciones requieren el permiso de catálogo y generan eventos de auditoría.
+12. El flujo común de unidades no exige escribir abreviaturas ni llenar precios y códigos opcionales; esos datos quedan en opciones avanzadas.
+13. Al elegir una presentación conocida, el programa propone su equivalencia habitual (Par = 2, Docena = 12). Para cajas y paquetes de contenido variable, pide solo cuántas unidades base contiene.
+14. La búsqueda y el carrito muestran el nombre corto de la forma de venta, como “Par”; la equivalencia completa queda visible en la ficha del producto.
 
 ## Reglas de datos
 
 - Unidad base: unidad en la que se guarda la existencia central y por almacén.
 - Presentación: cantidad vendible expresada en una unidad y convertida por un factor específico del producto; por ejemplo, una caja puede consumir 12 unidades de un SKU y 6 de otro.
 - Si no se define un precio para una presentación, se calcula desde el precio de la unidad base por el factor. El precio calculado queda sujeto a revisión y se puede reemplazar por un precio explícito.
+- El catálogo inicial incluye las unidades de uso común. Crear una unidad personalizada requiere solo un nombre; la abreviatura se genera y la opción de cantidades fraccionarias queda avanzada.
 - Cantidades vendidas deben ser enteras cuando la unidad seleccionada no permite fracciones. Si la unidad base tampoco permite fracciones, el factor y el consumo calculado deben producir cantidades base enteras; el consumo conserva precisión máxima de tres decimales.
 - Los registros históricos de venta guardan la descripción, presentación, factor, cantidad vendida y cantidad base consumida en el momento de confirmar.
 

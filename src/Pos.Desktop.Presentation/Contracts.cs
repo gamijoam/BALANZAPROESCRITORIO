@@ -21,19 +21,40 @@ public sealed record ProductInfo(Guid Id, string Sku, string Name, decimal UnitP
 }
 public sealed record ProductUnitInfo(Guid Id, string Name, string Abbreviation, bool AllowsFractionalQuantities, bool IsSystem, bool Active)
 {
-    public string DisplayLabel => $"{Name} ({Abbreviation})";
+    public string DisplayLabel => Name;
 }
 public sealed record ProductPresentationInfo(Guid Id, Guid UnitId, string Label, string UnitName, string UnitAbbreviation,
     decimal ConversionFactor, decimal? Price1, decimal? Price2, decimal? Price3, string? Barcode,
     bool AllowsFractionalQuantities, bool Active = true)
 {
     public string StatusLabel => Active ? "Activa" : "Inactiva";
+    public string BaseUnitName { get; init; } = "Unidad";
+    public string ConversionLabel
+    {
+        get
+        {
+            var unitName = ConversionFactor == 1m ? BaseUnitName : PluralizeUnitName(BaseUnitName);
+            return $"{PosNumberFormat.FormatQuantity(ConversionFactor)} {unitName}";
+        }
+    }
+    public string Price1Label => Price1?.ToString("N2", PosNumberFormat.Culture) ?? "Automático";
+
+    private static string PluralizeUnitName(string name)
+    {
+        if (name.EndsWith('z')) return name[..^1] + "ces";
+        if (name.EndsWith('s')) return name;
+        if (name.EndsWith("ión", StringComparison.OrdinalIgnoreCase)) return name[..^3] + "iones";
+        if (name.EndsWith("ón", StringComparison.OrdinalIgnoreCase)) return name[..^2] + "ones";
+        return name.EndsWith('r') || name.EndsWith('d') || name.EndsWith('n') || name.EndsWith('j') ? name + "es" : name + "s";
+    }
 }
 public sealed record ProductSaleUnitInfo(Guid? PresentationId, Guid UnitId, string Label, string UnitName, string UnitAbbreviation,
     decimal ConversionFactor, decimal? Price1, decimal? Price2, decimal? Price3, string? Barcode, bool AllowsFractionalQuantities)
 {
     public string BaseUnitAbbreviation { get; init; } = "ud";
-    public string DisplayLabel => $"{Label} · descuenta {PosNumberFormat.FormatQuantity(ConversionFactor)} {BaseUnitAbbreviation}";
+    public string DisplayLabel => PresentationId.HasValue
+        ? $"{Label} (×{PosNumberFormat.FormatQuantity(ConversionFactor)} {BaseUnitAbbreviation})"
+        : Label;
 }
 public sealed record ProductDetailsInfo(Guid Id, string Sku, string Name, decimal UnitPrice, decimal? Price2, decimal? Price3,
     string Currency, decimal Quantity, decimal? UnitCost, decimal MinimumStock, string TaxTreatment, bool Active,
@@ -215,7 +236,7 @@ public sealed record SaleDetailLine(string Sku, string Description, decimal Quan
     public decimal InventoryQuantity { get; init; }
     public string DisplayDescription => PresentationName is "" or "Unidad"
         ? Description
-        : $"{Description} · {PresentationName} (x{PosNumberFormat.FormatQuantity(ConversionFactor)})";
+        : $"{Description} · {PresentationName}";
     public string PriceTier { get; init; } = "Price1";
     public string TaxTreatment { get; init; } = "NotCaptured";
     public decimal TaxRate { get; init; }
