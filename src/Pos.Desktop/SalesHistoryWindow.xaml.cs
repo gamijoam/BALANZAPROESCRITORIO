@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Pos.Desktop.Presentation;
 
 namespace Pos.Desktop;
@@ -18,6 +19,11 @@ public partial class SalesHistoryWindow : Window
     public SalesHistoryWindow(PosViewModel viewModel, Func<SaleReceipt, Window>? receiptPreviewFactory = null)
     {
         InitializeComponent();
+        var workArea = SystemParameters.WorkArea;
+        Width = workArea.Width - 16;
+        Height = workArea.Height - 16;
+        MinWidth = Math.Min(MinWidth, Width);
+        MinHeight = Math.Min(MinHeight, Height);
         _viewModel = viewModel;
         _receiptPreviewFactory = receiptPreviewFactory;
         FromDatePicker.SelectedDate = DateTime.Today.AddDays(-30);
@@ -57,13 +63,17 @@ public partial class SalesHistoryWindow : Window
             PageLabel.Text = $"Página {result.Page} de {pages}";
             PreviousPageButton.IsEnabled = result.Page > 1;
             NextPageButton.IsEnabled = result.Page < pages;
-            SalesSummary.Text = $"{_totalCount} ventas en el período · {result.Sales.Count} en esta página";
-            StatusText.Text = $"Período: {FromDatePicker.SelectedDate:dd/MM/yyyy} al {ToDatePicker.SelectedDate:dd/MM/yyyy}. Selecciona una venta para ver el comprobante.";
+            SalesSummary.Text = $"{_totalCount} ventas encontradas · {result.Sales.Count} en esta página";
+            StatusText.Text = $"Período: {FromDatePicker.SelectedDate:dd/MM/yyyy} al {ToDatePicker.SelectedDate:dd/MM/yyyy}. Haz doble clic en una venta para abrir su comprobante.";
 
             if (selectSaleId.HasValue)
             {
                 var match = SalesGrid.Items.Cast<SalesHistoryListItem>().FirstOrDefault(x => x.Sale.Id == selectSaleId.Value);
                 if (match is not null) SalesGrid.SelectedItem = match;
+            }
+            else if (SalesGrid.Items.Count > 0 && SalesGrid.SelectedItem is null)
+            {
+                SalesGrid.SelectedIndex = 0;
             }
         }
         catch (Exception exception)
@@ -114,6 +124,7 @@ public partial class SalesHistoryWindow : Window
     {
         if (SalesGrid is null) return;
         var term = SearchBox.Text.Trim();
+        var previousId = SelectedSale?.Id;
         var rows = _sales.Where(sale => term.Length == 0 ||
             sale.Id.ToString("N").Contains(term, StringComparison.OrdinalIgnoreCase) ||
             sale.CustomerName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
@@ -121,7 +132,11 @@ public partial class SalesHistoryWindow : Window
             sale.Lines.Any(line => line.Sku.Contains(term, StringComparison.OrdinalIgnoreCase) || line.Description.Contains(term, StringComparison.OrdinalIgnoreCase)))
             .Select(sale => new SalesHistoryListItem(sale)).ToArray();
         SalesGrid.ItemsSource = rows;
-        if (rows.Length == 0) ClearPreview();
+        var selection = rows.FirstOrDefault(x => x.Sale.Id == previousId) ?? rows.FirstOrDefault();
+        if (selection is not null)
+            SalesGrid.SelectedItem = selection;
+        else
+            ClearPreview();
     }
 
     private void SalesGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -133,6 +148,13 @@ public partial class SalesHistoryWindow : Window
         }
 
         SaleSelectionSummary.Text = $"Venta {sale.Id.ToString("N")[..8].ToUpperInvariant()} · {sale.StatusLabel} · Devuelto: {sale.Currency} {PosNumberFormat.FormatAmount(sale.ReturnedAmount)}";
+        SaleCustomerText.Text = sale.CustomerName;
+        SaleOperatorText.Text = $"Operador: {sale.OperatorName}";
+        SaleDateText.Text = $"Fecha: {ToLocalTime(sale.CreatedAtUtc):dd/MM/yyyy HH:mm}";
+        SaleStatusText.Text = sale.StatusLabel;
+        SaleTotalText.Text = $"{sale.Currency} {PosNumberFormat.FormatAmount(sale.Total)}";
+        SaleReferenceText.Text = sale.HistoricalReferenceLabel;
+        SaleNetText.Text = $"Neto: {sale.Currency} {PosNumberFormat.FormatAmount(sale.NetTotal)}";
         ReceiptPayments.Text = sale.Payments.Count == 0
             ? "Sin pagos registrados."
             : string.Join(Environment.NewLine, sale.Payments.Select(payment => payment.DescribeForSaleCurrency(sale.Currency)));
@@ -145,6 +167,13 @@ public partial class SalesHistoryWindow : Window
     {
         if (SaleSelectionSummary is null) return;
         SaleSelectionSummary.Text = "Selecciona una venta para ver sus artículos.";
+        SaleCustomerText.Text = "—";
+        SaleOperatorText.Text = "Operador: —";
+        SaleDateText.Text = "Fecha: —";
+        SaleStatusText.Text = "—";
+        SaleTotalText.Text = "—";
+        SaleReferenceText.Text = string.Empty;
+        SaleNetText.Text = string.Empty;
         ReceiptPayments.Text = string.Empty;
         PreviewLinesGrid.ItemsSource = null;
         PrintReceiptButton.IsEnabled = false;
@@ -154,6 +183,17 @@ public partial class SalesHistoryWindow : Window
     private void PrintReceipt_Click(object sender, RoutedEventArgs e)
     {
         if (SelectedSale is not { } sale) return;
+        OpenReceiptPreview(sale);
+    }
+
+    private void SalesGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (SelectedSale is { } sale)
+            OpenReceiptPreview(sale);
+    }
+
+    private void OpenReceiptPreview(SaleDetailRow sale)
+    {
         var receipt = SaleHistoryReceiptMapper.ToReceipt(sale);
         var preview = _receiptPreviewFactory?.Invoke(receipt) ?? new ReceiptWindow(receipt);
         preview.Owner = this;
