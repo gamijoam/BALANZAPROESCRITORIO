@@ -647,6 +647,10 @@
                                     Tag="Reportes" Click="NavigationMenu_Click" AutomationProperties.Name="Reportes" AutomationProperties.AutomationId="NavigateReports"/>
                             <Button Style="{StaticResource Pos.MenuButton}" Content="Operadores"
                                     Tag="Operadores" Click="NavigationMenu_Click" AutomationProperties.Name="Operadores" AutomationProperties.AutomationId="NavigateOperators"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Actualizar POS"
+                                    Tag="Actualizar POS" Click="NavigationMenu_Click" AutomationProperties.Name="Actualizar POS"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Actualizar módulos"
+                                    Tag="Actualizar módulos" Click="NavigationMenu_Click" AutomationProperties.Name="Actualizar módulos"/>
                             <Button x:Name="ModulesButton" Style="{StaticResource Pos.MenuButton}" Content="Módulos y extensiones"
                                     Click="ModulesButton_Click" AutomationProperties.Name="Módulos y extensiones"
                                     AutomationProperties.AutomationId="NavigateModules" ToolTip="Abre las funciones de módulos instalados">

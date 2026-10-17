@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Globalization;
 using System.ComponentModel;
 using System.Windows;
@@ -73,7 +74,46 @@ public partial class MainWindow : Window
             case "Clientes": Customer_Click(sender, e); break;
             case "Inventario": InventoryTool_Click(sender, e); break;
             case "Sesion": OperatorSessionAction_Click(sender, e); break;
+            case "Actualizar POS": UpdatePos_Click(sender, e); break;
+            case "Actualizar módulos": new ManagementWindow(_viewModel, "Módulos", _restartLocalServiceAsync) { Owner = this }.ShowDialog(); RefocusScanner(); break;
             default: ManagementTool_Click(sender, e); break;
+        }
+    }
+
+    private async void UpdatePos_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.IsBusy || _viewModel.HasPendingCheckout || _viewModel.CartLines.Count > 0)
+        {
+            MessageBox.Show(this, "Termina la venta actual antes de actualizar el POS.", "Actualización pendiente",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var window = new PosUpdateWindow { Owner = this };
+        if (window.ShowDialog() != true || window.PreparedPackageDirectory is not { } package) return;
+        try
+        {
+            await _viewModel.FlushWorkspaceSyncAsync();
+            var installationRoot = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))!.FullName;
+            var helper = Path.Combine(installationRoot, "scripts", "Install-DownloadedPosUpdate.ps1");
+            if (!File.Exists(helper)) throw new FileNotFoundException("Falta el instalador de actualizaciones. Usa Actualizar POS.cmd una vez para instalar una versión reciente.", helper);
+            var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = true, WorkingDirectory = installationRoot };
+            start.ArgumentList.Add("-NoProfile");
+            start.ArgumentList.Add("-ExecutionPolicy");
+            start.ArgumentList.Add("Bypass");
+            start.ArgumentList.Add("-File");
+            start.ArgumentList.Add(helper);
+            start.ArgumentList.Add("-PackageDirectory");
+            start.ArgumentList.Add(package);
+            start.ArgumentList.Add("-DesktopProcessId");
+            start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (Process.Start(start) is null) throw new InvalidOperationException("No se pudo iniciar el instalador externo.");
+            _exitConfirmed = true;
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"El POS sigue abierto. No se inició la instalación. {ex.Message}",
+                "No se pudo actualizar", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

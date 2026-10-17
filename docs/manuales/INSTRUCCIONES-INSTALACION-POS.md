@@ -53,6 +53,18 @@ No hace falta instalar PostgreSQL, escribir la contraseña de `postgres`, copiar
 
 ## Actualizar el POS
 
+Desde el menú del POS, pulsa **Actualizar POS**. Si hay Internet, **Buscar actualizaciones** muestra las versiones publicadas y sus cambios. Selecciona una y pulsa **Preparar actualización**. El POS descarga y comprueba la firma del paquete; al confirmar, se cierra y ejecuta el instalador externo. Espera a que termine y vuelva a abrirse. No apagues el servidor durante el respaldo o la instalación.
+
+Si la computadora no tiene Internet, descarga el ZIP oficial firmado en otra computadora y cópialo por USB. En **Actualizar POS**, pulsa **Elegir ZIP sin Internet** y selecciona ese archivo. También puedes seguir el procedimiento manual siguiente con `Actualizar POS.cmd`. Los ZIP de prueba de Pull Requests no llevan firma de publicación: sirven para el procedimiento manual, pero la actualización desde dentro del POS acepta únicamente ZIP oficiales firmados.
+
+Para los módulos, usa **Actualizar módulos** en el menú. **Buscar actualizaciones de módulos** muestra versiones nuevas de los módulos ya instalados; **Descargar versión** trae un ZIP firmado. Después pulsa **Validar paquete**, **Instalar módulo** y **Reiniciar servidor y cargar módulos**. Sin Internet, conserva la opción **Elegir paquete(s) ZIP…** en la misma pantalla. La licencia y la compatibilidad se comprueban antes de instalar.
+
+Si una instalación del POS es anterior a esta función, actualízala una vez con el ZIP completo y `Actualizar POS.cmd` para incorporar el botón y la clave pública de confianza.
+
+Para publicar una versión visible en **Buscar actualizaciones**, crea una etiqueta `pos-vX.Y.Z` o `pos-vAAAA.MM.DD.N` sobre un commit de `main` y ejecuta en GitHub **Actions → Empaquetar POS para Windows** desde `main` con esa etiqueta en `release_tag`. El flujo compila en Windows, firma el inventario del ZIP en el runner privado y publica el ZIP firmado en **Releases**. Las ejecuciones de Pull Request producen solo paquetes de prueba, que caducan a los tres días.
+
+### Instalación manual desde el ZIP extraído
+
 1. Extrae el ZIP nuevo en una carpeta distinta de la instalación actual.
 2. Cierra todas las ventanas del POS en la PC que vas a actualizar.
 3. Ejecuta `Actualizar POS.cmd` con la misma cuenta de Windows que usa esa instalación.

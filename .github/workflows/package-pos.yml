@@ -16,8 +16,6 @@ on:
       - 'docs/manuales/INSTRUCCIONES-INSTALACION-POS.md'
       - 'docs/runbooks/importar-saldos-iniciales-legado.md'
       - 'docs/security/publicar-modulos-desde-cualquier-equipo.md'
-  release:
-    types: [published]
 
 permissions:
   contents: read
@@ -25,13 +23,14 @@ permissions:
 jobs:
   package:
     name: Compilar y empaquetar win-x64
-    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'pos-v') }}
+    if: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     runs-on: windows-latest
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.event.release.tag_name || github.ref }}
+          ref: ${{ inputs.release_tag || github.ref }}
+          fetch-depth: 0
 
       - name: Validar etiqueta de Release solicitada
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
@@ -39,9 +38,12 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if ($env:RELEASE_TAG -notmatch '^pos-v[0-9]+(\.[0-9]+){1,3}$') {
+          if ($env:RELEASE_TAG -notmatch '^pos-v[0-9]+(\.[0-9]+){2,3}$') {
             throw 'La etiqueta debe tener el formato pos-vX.Y.Z o pos-vAAAA.MM.DD.N.'
           }
+          git fetch origin main --quiet
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'La etiqueta debe apuntar a un commit aprobado de main.' }
 
       - name: Instalar .NET 10
         uses: actions/setup-dotnet@v4
@@ -50,39 +52,80 @@ jobs:
 
       - name: Publicar servidor, escritorio y actualizador
         shell: pwsh
-        run: .\scripts\Publish-LocalPos.ps1
-
-      - name: Crear suma de comprobación del paquete de Release
-        if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
-        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          $archive = 'artifacts\local-pos-win-x64.zip'
-          $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  local-pos-win-x64.zip" | Set-Content -LiteralPath 'artifacts\local-pos-win-x64.zip.sha256' -Encoding ascii
+          $version = if ($env:RELEASE_TAG -match '^pos-v(\d+\.\d+\.\d+(?:\.\d+)?)$') { $Matches[1] } else { '0.0.0' }
+          .\scripts\Publish-LocalPos.ps1 -ReleaseVersion $version
 
       - name: Subir paquete descargable para probar
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_tag == '') }}
         uses: actions/upload-artifact@v4
         with:
           name: BALANZAPRO-POS-win-x64-${{ github.sha }}
           path: artifacts/local-pos/**
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 3
 
-      - name: Preparar archivos de Release
-        if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+      - name: Enviar ZIP al firmador privado
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pos-release-input
+          path: artifacts/local-pos-win-x64.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-release:
+    name: Firmar paquete POS oficial
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+    needs: package
+    runs-on: [self-hosted, linux, x64, pos-module-signing]
+    environment: module-signing
+    steps:
+      - name: Descargar código aprobado
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Recibir ZIP construido en Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: pos-release-input
+          path: ${{ runner.temp }}/pos-update-${{ github.run_id }}-${{ github.run_attempt }}/incoming
+      - name: Comprobar clave y firmar inventario del paquete
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          POS_UPDATE_SIGNING_KEY: /etc/pos-module-signer/pos-publisher-vps-2026-private.pem
+        run: |
+          set -euo pipefail
+          run_root="${RUNNER_TEMP}/pos-update-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          openssl pkey -pubin -in security/module-publishers/pos-publisher-vps-2026.pem -outform DER -out "$run_root/trusted.der"
+          openssl pkey -in "$POS_UPDATE_SIGNING_KEY" -pubout -outform DER -out "$run_root/signer.der"
+          cmp --silent "$run_root/trusted.der" "$run_root/signer.der"
+          python3 scripts/Sign-PosUpdateArchive.py \
+            --input "$run_root/incoming/local-pos-win-x64.zip" \
+            --output "$run_root/signed/local-pos-win-x64.zip" \
+            --private-key "$POS_UPDATE_SIGNING_KEY" \
+            --version "${RELEASE_TAG#pos-v}"
+      - name: Enviar paquete oficial firmado
         uses: actions/upload-artifact@v4
         with:
           name: pos-release-files
           path: |
-            artifacts/local-pos-win-x64.zip
-            artifacts/local-pos-win-x64.zip.sha256
+            ${{ runner.temp }}/pos-update-${{ github.run_id }}-${{ github.run_attempt }}/signed/local-pos-win-x64.zip
+            ${{ runner.temp }}/pos-update-${{ github.run_id }}-${{ github.run_attempt }}/signed/local-pos-win-x64.zip.sha256
           if-no-files-found: error
           retention-days: 1
+      - name: Limpiar archivos del firmador
+        if: always()
+        shell: bash
+        run: rm -rf -- "${RUNNER_TEMP}/pos-update-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
   publish-release:
     name: Publicar Release versionada
-    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'pos-v')) || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
-    needs: package
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+    needs: sign-release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -96,7 +139,7 @@ jobs:
       - name: Crear o actualizar el Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name || github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: bash
         run: |
           set -euo pipefail
