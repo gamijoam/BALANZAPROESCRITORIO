@@ -834,6 +834,13 @@ public sealed class PosViewModel : INotifyPropertyChanged
         finally { IsBusy = false; }
     }
 
+    public async Task RefreshCartLineSaleUnitsAsync(CartLineViewModel line, CancellationToken cancellationToken = default)
+    {
+        var products = await _api.SearchProductsAsync(line.Product.Sku, cancellationToken);
+        var current = products.FirstOrDefault(x => x.Id == line.Product.Id);
+        if (current is not null) line.SetAvailableSaleUnits(current.SaleUnits);
+    }
+
     public bool AddProduct(ProductInfo product, ProductSaleUnitInfo? saleUnit = null)
     {
         if (!CanEditCart) { StatusMessage = "Hay una venta pendiente de confirmar. Reintenta antes de cambiar el carrito."; return false; }
@@ -891,14 +898,32 @@ public sealed class PosViewModel : INotifyPropertyChanged
     }
 
     public bool EditCartLine(CartLineViewModel? line, decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
-        => EditCartLine(line, quantity, line?.PriceTier ?? "Price1", unitPriceOverride, priceOverrideReason);
+        => EditCartLine(line, line?.SaleUnit, quantity, line?.PriceTier ?? "Price1", unitPriceOverride, priceOverrideReason);
 
     public bool EditCartLine(CartLineViewModel? line, decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
+        => EditCartLine(line, line?.SaleUnit, quantity, priceTier, unitPriceOverride, priceOverrideReason);
+
+    public bool EditCartLine(CartLineViewModel? line, ProductSaleUnitInfo? requestedSaleUnit, decimal quantity, string priceTier,
+        decimal? unitPriceOverride, string? priceOverrideReason)
     {
         if (!CanEditCart) { StatusMessage = "Confirma el resultado de la venta pendiente antes de modificarla."; return false; }
         if (line is null || !CartLines.Contains(line)) return false;
+        IReadOnlyList<ProductSaleUnitInfo> availableSaleUnits = line.AvailableSaleUnits;
+        var saleUnit = requestedSaleUnit is null ? null : availableSaleUnits.FirstOrDefault(x =>
+            x.PresentationId == requestedSaleUnit.PresentationId && x.UnitId == requestedSaleUnit.UnitId);
+        if (saleUnit is null)
+        {
+            StatusMessage = "La forma de venta seleccionada ya no está disponible para este producto.";
+            return false;
+        }
+        if (CartLines.Any(x => !ReferenceEquals(x, line) && x.Product.Id == line.Product.Id &&
+            x.SaleUnit.PresentationId == saleUnit.PresentationId))
+        {
+            StatusMessage = $"Ya hay otra línea de {line.Product.Name} como {saleUnit.Label}. Modifica esa línea o quítala antes de cambiar esta.";
+            return false;
+        }
         if (priceTier is not ("Price1" or "Price2" or "Price3") ||
-            priceTier == "Price2" && line.SaleUnit.Price2 is null || priceTier == "Price3" && line.SaleUnit.Price3 is null)
+            priceTier == "Price2" && saleUnit.Price2 is null || priceTier == "Price3" && saleUnit.Price3 is null)
         {
             StatusMessage = "Ese nivel de precio no está configurado para el producto.";
             return false;
@@ -908,12 +933,12 @@ public sealed class PosViewModel : INotifyPropertyChanged
             StatusMessage = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
             return false;
         }
-        if (!line.AllowsFractionalQuantity && decimal.Round(quantity, 0) != quantity)
+        if (!saleUnit.AllowsFractionalQuantities && decimal.Round(quantity, 0) != quantity)
         {
-            StatusMessage = $"La presentación {line.SaleUnit.Label} solo permite cantidades enteras.";
+            StatusMessage = $"La presentación {saleUnit.Label} solo permite cantidades enteras.";
             return false;
         }
-        var requestedInventoryQuantity = quantity * line.SaleUnit.ConversionFactor;
+        var requestedInventoryQuantity = quantity * saleUnit.ConversionFactor;
         if (!line.Product.BaseUnitAllowsFractional && decimal.Round(requestedInventoryQuantity, 0) != requestedInventoryQuantity)
         {
             StatusMessage = "La cantidad elegida produciría una fracción de la unidad base, que no está permitida.";
@@ -932,12 +957,12 @@ public sealed class PosViewModel : INotifyPropertyChanged
             return false;
         }
 
-        line.ApplyEdits(quantity, priceTier, unitPriceOverride, reason);
+        line.ApplyEdits(saleUnit, quantity, priceTier, unitPriceOverride, reason);
         SelectedCartLine = line;
         RefreshTotals();
         StatusMessage = unitPriceOverride.HasValue
             ? "Precio especial aplicado a esta venta. Al confirmar, un administrador deberá autorizarlo con su PIN."
-            : "Artículo actualizado.";
+            : $"Artículo actualizado: {PosNumberFormat.FormatQuantity(quantity)} {saleUnit.Label}.";
         return true;
     }
 
@@ -1087,7 +1112,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
 
     private void CartLine_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(CartLineViewModel.Quantity) or nameof(CartLineViewModel.LineTotal) or nameof(CartLineViewModel.PriceTier) or nameof(CartLineViewModel.UnitPriceOverride))
+        if (e.PropertyName is nameof(CartLineViewModel.Quantity) or nameof(CartLineViewModel.LineTotal) or nameof(CartLineViewModel.PriceTier) or
+            nameof(CartLineViewModel.UnitPriceOverride) or nameof(CartLineViewModel.SaleUnit) or nameof(CartLineViewModel.InventoryQuantity))
         {
             RefreshTotals();
             QueueWorkspaceSync();
@@ -1146,6 +1172,16 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private decimal _quantity = quantity;
     private string _settlementCurrency = settlementCurrency;
     private ExchangeRateInfo? _usdToVesRate = usdToVesRate;
+    private ProductSaleUnitInfo _saleUnit = saleUnit ?? product.SaleUnits.FirstOrDefault(x => x.PresentationId is null)
+        ?? new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
+            product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
+        { BaseUnitAbbreviation = product.BaseUnitAbbreviation };
+    private IReadOnlyList<ProductSaleUnitInfo> _availableSaleUnits = product.SaleUnits.Count > 0 ? product.SaleUnits : new[]
+    {
+        saleUnit ?? new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
+            product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
+        { BaseUnitAbbreviation = product.BaseUnitAbbreviation }
+    };
     private decimal? _unitPriceOverride;
     private string? _priceOverrideReason;
     private string _priceTier = "Price1";
@@ -1153,10 +1189,17 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private string? _resumeIssue;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProductInfo Product { get; } = product;
-    public ProductSaleUnitInfo SaleUnit { get; } = saleUnit ?? product.SaleUnits.FirstOrDefault(x => x.PresentationId is null)
-        ?? new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
-            product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
-        { BaseUnitAbbreviation = product.BaseUnitAbbreviation };
+    public ProductSaleUnitInfo SaleUnit => _saleUnit;
+    public IReadOnlyList<ProductSaleUnitInfo> AvailableSaleUnits => _availableSaleUnits;
+    public void SetAvailableSaleUnits(IReadOnlyList<ProductSaleUnitInfo> saleUnits)
+    {
+        var refreshed = saleUnits.ToList();
+        if (!refreshed.Any(x => x.PresentationId == SaleUnit.PresentationId && x.UnitId == SaleUnit.UnitId))
+            refreshed.Add(SaleUnit);
+        if (refreshed.Count == 0) refreshed.Add(SaleUnit);
+        _availableSaleUnits = refreshed;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AvailableSaleUnits)));
+    }
     public string DisplayName => $"{Product.Name} · {SaleUnit.Label}";
     public string SaleUnitLabel => SaleUnit.Label;
     public string QuantityLabel => SaleUnit.UnitAbbreviation;
@@ -1176,9 +1219,10 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         }
     }
     public decimal CatalogUnitPrice => _savedPriceFallback ?? CatalogUnitPriceFor(PriceTier);
-    public decimal CatalogUnitPriceFor(string priceTier)
+    public decimal CatalogUnitPriceFor(string priceTier) => CatalogUnitPriceFor(SaleUnit, priceTier);
+    public decimal CatalogUnitPriceFor(ProductSaleUnitInfo saleUnit, string priceTier)
     {
-        var source = priceTier switch { "Price1" => SaleUnit.Price1, "Price2" => SaleUnit.Price2, "Price3" => SaleUnit.Price3, _ => null };
+        var source = priceTier switch { "Price1" => saleUnit.Price1, "Price2" => saleUnit.Price2, "Price3" => saleUnit.Price3, _ => null };
         if (source is null) throw new ArgumentException("El nivel de precio no está configurado.", nameof(priceTier));
         return PosViewModel.ConvertPrice(source.Value, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
     }
@@ -1221,15 +1265,26 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         }
     }
     public void ApplyEdits(decimal quantity, decimal? unitPriceOverride, string? priceOverrideReason)
-        => ApplyEdits(quantity, PriceTier, unitPriceOverride, priceOverrideReason);
+        => ApplyEdits(SaleUnit, quantity, PriceTier, unitPriceOverride, priceOverrideReason);
 
     public void ApplyEdits(decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
+        => ApplyEdits(SaleUnit, quantity, priceTier, unitPriceOverride, priceOverrideReason);
+
+    public void ApplyEdits(ProductSaleUnitInfo saleUnit, decimal quantity, string priceTier, decimal? unitPriceOverride, string? priceOverrideReason)
     {
         _savedPriceFallback = null;
+        _saleUnit = saleUnit;
         _priceTier = priceTier;
         _unitPriceOverride = unitPriceOverride;
         _priceOverrideReason = priceOverrideReason;
         Quantity = quantity;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SaleUnit)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DisplayName)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SaleUnitLabel)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(QuantityLabel)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(InventoryQuantity)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AllowsFractionalQuantity)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AvailablePriceTiers)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CatalogUnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPrice)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UnitPriceOverride)));
