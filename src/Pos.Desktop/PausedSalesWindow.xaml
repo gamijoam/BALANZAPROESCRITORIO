@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Ventas pausadas" Width="1080" Height="680" MinWidth="900" MinHeight="560"
-        WindowStartupLocation="CenterOwner" Background="#EEF2F7" FontFamily="Segoe UI" Loaded="Window_Loaded">
+        WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI" Loaded="Window_Loaded">
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -11,10 +12,10 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Background="White" CornerRadius="8" Padding="16,12" Margin="0,0,0,12">
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="18,12" Margin="0,0,0,12">
             <StackPanel>
-                <TextBlock Text="VENTAS PAUSADAS" Foreground="#173F78" FontSize="23" FontWeight="Bold"/>
-                <TextBlock Margin="0,4,0,0" Text="Ventas guardadas en esta terminal. Selecciona una para revisar sus artículos antes de retomarla." Foreground="#52667E" FontSize="13"/>
+                <TextBlock Text="Ventas pausadas" Foreground="White" FontSize="23" FontWeight="Bold"/>
+                <TextBlock Margin="0,4,0,0" Text="Ventas guardadas en esta terminal. Revisa los artículos antes de retomarlas." Foreground="#D7E3F2" FontSize="13"/>
             </StackPanel>
         </Border>
 
@@ -46,11 +47,11 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Foreground="#52667E" FontSize="12" TextWrapping="Wrap" Margin="2,0,12,0"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="RefreshButton" Content="Actualizar" Width="100" Height="38" Margin="0,0,8,0" Click="RefreshButton_Click"/>
-                <Button x:Name="DiscardButton" Content="Descartar" Width="105" Height="38" Margin="0,0,8,0" IsEnabled="False" Click="DiscardButton_Click"/>
-                <Button x:Name="ResumeButton" Content="Retomar venta" Width="135" Height="38" Background="#2858A2" Foreground="White"
+                <Button x:Name="RefreshButton" Content="Actualizar" Width="100" Height="42" Margin="0,0,8,0" Click="RefreshButton_Click"/>
+                <Button x:Name="DiscardButton" Content="Descartar" Width="105" Height="42" Margin="0,0,8,0" IsEnabled="False" Click="DiscardButton_Click"/>
+                <Button x:Name="ResumeButton" Content="Retomar venta" Width="150" Height="42" Style="{StaticResource PosWindow.PrimaryButton}"
                         BorderThickness="0" FontWeight="SemiBold" IsEnabled="False" Click="ResumeButton_Click"/>
-                <Button Content="Cerrar" Width="90" Height="38" Margin="8,0,0,0" IsCancel="True"/>
+                <Button Content="Cerrar" Width="90" Height="42" Margin="8,0,0,0" IsCancel="True"/>
             </StackPanel>
         </Grid>
     </Grid>
