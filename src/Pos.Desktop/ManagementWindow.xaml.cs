@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using Pos.Modules.Packaging;
 using Pos.Desktop.Presentation;
 
 namespace Pos.Desktop;
@@ -20,6 +21,8 @@ public partial class ManagementWindow : Window
     private DateTime _salesDetailToUtc;
     private int _salesDetailTotalCount;
     private string[] _modulePackagePaths = [];
+    private string? _downloadedModuleDirectory;
+    private bool _moduleDownloadInProgress;
     private ModuleInstallationPlanClientResult? _validatedModulePlan;
     private Guid? _licenseInstallationId;
     private string _licenseState = string.Empty;
@@ -29,6 +32,8 @@ public partial class ManagementWindow : Window
         Func<CancellationToken, Task>? restartLocalServiceAsync = null, bool licenseRecoveryOnly = false)
     {
         InitializeComponent(); _viewModel = viewModel; _restartLocalServiceAsync = restartLocalServiceAsync;
+        Closing += (_, args) => { if (_moduleDownloadInProgress) args.Cancel = true; };
+        Closed += (_, _) => ClearDownloadedModule();
         _licenseRecoveryOnly = licenseRecoveryOnly;
         RestartModuleHostButton.IsEnabled = _restartLocalServiceAsync is not null;
         if (_restartLocalServiceAsync is null)
@@ -633,6 +638,7 @@ public partial class ManagementWindow : Window
     {
         var dialog = new OpenFileDialog { Title = "Seleccionar módulos oficiales", Filter = "Paquetes de módulo (*.zip)|*.zip", Multiselect = true, CheckFileExists = true };
         if (dialog.ShowDialog(this) != true) return;
+        ClearDownloadedModule();
         _modulePackagePaths = dialog.FileNames;
         _validatedModulePlan = null;
         ModulePlanGrid.ItemsSource = null;
@@ -658,6 +664,103 @@ public partial class ManagementWindow : Window
             ModulePackageIdentityLabel.Text = PosUserMessage.ForException(exception);
         }
         ModuleStatus.Text = "Valida el lote para revisar firmas, compatibilidad y dependencias antes de instalar.";
+    }
+
+    private async void CheckModuleUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckModuleUpdatesButton.IsEnabled = false;
+        DownloadModuleUpdateButton.IsEnabled = false;
+        try
+        {
+            var installed = await _viewModel.GetInstalledModulesAsync();
+            var releases = await UpdateReleaseCatalog.GetAsync("module-", ".zip");
+            var available = releases.Where(release =>
+            {
+                var existing = installed.FirstOrDefault(module => module.ModuleId == release.ModuleId);
+                return existing is not null && Version.TryParse(existing.Version, out var current) &&
+                    Version.Parse(release.Version) > current;
+            }).ToArray();
+            ModuleUpdatesBox.ItemsSource = available;
+            ModuleUpdatesBox.SelectedIndex = available.Length > 0 ? 0 : -1;
+            DownloadModuleUpdateButton.IsEnabled = available.Length > 0;
+            ModuleStatus.Text = available.Length == 0 ? "Los módulos instalados ya tienen la última versión publicada." :
+                $"Hay {available.Length} actualización(es). Selecciona una y descarga su paquete para validarlo.";
+        }
+        catch (Exception ex) { ModuleStatus.Text = $"No se pudieron consultar actualizaciones: {ex.Message}. Puedes elegir un ZIP local."; }
+        finally { CheckModuleUpdatesButton.IsEnabled = true; }
+    }
+
+    private void ModuleUpdates_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ModuleUpdatesBox.SelectedItem is not UpdateRelease release)
+        {
+            ModuleUpdateNotesText.Text = "";
+            return;
+        }
+        var notes = string.IsNullOrWhiteSpace(release.Notes) ? "No se publicaron detalles de esta versión." : release.Notes;
+        ModuleUpdateNotesText.Text = $"{release.ModuleId} {release.Version}: {notes[..Math.Min(notes.Length, 250)]}";
+        ModuleUpdateNotesText.ToolTip = notes;
+    }
+
+    private async void DownloadModuleUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModuleUpdatesBox.SelectedItem is not UpdateRelease release || release.ModuleId is null) return;
+        _moduleDownloadInProgress = true;
+        DownloadModuleUpdateButton.IsEnabled = false;
+        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BalanzaPro", "Updates", "modules", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "module.zip");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            ModuleStatus.Text = $"Descargando {release.ModuleId} {release.Version}…";
+            await UpdateReleaseCatalog.DownloadAsync(release, path, 512L * 1024 * 1024);
+            var root = Directory.GetParent(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar))!.FullName;
+            var keyPath = Path.Combine(root, "trusted-publishers", "pos-publisher-vps-2026.pem");
+            if (!File.Exists(keyPath)) throw new InvalidDataException("Esta instalación no contiene la clave pública de módulos.");
+            using var stream = File.OpenRead(path);
+            var verified = ModulePackageVerifier.Verify(stream,
+                new Dictionary<string, string> { ["pos-publisher-vps-2026"] = File.ReadAllText(keyPath) });
+            if (verified.Module.Id != release.ModuleId || verified.Module.Version.ToString(3) != release.Version)
+                throw new InvalidDataException("La identidad firmada del módulo no coincide con la versión publicada.");
+            ClearDownloadedModule();
+            _downloadedModuleDirectory = directory;
+            _modulePackagePaths = [path];
+            _validatedModulePlan = null;
+            ModulePlanGrid.ItemsSource = null;
+            InstallModuleButton.IsEnabled = false;
+            ModuleIdBox.Text = release.ModuleId;
+            ModulePackageFilesLabel.Text = $"{release.ModuleId} · versión {release.Version} descargada";
+            var notes = string.IsNullOrWhiteSpace(release.Notes) ? "No se publicaron detalles." : release.Notes;
+            ModulePackageIdentityLabel.Text = $"Cambios: {notes[..Math.Min(notes.Length, 250)]}";
+            ModulePackageIdentityLabel.ToolTip = notes;
+            var plan = await _viewModel.PlanModuleInstallationAsync(release.ModuleId, _modulePackagePaths);
+            _validatedModulePlan = plan;
+            ModulePlanGrid.ItemsSource = plan.InstallationOrder;
+            InstallModuleButton.IsEnabled = plan.PlanValid && plan.InstallationOrder.Count > 0 &&
+                plan.InstallationOrder.All(module => module.TerminalCompatibility.IsCompatible);
+            ModuleStatus.Text = InstallModuleButton.IsEnabled
+                ? "Paquete firmado y compatible. Pulsa Instalar módulo y después reinicia el servidor para activarlo."
+                : "La actualización no se puede instalar aún. Revisa la compatibilidad y las dependencias en el plan.";
+        }
+        catch (Exception ex)
+        {
+            ModuleStatus.Text = $"No se pudo descargar o verificar el módulo: {ex.Message}";
+            _downloadedModuleDirectory = null;
+            _modulePackagePaths = [];
+            _validatedModulePlan = null;
+            InstallModuleButton.IsEnabled = false;
+            if (Directory.Exists(directory))
+                try { Directory.Delete(directory, true); } catch (Exception) { }
+        }
+        finally { _moduleDownloadInProgress = false; DownloadModuleUpdateButton.IsEnabled = true; }
+    }
+
+    private void ClearDownloadedModule()
+    {
+        if (_downloadedModuleDirectory is { } directory && Directory.Exists(directory))
+            try { Directory.Delete(directory, true); } catch (Exception) { }
+        _downloadedModuleDirectory = null;
     }
 
     private async void ValidateModule_Click(object sender, RoutedEventArgs e)
@@ -694,6 +797,7 @@ public partial class ManagementWindow : Window
             ModuleStatus.Text = $"Instalación registrada como {result.Status}. Respaldo verificado: {result.BackupPath} (SHA-256 {result.BackupSha256}). Pulsa «Reiniciar servidor y cargar módulos» para activar la versión instalada.";
             _validatedModulePlan = null;
             await LoadInstalledModulesAsync();
+            ClearDownloadedModule();
         }
         catch (Exception exception) { ModuleStatus.Text = PosUserMessage.ForModuleException(exception); }
         finally { ValidateModuleButton.IsEnabled = true; }

@@ -138,9 +138,80 @@ jobs:
             ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/signed/publisher-public.pem
             ${{ runner.temp }}/module-signing-${{ github.run_id }}-${{ github.run_attempt }}/signed/*.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 3
 
       - name: Limpiar archivos temporales
         if: always()
         shell: bash
         run: rm -rf -- "${RUNNER_TEMP}/module-signing-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+  publish-releases:
+    name: Publicar versiones instalables de módulos
+    if: github.ref == 'refs/heads/main'
+    needs: sign-and-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar historial para describir los cambios
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Recibir ZIP firmados
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-module-output
+          path: release
+      - name: Crear o actualizar Releases de módulos
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(release/*.zip)
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo 'No se recibieron módulos firmados.' >&2
+            exit 1
+          fi
+          for package in "${packages[@]}"; do
+            module_id="$(unzip -p "$package" module.manifest.json | jq -r '.id')"
+            version="$(unzip -p "$package" module.manifest.json | jq -r '.version')"
+            display_name="$(unzip -p "$package" module.manifest.json | jq -r '.displayName // .id')"
+            if [[ ! "$module_id" =~ ^[a-z][a-z0-9-]*$ || ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Identidad inválida en $package" >&2
+              exit 1
+            fi
+            tag="module-${module_id}-v${version}"
+            checksum="${package}.sha256"
+            if [ ! -f "$checksum" ]; then
+              echo "Falta la suma SHA-256 de $package" >&2
+              exit 1
+            fi
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$tag" "$package" "$checksum" --clobber --repo "$GITHUB_REPOSITORY"
+            else
+              case "$module_id" in
+                warehouses) source_dir='src/Modules/Pos.Modules.Warehouses' ;;
+                thermal-receipts) source_dir='src/Modules/Pos.Modules.ThermalReceipts' ;;
+                advanced-reports) source_dir='src/Modules/Pos.Modules.Reporting.Desktop' ;;
+                finance) source_dir='src/Modules/Pos.Modules.Finance' ;;
+                *) echo "Módulo desconocido: $module_id" >&2; exit 1 ;;
+              esac
+              previous_tag="$(git tag --list "module-${module_id}-v*" --sort=-version:refname | head -n 1)"
+              notes_file="${RUNNER_TEMP}/module-${module_id}-notes.md"
+              printf '# %s %s\n\n' "$display_name" "$version" > "$notes_file"
+              if [ -n "$previous_tag" ]; then
+                git log --pretty=format:'- %s%n' "${previous_tag}..HEAD" -- "$source_dir" >> "$notes_file"
+              else
+                printf 'Primera versión publicada de este módulo.\n' >> "$notes_file"
+              fi
+              if [ "$(wc -l < "$notes_file")" -le 2 ]; then
+                printf 'Actualización del módulo sin cambios descritos en el historial.\n' >> "$notes_file"
+              fi
+              gh release create "$tag" "$package" "$checksum" \
+                --target main --title "$display_name $version" \
+                --notes-file "$notes_file" \
+                --repo "$GITHUB_REPOSITORY"
+            fi
+          done
