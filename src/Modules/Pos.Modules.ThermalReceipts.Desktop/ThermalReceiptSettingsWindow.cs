@@ -40,7 +40,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     private UIElement BuildLayout()
     {
         var root = new DockPanel { Margin = new Thickness(16) };
-        var heading = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12), Margin = new Thickness(0, 0, 0, 12) };
+        var heading = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, 0, 0, 12) };
         var headingContent = new StackPanel();
         headingContent.Children.Add(new TextBlock { Text = "Ticket térmico", FontSize = 22, FontWeight = FontWeights.Bold, Foreground = Brushes.White });
         headingContent.Children.Add(new TextBlock { Text = "Diseño compartido entre terminales; cada caja usa su impresora local. Comprobante comercial no fiscal.",
@@ -158,7 +158,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
         var layout = new Grid { Margin = new Thickness(16) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var header = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 10) };
+        var header = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10, 14, 10), Margin = new Thickness(0, 0, 0, 10) };
         header.Child = new TextBlock { Text = "Vista previa del ticket", Foreground = Brushes.White, FontSize = 19, FontWeight = FontWeights.Bold };
         Grid.SetRow(header, 0); layout.Children.Add(header);
         var preview = new Border { Background = Brushes.White, BorderBrush = Brush("#D5DFEB"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(10) };

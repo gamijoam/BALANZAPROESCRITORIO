@@ -759,7 +759,7 @@ internal sealed class ReceiptQuantityWindow : Window
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var heading = new Border { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 45, 80)),
-            CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12), Margin = new Thickness(0, 0, 0, 10) };
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12, 16, 12), Margin = new Thickness(0, 0, 0, 10) };
         var headingContent = new StackPanel();
         headingContent.Children.Add(new TextBlock { Text = "Recepción de mercancía", Foreground = System.Windows.Media.Brushes.White, FontSize = 20, FontWeight = FontWeights.Bold });
         headingContent.Children.Add(new TextBlock { Text = "Indica cuánto recibiste ahora de cada artículo. Puedes registrar una recepción parcial.",
@@ -803,7 +803,7 @@ internal static class TextEntryWindow
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var heading = new Border { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 45, 80)),
-            CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 12) };
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10, 14, 10), Margin = new Thickness(0, 0, 0, 12) };
         heading.Child = new TextBlock { Text = title, Foreground = System.Windows.Media.Brushes.White, FontSize = 18, FontWeight = FontWeights.Bold };
         Grid.SetRow(heading, 0); Grid.SetColumnSpan(heading, 2); layout.Children.Add(heading);
         var inputs = new Dictionary<string, TextBox>(StringComparer.Ordinal);

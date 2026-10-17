@@ -72,7 +72,7 @@ internal sealed class ThermalReceiptPreviewWindow : Window
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var heading = new Border { Background = new SolidColorBrush(Color.FromRgb(16, 45, 80)), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 10) };
+        var heading = new Border { Background = new SolidColorBrush(Color.FromRgb(16, 45, 80)), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10, 14, 10), Margin = new Thickness(0, 0, 0, 10) };
         heading.Child = new TextBlock { Text = "Vista previa del ticket", Foreground = Brushes.White, FontSize = 19, FontWeight = FontWeights.Bold };
         Grid.SetRow(heading, 0); layout.Children.Add(heading);
         var retry = new Button { Content = "Imprimir / reintentar", Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(5),
