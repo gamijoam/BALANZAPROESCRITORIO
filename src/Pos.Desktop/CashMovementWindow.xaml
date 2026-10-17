@@ -1,8 +1,9 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.CashMovementWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Movimiento de caja" Width="450" Height="390" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
+        Title="Movimiento de caja" Width="450" Height="390" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F2F5F9">
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="24">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel><TextBlock Text="MOVIMIENTO DE CAJA" Foreground="#173F78" FontSize="22" FontWeight="Bold"/><TextBlock x:Name="CurrencyLabel" Foreground="#63758B" Margin="0,5,0,0"/></StackPanel>
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="16,12"><StackPanel><TextBlock Text="Movimiento de caja" Foreground="White" FontSize="21" FontWeight="Bold"/><TextBlock x:Name="CurrencyLabel" Foreground="#D7E3F2" Margin="0,5,0,0"/></StackPanel></Border>
         <StackPanel Grid.Row="1" VerticalAlignment="Center">
             <TextBlock Text="Tipo" FontWeight="SemiBold" Margin="0,0,0,5"/><ComboBox x:Name="DirectionBox" Height="36" SelectedIndex="0"><ComboBoxItem Content="Entrada"/><ComboBoxItem Content="Salida"/></ComboBox>
             <TextBlock Text="Moneda" FontWeight="SemiBold" Margin="0,10,0,5"/><ComboBox x:Name="CurrencyBox" Height="36"><ComboBoxItem Content="VES"/><ComboBoxItem Content="USD"/></ComboBox>
@@ -10,7 +11,7 @@
             <TextBlock Text="Motivo" FontWeight="SemiBold" Margin="0,12,0,5"/><TextBox x:Name="ReasonBox" Height="38" Padding="8"/>
             <TextBlock x:Name="ErrorLabel" Foreground="#B43B42" Margin="0,8,0,0"/>
         </StackPanel>
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Cancelar" Width="95" Height="40" Margin="0,0,10,0" Click="Cancel_Click"/><Button Content="Guardar movimiento" Width="160" Height="40" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Save_Click"/></StackPanel>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Cancelar" Width="95" Height="42" Margin="0,0,10,0" Click="Cancel_Click"/><Button Content="Guardar movimiento" Width="180" Height="42" Style="{StaticResource PosWindow.PrimaryButton}" Click="Save_Click"/></StackPanel>
     </Grid>
 </Window>
 
