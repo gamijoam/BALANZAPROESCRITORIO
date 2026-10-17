@@ -9,6 +9,8 @@ Esta guía cubre instalación, conexión por red local, actualización y respald
 - Las PCs que compartirán ventas deben estar conectadas a la misma red local.
 - Usa la misma cuenta de Windows con la que configuraste el POS: Windows protege la configuración y el certificado para ese usuario.
 
+El paquete oficial también contiene la llave pública para validar licencias. Se instala automáticamente al iniciar el paquete y al configurar el servicio; la computadora del POS no necesita Internet para validar o importar un `.poslic` que ya corresponda a su ID de instalación. La licencia inicial debe generarse desde el panel de administración en un dispositivo con Internet y copiarse al POS, por ejemplo con una memoria USB.
+
 PostgreSQL no viene dentro del paquete. Una PC configurada como **independiente** tiene su propia base; sus ventas no se comparten con otras PCs.
 
 ## Instalar la caja principal

@@ -64,7 +64,11 @@ Para un VPS sin Traefik en Docker, desde una copia actualizada del repositorio e
 
 ## Confiar en la llave pública
 
-Después de habilitar el dominio HTTPS, descarga desde el servidor POS Windows el anillo público. Este endpoint devuelve el formato que `Pos.Server` ya entiende:
+El paquete oficial de Windows descarga este anillo desde el endpoint HTTPS al prepararse. El ZIP incluye `trusted-license-keys.json`; al abrir `Iniciar POS.cmd`, se instala en la carpeta local de licencias. Al configurar el servicio, `Administrar servicio POS.cmd` también lo instala bajo `%ProgramData%` para que `BalanzaProPosServer` pueda leerlo. Así, la llave queda preparada antes de importar una licencia, incluso si la computadora del POS no tiene Internet.
+
+La llave pública no es secreta y es la misma para el comercio. Solo se instala en el servidor POS; las terminales cliente se conectan a ese servidor y no necesitan su propia copia. El archivo `.poslic` sí corresponde al ID de instalación y debe copiarse al POS por USB cuando se active sin Internet.
+
+Para reparar manualmente una computadora que ya usa un paquete anterior, descarga el anillo desde una computadora con Internet:
 
 ```powershell
 $licenseDirectory = Join-Path $env:ProgramData 'BalanzaPro\PosServer\Licensing'
@@ -73,7 +77,7 @@ Invoke-WebRequest 'https://licencias.balanzapro.com/api/v1/license/public-key' -
 Restart-Service BalanzaProPosServer
 ```
 
-La ruta es para la computadora que ejecuta `BalanzaProPosServer`, no para cada terminal cliente.
+También puedes copiar ese archivo desde una computadora POS ya configurada, usando la misma ruta, y reiniciar el servicio. La ruta es para la computadora que ejecuta `BalanzaProPosServer`, no para cada terminal cliente.
 
 ## Activar la consulta automática
 
@@ -81,7 +85,7 @@ El paquete oficial configura por defecto `https://licencias.balanzapro.com/api/v
 
 La pestaña **Administración → Licencia** muestra si la renovación automática y el bloqueo están activos. El POS consulta al VPS al iniciar y cada cuatro horas; los fallos de red se reintentan cada quince minutos. Para usar un VPS distinto, define `BALANZAPRO_LICENSE_RENEWAL_ENDPOINT` a nivel máquina antes de instalar o actualizar el servicio. La dirección debe usar HTTPS y terminar en `/api/v1/renewals`.
 
-Instala la llave pública antes de activar el servicio. El bloqueo queda habilitado por defecto; al faltar una licencia válida, el POS abre el acceso de recuperación y permite importar la licencia inicial. Si el estado indica que no está configurada la validación, completa primero el paso anterior de instalación de la llave pública y reinicia el servicio.
+El bloqueo queda habilitado por defecto; al faltar una licencia válida, el POS abre el acceso de recuperación y permite importar la licencia inicial. En paquetes oficiales recientes la llave se instala automáticamente. Si el estado aún indica que no está configurada la validación, repara la llave según el paso anterior y reinicia el servicio.
 
 ## Crear una suscripción y la licencia inicial
 
