@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
@@ -14,6 +16,7 @@ public partial class ProductDetailsWindow : Window
     private ProductDetailsInfo? _details;
     private IReadOnlyList<ProductUnitInfo> _units = [];
     private bool _loading;
+    private Guid? _currentPresentationUnitId;
 
     public ProductDetailsWindow(PosViewModel viewModel, InventoryItemInfo product)
     {
@@ -57,9 +60,11 @@ public partial class ProductDetailsWindow : Window
                 .FirstOrDefault(x => string.Equals(x.Tag?.ToString(), _details.TaxTreatment, StringComparison.Ordinal));
             TitleProductLabel.Text = $"{_details.Name} · SKU {_details.Sku} · {_details.Currency}";
             StockSummaryLabel.Text = StockSummary(_details);
+            BaseUnitSummaryLabel.Text = $"El inventario se cuenta por: {_details.BaseUnitName}";
             RemoveImageButton.IsEnabled = _details.HasImage;
             ImageStatusLabel.Text = _details.HasImage ? "Foto guardada" : "Sin foto";
-            PresentationsGrid.ItemsSource = _details.Presentations;
+            PresentationsGrid.ItemsSource = _details.Presentations
+                .Select(x => x with { BaseUnitName = _details.BaseUnitName }).ToArray();
             NewPresentationFields();
             StatusLabel.Text = string.Empty;
             ProductImagePreview.Source = null;
@@ -80,14 +85,32 @@ public partial class ProductDetailsWindow : Window
 
     private static string StockSummary(ProductDetailsInfo details)
     {
-        var parts = new List<string> { $"{PosNumberFormat.FormatQuantity(details.Quantity)} {details.BaseUnitAbbreviation}" };
+        var parts = new List<string> { QuantityAndUnit(details.Quantity, details.BaseUnitName) };
         foreach (var presentation in details.Presentations.Where(x => x.Active && x.ConversionFactor > 0m))
         {
             var amount = details.Quantity / presentation.ConversionFactor;
             if (!presentation.AllowsFractionalQuantities) amount = decimal.Floor(amount);
-            if (amount > 0m) parts.Add($"{PosNumberFormat.FormatQuantity(amount)} {presentation.Label}");
+            if (amount > 0m) parts.Add(QuantityAndUnit(amount, presentation.UnitName));
         }
         return string.Join("  ·  ", parts);
+    }
+
+    private static string QuantityAndUnit(decimal quantity, string unitName)
+    {
+        var name = quantity == 1m ? unitName : PluralizeUnit(unitName);
+        return $"{PosNumberFormat.FormatQuantity(quantity)} {name}";
+    }
+
+    private static string PluralizeUnit(string unitName)
+    {
+        var name = unitName.Trim();
+        if (name.EndsWith('z')) return name[..^1] + "ces";
+        if (name.EndsWith('s')) return name;
+        if (name.EndsWith("ión", StringComparison.OrdinalIgnoreCase)) return name[..^3] + "iones";
+        if (name.EndsWith("ón", StringComparison.OrdinalIgnoreCase)) return name[..^2] + "ones";
+        return name.EndsWith('r') || name.EndsWith('d') || name.EndsWith('n') || name.EndsWith('j')
+            ? name + "es"
+            : name + "s";
     }
 
     private async void SaveDetails_Click(object sender, RoutedEventArgs e)
@@ -193,16 +216,21 @@ public partial class ProductDetailsWindow : Window
     private void PresentationsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || PresentationsGrid.SelectedItem is not ProductPresentationInfo presentation) return;
-        PresentationLabelBox.Text = presentation.Label;
         PresentationUnitBox.SelectedItem = _units.FirstOrDefault(x => x.Id == presentation.UnitId);
         ConversionFactorBox.Text = presentation.ConversionFactor.ToString("0.###", PosNumberFormat.Culture);
         PresentationPrice1Box.Text = presentation.Price1?.ToString("N2", PosNumberFormat.Culture) ?? string.Empty;
         PresentationPrice2Box.Text = presentation.Price2?.ToString("N2", PosNumberFormat.Culture) ?? string.Empty;
         PresentationPrice3Box.Text = presentation.Price3?.ToString("N2", PosNumberFormat.Culture) ?? string.Empty;
         PresentationBarcodeBox.Text = presentation.Barcode ?? string.Empty;
+        PresentationAdvancedOptions.IsExpanded = presentation.Price1.HasValue || presentation.Price2.HasValue ||
+            presentation.Price3.HasValue || !string.IsNullOrWhiteSpace(presentation.Barcode);
         _editingPresentationId = presentation.Id;
-        SavePresentationButton.Content = presentation.Active ? "Guardar" : "Reactivar";
+        _currentPresentationUnitId = presentation.UnitId;
+        PresentationEditorTitle.Text = $"Editar forma: {presentation.UnitName}";
+        SavePresentationButton.Content = presentation.Active ? "Guardar cambios" : "Reactivar";
         DeactivatePresentationButton.IsEnabled = presentation.Active;
+        CancelPresentationEditButton.Visibility = Visibility.Visible;
+        UpdateConversionHint();
     }
 
     private Guid? _editingPresentationId;
@@ -212,48 +240,104 @@ public partial class ProductDetailsWindow : Window
     private void NewPresentationFields()
     {
         _editingPresentationId = null;
-        PresentationLabelBox.Clear();
-        PresentationUnitBox.SelectedItem = _units.FirstOrDefault(x => x.Id == _details?.BaseUnitId) ?? _units.FirstOrDefault();
-        ConversionFactorBox.Text = "1";
+        _currentPresentationUnitId = null;
+        PresentationEditorTitle.Text = "Agregar forma de venta";
+        PresentationUnitBox.SelectedItem = null;
+        ConversionFactorPanel.Visibility = Visibility.Collapsed;
+        ConversionFactorBox.Clear();
         PresentationPrice1Box.Clear(); PresentationPrice2Box.Clear(); PresentationPrice3Box.Clear(); PresentationBarcodeBox.Clear();
-        SavePresentationButton.Content = "Guardar";
+        PresentationAdvancedOptions.IsExpanded = false;
+        SavePresentationButton.Content = "Agregar";
         DeactivatePresentationButton.IsEnabled = false;
+        CancelPresentationEditButton.Visibility = Visibility.Collapsed;
         PresentationsGrid.SelectedItem = null;
+    }
+
+    private void CancelPresentationEdit_Click(object sender, RoutedEventArgs e) => NewPresentationFields();
+
+    private void PresentationUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || _details is null || PresentationUnitBox.SelectedItem is not ProductUnitInfo unit) return;
+        ConversionFactorPanel.Visibility = Visibility.Visible;
+        ConversionFactorLabel.Text = $"Contenido por cada {unit.Name}";
+        BaseUnitFactorLabel.Text = PluralizeUnit(_details.BaseUnitName);
+        if (!_editingPresentationId.HasValue || _currentPresentationUnitId != unit.Id)
+            ConversionFactorBox.Text = DefaultConversionFactor(unit)?.ToString("0.###", PosNumberFormat.Culture) ?? string.Empty;
+        _currentPresentationUnitId = unit.Id;
+        UpdateConversionHint();
+    }
+
+    private decimal? DefaultConversionFactor(ProductUnitInfo unit)
+    {
+        if (_details is null || unit.Id == _details.BaseUnitId) return 1m;
+        var unitName = NormalizeUnitName(unit.Name);
+        var baseName = NormalizeUnitName(_details.BaseUnitName);
+        if (unitName is "par" or "pareja") return 2m;
+        if (unitName is "docena") return 12m;
+        if ((unitName is "gramo" or "gramos") && (baseName is "kilogramo" or "kilogramos")) return 0.001m;
+        if ((unitName is "kilogramo" or "kilogramos") && (baseName is "gramo" or "gramos")) return 1000m;
+        if (unitName is "caja" or "cajas" or "paquete" or "paquetes" or "pack" or "packs" or "bulto" or "bultos" or
+            "fardo" or "fardos" or "bolsa" or "bolsas" or "saco" or "sacos" or "paca" or "pacas" or "carton" or "cartones" or "lote" or "lotes")
+            return null;
+        return 1m;
+    }
+
+    private static string NormalizeUnitName(string name)
+    {
+        var decomposed = name.Trim().Normalize(NormalizationForm.FormD);
+        return new string(decomposed
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark && char.IsLetterOrDigit(c))
+            .ToArray()).Normalize(NormalizationForm.FormC).ToLowerInvariant();
+    }
+
+    private void ConversionFactorBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateConversionHint();
+
+    private void UpdateConversionHint()
+    {
+        if (_details is null || PresentationUnitBox.SelectedItem is not ProductUnitInfo unit) return;
+        if (PosNumberFormat.TryParseAmount(ConversionFactorBox.Text, out var factor) && factor > 0m)
+            ConversionHintLabel.Text = $"1 {unit.Name} = {PosNumberFormat.FormatQuantity(factor)} {PluralizeUnit(_details.BaseUnitName)}";
+        else
+            ConversionHintLabel.Text = $"Indica cuántas {PluralizeUnit(_details.BaseUnitName)} contiene cada {unit.Name}.";
     }
 
     private async void CreateUnit_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ProductUnitCreateWindow { Owner = this };
+        var dialog = new ProductUnitCreateWindow(_units) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         try
         {
             var unit = await _viewModel.CreateProductUnitAsync(dialog.UnitName, dialog.Abbreviation, dialog.AllowsFractional);
             _units = await _viewModel.GetProductUnitsAsync();
+            NewPresentationFields();
             PresentationUnitBox.ItemsSource = _units; PresentationUnitBox.SelectedItem = _units.FirstOrDefault(x => x.Id == unit.Id);
-            StatusLabel.Text = $"Se creó la unidad {unit.DisplayLabel}. Puedes usarla en una presentación de venta.";
+            StatusLabel.Text = $"Unidad {unit.Name} agregada.";
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
     }
 
     private async void SavePresentation_Click(object sender, RoutedEventArgs e)
     {
-        if (_details is not null && !_details.BaseUnitAllowsFractionalQuantities &&
-            PosNumberFormat.TryParseAmount(ConversionFactorBox.Text, out var baseFactor) && decimal.Round(baseFactor, 0) != baseFactor)
-        { StatusLabel.Text = "La unidad base no permite fracciones; usa un factor entero para esta presentación."; return; }
-        if (_details is null || PresentationUnitBox.SelectedItem is not ProductUnitInfo unit ||
-            !PosNumberFormat.TryParseAmount(ConversionFactorBox.Text, out var factor) || factor <= 0m || decimal.Round(factor, 3) != factor ||
-            !TryOptionalPrice(PresentationPrice1Box.Text, out var price1) || !TryOptionalPrice(PresentationPrice2Box.Text, out var price2) ||
+        if (_details is null) return;
+        if (PresentationUnitBox.SelectedItem is not ProductUnitInfo unit)
+        { StatusLabel.Text = "Elige cómo se vende este producto."; return; }
+        if (!_editingPresentationId.HasValue && unit.Id == _details.BaseUnitId)
+        { StatusLabel.Text = "La unidad del inventario ya está disponible para vender."; return; }
+        if (!PosNumberFormat.TryParseAmount(ConversionFactorBox.Text, out var factor) || factor <= 0m || decimal.Round(factor, 3) != factor)
+        { StatusLabel.Text = $"Indica cuántas {PluralizeUnit(_details.BaseUnitName)} contiene cada {unit.Name}."; return; }
+        if (!_details.BaseUnitAllowsFractionalQuantities && decimal.Round(factor, 0) != factor)
+        { StatusLabel.Text = "La unidad del inventario solo permite cantidades enteras."; return; }
+        if (!TryOptionalPrice(PresentationPrice1Box.Text, out var price1) || !TryOptionalPrice(PresentationPrice2Box.Text, out var price2) ||
             !TryOptionalPrice(PresentationPrice3Box.Text, out var price3))
-        { StatusLabel.Text = "Revisa la unidad, el factor y los precios de la presentación."; return; }
-        var label = PresentationLabelBox.Text.Trim();
-        if (label.Length is < 2 or > 80) { StatusLabel.Text = "Escribe un nombre visible de 2 a 80 caracteres."; return; }
+        { StatusLabel.Text = "Revisa los precios especiales. Déjalos vacíos para usar el cálculo automático."; return; }
+        var wasEditing = _editingPresentationId.HasValue;
         try
         {
             await _viewModel.SaveProductPresentationAsync(_productId, new ProductPresentationInput(_editingPresentationId, unit.Id,
-                label, factor, price1, price2, price3, PresentationBarcodeBox.Text.Trim()));
+                unit.Name, factor, price1, price2, price3, PresentationBarcodeBox.Text.Trim()));
             _editingPresentationId = null;
             await LoadAsync();
-            StatusLabel.Text = "Presentación guardada.";
+            StatusLabel.Text = wasEditing ? "Cambios guardados." : "Forma de venta agregada.";
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
     }
@@ -261,8 +345,8 @@ public partial class ProductDetailsWindow : Window
     private async void DeactivatePresentation_Click(object sender, RoutedEventArgs e)
     {
         if (_editingPresentationId is not { } id || PresentationsGrid.SelectedItem is not ProductPresentationInfo presentation) return;
-        if (MessageBox.Show(this, $"¿Desactivar «{presentation.Label}»? Las ventas anteriores conservarán su presentación.",
-            "Desactivar presentación", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, $"¿Retirar «{presentation.UnitName}» de las formas de venta? Las ventas anteriores se conservarán.",
+            "Retirar forma de venta", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
         {
             await _viewModel.DeactivateProductPresentationAsync(_productId, id);

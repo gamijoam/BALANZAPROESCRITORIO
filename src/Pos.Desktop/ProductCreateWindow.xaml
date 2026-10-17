@@ -23,8 +23,8 @@
                 </ComboBox><TextBlock Text="“Gravado 0 %” y “Exento” se guardan por separado. La tasa se calcula al vender." Foreground="#63758B" FontSize="12" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
                 <Grid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <StackPanel><TextBlock Text="Unidad base del inventario" FontWeight="SemiBold"/><ComboBox x:Name="BaseUnitBox" Height="38" Margin="0,4,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="BaseUnitBox_SelectionChanged" AutomationProperties.Name="Unidad base del producto"/><TextBlock Text="El inventario, las compras y los ajustes se registrarán en esta unidad." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
-                    <Button Grid.Column="1" Content="Crear unidad" Height="38" Padding="12,4" Margin="10,22,0,0" VerticalAlignment="Top" Click="CreateUnit_Click"/>
+                    <StackPanel><TextBlock Text="Inventario contado por" FontWeight="SemiBold"/><ComboBox x:Name="BaseUnitBox" Height="38" Margin="0,4,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="BaseUnitBox_SelectionChanged" AutomationProperties.Name="Unidad base del producto"/><TextBlock Text="Elige cómo cuentas las existencias de este producto." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
+                    <Button Grid.Column="1" Content="Agregar tipo" Height="38" Padding="12,4" Margin="10,22,0,0" VerticalAlignment="Top" Click="CreateUnit_Click"/>
                 </Grid>
                 <StackPanel Grid.Row="5" Margin="0,0,10,12"><TextBlock x:Name="InitialStockLabel" Text="Existencia inicial" FontWeight="SemiBold"/><TextBox x:Name="StockBox" Text="0" Height="38" Padding="8" Margin="0,4,0,0" AutomationProperties.Name="Existencia inicial del producto"/><TextBlock Text="Ingresa 0 si todavía no tienes existencia." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
                 <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0,0,12" VerticalAlignment="Bottom">
