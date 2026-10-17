@@ -46,6 +46,11 @@ function Get-NormalizedPem {
     return ($Pem -replace '\s', '')
 }
 
+function Test-FullyQualifiedWindowsPath {
+    param([Parameter(Mandatory)][string]$Path)
+    return $Path -match '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$))'
+}
+
 $sourceKeys = Read-LicensePublicKeyRing -Path $PublicKeyRingPath
 if ($ValidateOnly) {
     Write-Output 'El anillo de llaves públicas de licencias tiene un formato válido.'
@@ -56,7 +61,7 @@ if ($DestinationDirectory.Count -eq 0) {
 }
 
 foreach ($directory in $DestinationDirectory) {
-    if ([string]::IsNullOrWhiteSpace($directory) -or -not [IO.Path]::IsPathFullyQualified($directory)) {
+    if ([string]::IsNullOrWhiteSpace($directory) -or -not (Test-FullyQualifiedWindowsPath -Path $directory)) {
         throw "La carpeta de destino debe ser una ruta absoluta: '$directory'."
     }
     $resolvedDirectory = [IO.Path]::GetFullPath($directory)
