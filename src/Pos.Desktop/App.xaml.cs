@@ -3,9 +3,11 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using Pos.Desktop.Presentation;
 
 namespace Pos.Desktop;
@@ -15,6 +17,8 @@ public partial class App : Application
     private PosApiClient? _apiClient;
     private LocalPosServerProcessHost? _localServer;
     private bool _canRestartLocalService;
+    private static Mutex? _singleInstanceMutex;
+    private static bool _ownsSingleInstanceMutex;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -23,6 +27,21 @@ public partial class App : Application
         Thread.CurrentThread.CurrentCulture = PosNumberFormat.Culture;
         Thread.CurrentThread.CurrentUICulture = PosNumberFormat.Culture;
         base.OnStartup(e);
+
+        if (!TryOwnSingleInstanceMutex())
+        {
+            ActivateExistingInstance();
+            Shutdown(0);
+            return;
+        }
+
+        var startupSplash = new StartupSplashWindow();
+        MainWindow = startupSplash;
+        startupSplash.Show();
+        // Let WPF paint the splash before any first-run dialogs or service startup work.
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        startupSplash.SetStatus("Leyendo la configuración de este equipo…");
+
         var apiBaseUrl = Environment.GetEnvironmentVariable("POS_API_BASE_URL");
         var configurationDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PuntoDeVenta", "Configuracion");
         var profileStore = new PosInstallationProfileStore(Path.Combine(configurationDirectory, "deployment.dpapi"), new WindowsDpapiSecretProtector());
@@ -37,6 +56,7 @@ public partial class App : Application
 
         if (profile is null && string.IsNullOrWhiteSpace(apiBaseUrl))
         {
+            startupSplash.SetStatus("Configurando el punto de venta por primera vez…");
             var setup = new InstallationSetupWindow(configurationDirectory);
             if (setup.ShowDialog() != true || setup.Profile is null)
             {
@@ -116,6 +136,7 @@ public partial class App : Application
 
         if (startLocalServer || (profile is null && apiUri.IsLoopback && apiUri.Port == 5155))
         {
+            startupSplash.SetStatus("Iniciando y comprobando el servicio local…");
             if (profile?.Mode != PosInstallationMode.Server)
             {
                 // Keep the single-PC API bound to IPv4 loopback only.
@@ -148,6 +169,7 @@ public partial class App : Application
         }
         else if (profile?.Mode == PosInstallationMode.ClientTerminal)
         {
+            startupSplash.SetStatus("Conectando con el servidor del punto de venta…");
             while (true)
             {
                 try
@@ -180,6 +202,7 @@ public partial class App : Application
             profileStore.Save(profile!);
         }
 
+        startupSplash.SetStatus("Abriendo el punto de venta…");
         _apiClient = new PosApiClient(new Uri(apiBaseUrl), terminalCredential: profile?.TerminalCredential,
             serverCertificateSha256: profile?.ServerCertificateSha256);
         _apiClient.RequestAdministratorPinAsync = (challenge, _) =>
@@ -192,15 +215,62 @@ public partial class App : Application
             startLocalServer && _canRestartLocalService ? RestartLocalServiceAndReloadModulesAsync : null,
             stopsLocalServerOnExit: startLocalServer && !LocalPosServerProcessHost.IsInstalledWindowsServiceForPath(ResolveServerPath()));
         MainWindow = window;
+        await startupSplash.KeepVisibleForAnimationAsync();
         window.Show();
+        startupSplash.Close();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _apiClient?.Dispose();
         _localServer?.Dispose();
+        if (_ownsSingleInstanceMutex)
+        {
+            try { _singleInstanceMutex?.ReleaseMutex(); } catch (ApplicationException) { }
+            _ownsSingleInstanceMutex = false;
+        }
+        _singleInstanceMutex?.Dispose();
+        _singleInstanceMutex = null;
         base.OnExit(e);
     }
+
+    private static bool TryOwnSingleInstanceMutex()
+    {
+        var identity = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+        var mutexName = $"Local\\BalanzaPro.Pos.Desktop.{identity}";
+        _singleInstanceMutex = new Mutex(true, mutexName, out var createdNew);
+        _ownsSingleInstanceMutex = createdNew;
+        if (createdNew) return true;
+        _singleInstanceMutex.Dispose();
+        _singleInstanceMutex = null;
+        return false;
+    }
+
+    private static void ActivateExistingInstance()
+    {
+        foreach (var process in Process.GetProcessesByName("Pos.Desktop"))
+        {
+            try
+            {
+                if (process.Id == Environment.ProcessId) continue;
+                var window = process.MainWindowHandle;
+                if (window == IntPtr.Zero) continue;
+                ShowWindow(window, 9);
+                SetForegroundWindow(window);
+                return;
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+            }
+            finally { process.Dispose(); }
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr windowHandle, int command);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr windowHandle);
 
     private async Task RestartLocalServiceAndReloadModulesAsync(CancellationToken cancellationToken)
     {

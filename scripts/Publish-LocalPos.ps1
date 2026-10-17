@@ -108,20 +108,26 @@ $launcherPath = Join-Path $packageDirectory 'Iniciar POS.cmd'
 $launcherContent = @'
 @echo off
 setlocal
-set "STARTER=%~dp0scripts\Start-LocalPos.ps1"
-if not exist "%STARTER%" (
+set "LAUNCHER=%~dp0Iniciar POS.vbs"
+if not exist "%LAUNCHER%" (
   echo No se encontro la aplicacion del punto de venta.
   pause
   exit /b 1
 )
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%STARTER%"
-if errorlevel 1 (
-  echo No se pudo iniciar el punto de venta. Revisa el mensaje anterior.
-  pause
-  exit /b 1
-)
+start "" wscript.exe //B //NoLogo "%LAUNCHER%"
+exit /b 0
 '@
 Write-WindowsCommandFile -Path $launcherPath -Content $launcherContent
+$launcherVbsPath = Join-Path $packageDirectory 'Iniciar POS.vbs'
+$launcherVbsContent = @'
+Set fileSystem = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+root = fileSystem.GetParentFolderName(WScript.ScriptFullName)
+starter = root & "\scripts\Start-LocalPos.ps1"
+command = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & starter & """"
+shell.Run command, 0, False
+'@
+[IO.File]::WriteAllText($launcherVbsPath, $launcherVbsContent, [Text.Encoding]::ASCII)
 $stopperPath = Join-Path $packageDirectory 'Detener proceso por puerto.cmd'
 $stopperContent = @'
 @echo off
