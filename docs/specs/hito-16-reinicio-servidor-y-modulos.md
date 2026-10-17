@@ -2,7 +2,7 @@
 
 ## Criterios de aceptación
 
-1. Al abrir `Iniciar POS`, la aplicación identifica el `Pos.Server.exe` que responde en el puerto configurado. Si pertenece a una carpeta anterior o su ejecutable fue actualizado mientras seguía ejecutándose, lo detiene y arranca el servidor junto a la versión abierta.
+1. Al abrir `Iniciar POS.vbs`, la aplicación identifica el `Pos.Server.exe` que responde en el puerto configurado. Si pertenece a una carpeta anterior o su ejecutable fue actualizado mientras seguía ejecutándose, lo detiene y arranca el servidor junto a la versión abierta.
 2. El inicio nunca detiene un proceso que no sea `Pos.Server.exe`, un servidor POS que no responde en la dirección configurada ni una instancia ambigua. En esos casos informa el motivo y conserva el servicio existente.
 3. Administración → Módulos ofrece una acción explícita para reiniciar el servidor local y cargar módulos pendientes. La acción advierte sobre la interrupción temporal de las cajas, espera a que el servidor vuelva a estar listo y muestra el estado resultante.
 4. En una terminal cliente, la acción de reinicio remoto no se habilita; la interfaz indica que debe reiniciarse desde la computadora servidor.

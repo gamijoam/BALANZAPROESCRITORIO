@@ -8,7 +8,7 @@ La clave pública oficial ya viene en `trusted-publishers\pos-publisher-vps-2026
 
 ## Instalación nueva
 
-1. Ejecuta `Iniciar POS.cmd` y configura el POS servidor.
+1. Abre `Iniciar POS.vbs` y configura el POS servidor.
 2. Ejecuta `Actualizar POS.cmd`. Este paso registra automáticamente la clave pública en el anillo de confianza de la cuenta actual de Windows.
 3. Instala o actualiza el servicio desde `Administrar servicio POS.cmd`, con la opción **Instalar / actualizar configuración y arrancar**. Así el servicio de Windows recibe la ruta del anillo de confianza y permiso de lectura.
 4. En el POS servidor, entra en **Administración → Módulos**, valida e instala los ZIP de `modulos` y luego elige **Reiniciar servidor y cargar módulos**.

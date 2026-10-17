@@ -18,7 +18,7 @@
    ```
 
    El script agrega la clave pública al perfil actual de Windows. Si el anillo ya contiene ese identificador con otra clave, se detiene y conserva el archivo sin cambios.
-3. Extrae `pos-warehouses-preview.zip` y ejecuta `Iniciar POS.cmd` en el equipo que actuará como servidor POS. Usa el perfil de instalación existente de la misma cuenta de Windows; la contraseña de PostgreSQL no está en los ZIP.
+3. Extrae `pos-warehouses-preview.zip` y abre `Iniciar POS.vbs` en el equipo que actuará como servidor POS. Usa el perfil de instalación existente de la misma cuenta de Windows; la contraseña de PostgreSQL no está en los ZIP.
 4. Entra con un usuario administrador y abre **Administración → Módulos**. Elige `warehouses-1.1.0.zip`; la pantalla debe mostrar **Almacenes y traslados**, completar el ID interno `warehouses` y mostrar la versión `1.1.0`. Valida e instala la actualización y deja que termine el respaldo.
 5. Cierra y vuelve a abrir el POS actualizado. Confirma que Almacenes figure como activo; después usa una base recuperable y productos de prueba para seguir el flujo en `INSTRUCCIONES-ALMACENES.md`.
 

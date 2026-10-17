@@ -1,6 +1,6 @@
 # Punto de venta — instalación y conexión de cajas
 
-Esta guía cubre instalación, conexión por red local, actualización y respaldo. Extrae el ZIP completo antes de ejecutar `Iniciar POS.cmd` o `Actualizar POS.cmd`.
+Esta guía cubre instalación, conexión por red local, actualización y respaldo. Extrae el ZIP completo antes de abrir `Iniciar POS.vbs` o ejecutar `Actualizar POS.cmd`.
 
 ## Requisitos
 
@@ -15,7 +15,7 @@ PostgreSQL no viene dentro del paquete. Una PC configurada como **independiente*
 
 ## Instalar la caja principal
 
-1. En la computadora que tiene PostgreSQL, abre `Iniciar POS.cmd`.
+1. En la computadora que tiene PostgreSQL, abre `Iniciar POS.vbs`.
 2. Selecciona **Servidor POS + caja local**. El POS detecta la IP local, genera su certificado HTTPS y prepara el puerto 5155 para redes privadas.
 3. Acepta el permiso de Windows para habilitar el POS en la red privada. No lo habilites para redes públicas.
 4. Completa los datos de PostgreSQL si los solicita y configura el primer operador.
@@ -30,7 +30,7 @@ Si el servidor detecta que la IP guardada ya no pertenece a esta computadora, ac
 
 ## Conectar otra computadora
 
-1. Extrae el mismo ZIP en la computadora cliente y abre `Iniciar POS.cmd`. No instales el servicio ni PostgreSQL en una terminal cliente.
+1. Extrae el mismo ZIP en la computadora cliente y abre `Iniciar POS.vbs`. No instales el servicio ni PostgreSQL en una terminal cliente.
 2. Selecciona **Terminal cliente**.
 3. Escribe la IP del servidor, por ejemplo `192.168.1.20`, y pulsa **Continuar**. El puerto 5155 se agrega automáticamente. También puedes escribir `192.168.1.20:5155`.
 4. La primera vez, revisa la IP en el aviso de confianza y confirma si corresponde a tu caja principal. La aplicación guarda la identidad de ese servidor y la comprueba automáticamente en adelante.
@@ -76,7 +76,7 @@ El servicio de Windows `BalanzaProPosServer` inicia automáticamente al arrancar
 
 Abre `Administrar servicio POS.cmd` para ver el estado, PID y ruta activa, instalar o actualizar la configuración, detener, reiniciar o quitar el servicio. Quitar el servicio no borra la base ni los datos de módulos. El acceso directo de POS comprueba e inicia el servicio instalado antes de abrir la caja.
 
-Si aún no instalaste el servicio, al abrir `Iniciar POS.cmd` el escritorio puede iniciar un servidor local temporal. Ese servidor no arranca con Windows y se cierra al salir del POS. Instala el servicio después de configurar la base para operación automática.
+Si aún no instalaste el servicio, al abrir `Iniciar POS.vbs` el escritorio puede iniciar un servidor local temporal. Ese servidor no arranca con Windows y se cierra al salir del POS. Instala el servicio después de configurar la base para operación automática.
 
 Ejecuta `Detener proceso por puerto.cmd` y elige **1** para liberar un puerto TCP o **2** para cerrar `Pos.Desktop.exe`, incluso si quedó ejecutándose sin ventana visible. La herramienta muestra los PID y las rutas, solicita confirmación y comprueba que la acción se completó. Si necesita permisos elevados, Windows los solicitará. Consulta `DETENER-PROCESOS-POS.md` para más detalles.
 

@@ -7,7 +7,7 @@ El ZIP de entrega incluye una actualización del POS anfitrión y el módulo fir
 1. Extrae el ZIP completo en una carpeta nueva.
 2. Cierra las ventanas del POS.
 3. Ejecuta `Actualizar POS.cmd`. En el servidor, este proceso crea y verifica el respaldo, aplica las migraciones del anfitrión y reinicia el servicio.
-4. Ejecuta `Iniciar POS.cmd` y confirma que el servicio quede disponible.
+4. Abre `Iniciar POS.vbs` y confirma que el servicio quede disponible.
 5. Si el servidor no reconoce al firmante del módulo, ejecuta una vez `scripts\Install-WarehouseModuleTrust.ps1` con la clave pública que está junto a `modulos\advanced-reports\1.0.1.zip`:
 
    ```powershell

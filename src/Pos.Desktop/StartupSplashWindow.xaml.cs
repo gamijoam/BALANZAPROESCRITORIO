@@ -7,7 +7,8 @@ namespace Pos.Desktop;
 
 public partial class StartupSplashWindow : Window
 {
-    private readonly Stopwatch _visibleFor = Stopwatch.StartNew();
+    private static readonly TimeSpan MinimumSplashDuration = TimeSpan.FromSeconds(5);
+    private readonly Stopwatch _visibleFor = new();
 
     public StartupSplashWindow()
     {
@@ -26,13 +27,14 @@ public partial class StartupSplashWindow : Window
 
     public async Task KeepVisibleForAnimationAsync()
     {
-        var remaining = TimeSpan.FromMilliseconds(1200) - _visibleFor.Elapsed;
+        var remaining = MinimumSplashDuration - _visibleFor.Elapsed;
         if (remaining > TimeSpan.Zero)
             await Task.Delay(remaining);
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        _visibleFor.Restart();
         var logo = new BitmapImage();
         logo.BeginInit();
         logo.UriSource = new Uri("pack://application:,,,/Pos.Desktop;component/Assets/balanzapro-logo.png", UriKind.Absolute);
@@ -44,17 +46,27 @@ public partial class StartupSplashWindow : Window
         ScalePart.Source = new CroppedBitmap(logo, new Int32Rect(0, 0, logo.PixelWidth, split));
         RegisterPart.Source = new CroppedBitmap(logo, new Int32Rect(0, split, logo.PixelWidth, logo.PixelHeight - split));
 
-        var duration = TimeSpan.FromMilliseconds(850);
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        ScaleTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(-150, 0, duration) { EasingFunction = easing });
-        RegisterTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
-            new DoubleAnimation(150, 0, duration) { EasingFunction = easing, BeginTime = TimeSpan.FromMilliseconds(100) });
-        ScalePart.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(500)) { EasingFunction = easing });
-        RegisterPart.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(500))
+        var joinDuration = TimeSpan.FromMilliseconds(1300);
+        var easing = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.12 };
+        BalanceTranslateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(-180, 0, joinDuration) { EasingFunction = easing });
+        RegisterTranslateTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty,
+            new DoubleAnimation(180, 0, joinDuration) { EasingFunction = easing, BeginTime = TimeSpan.FromMilliseconds(120) });
+        ScalePart.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(650)) { EasingFunction = easing });
+        RegisterPart.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(650))
         {
             EasingFunction = easing,
-            BeginTime = TimeSpan.FromMilliseconds(100)
+            BeginTime = TimeSpan.FromMilliseconds(120)
         });
+
+        var pulse = new DoubleAnimation(1, 1.035, TimeSpan.FromMilliseconds(750))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(1500),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+        LogoScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulse);
+        LogoScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulse.Clone());
     }
 }
