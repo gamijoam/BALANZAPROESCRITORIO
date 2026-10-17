@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using Pos.Desktop.Modules.Abstractions;
 using Pos.Desktop.Presentation;
 
 namespace Pos.Desktop;
@@ -13,19 +14,22 @@ public partial class ProductDetailsWindow : Window
 {
     private readonly PosViewModel _viewModel;
     private readonly Guid _productId;
+    private readonly IReadOnlyList<LoadedDesktopModule> _modules;
     private ProductDetailsInfo? _details;
     private IReadOnlyList<ProductUnitInfo> _units = [];
     private bool _loading;
+    private bool _hasChanges;
     private Guid? _currentPresentationUnitId;
 
-    public ProductDetailsWindow(PosViewModel viewModel, InventoryItemInfo product)
+    public ProductDetailsWindow(PosViewModel viewModel, InventoryItemInfo product, IReadOnlyList<LoadedDesktopModule>? modules = null)
     {
         InitializeComponent();
         _viewModel = viewModel;
         _productId = product.Id;
+        _modules = modules ?? [];
         var workArea = SystemParameters.WorkArea;
-        Width = Math.Min(Width, workArea.Width - 32);
-        Height = Math.Min(Height, workArea.Height - 48);
+        Width = workArea.Width - 16;
+        Height = workArea.Height - 16;
         MinWidth = Math.Min(MinWidth, Width);
         MinHeight = Math.Min(MinHeight, Height);
         Loaded += async (_, _) => await LoadAsync();
@@ -53,6 +57,9 @@ public partial class ProductDetailsWindow : Window
             UnitCostLabel.Text = _details.UnitCost.HasValue
                 ? $"{_details.Currency} {_details.UnitCost.Value:N4} por {_details.BaseUnitAbbreviation}"
                 : "Sin costo registrado";
+            InitializeCostButton.IsEnabled = _details.Active && _details.Quantity > 0m && !_details.UnitCost.HasValue;
+            StockAdjustmentAmountLabel.Text = $"Cantidad {_details.BaseUnitAbbreviation} (+/−)";
+            ApplyStockAdjustmentButton.IsEnabled = _details.Active;
             Price1Box.Text = _details.UnitPrice.ToString("N2", PosNumberFormat.Culture);
             Price2Box.Text = _details.Price2?.ToString("N2", PosNumberFormat.Culture) ?? string.Empty;
             Price3Box.Text = _details.Price3?.ToString("N2", PosNumberFormat.Culture) ?? string.Empty;
@@ -68,15 +75,21 @@ public partial class ProductDetailsWindow : Window
             NewPresentationFields();
             StatusLabel.Text = string.Empty;
             ProductImagePreview.Source = null;
+            ProductImagePlaceholder.Visibility = _details.HasImage ? Visibility.Collapsed : Visibility.Visible;
+            ProductImagePlaceholder.Text = "Sin foto";
             if (_details.HasImage)
             {
                 try
                 {
                     var imageBytes = await _viewModel.GetProductImageAsync(_productId);
-                    if (imageBytes is { Length: > 0 }) ProductImagePreview.Source = LoadImage(imageBytes);
-                    else ImageStatusLabel.Text = "No se pudo cargar la foto.";
+                    if (imageBytes is { Length: > 0 })
+                    {
+                        ProductImagePreview.Source = LoadImage(imageBytes);
+                        ProductImagePlaceholder.Visibility = Visibility.Collapsed;
+                    }
+                    else { ImageStatusLabel.Text = "No se pudo cargar la foto."; ProductImagePlaceholder.Text = "Foto no disponible"; ProductImagePlaceholder.Visibility = Visibility.Visible; }
                 }
-                catch (Exception) { ImageStatusLabel.Text = "No se pudo cargar la foto."; }
+                catch (Exception) { ImageStatusLabel.Text = "No se pudo cargar la foto."; ProductImagePlaceholder.Text = "Foto no disponible"; ProductImagePlaceholder.Visibility = Visibility.Visible; }
             }
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
@@ -142,6 +155,7 @@ public partial class ProductDetailsWindow : Window
             if (price1 != _details.UnitPrice) await _viewModel.ChangePriceAsync(_productId, "Price1", price1, priceReason);
             if (price2.HasValue && price2 != _details.Price2) await _viewModel.ChangePriceAsync(_productId, "Price2", price2.Value, priceReason);
             if (price3.HasValue && price3 != _details.Price3) await _viewModel.ChangePriceAsync(_productId, "Price3", price3.Value, priceReason);
+            _hasChanges = true;
             DialogResult = true;
         }
         catch (Exception ex) { StatusLabel.Text = $"No se guardaron todos los cambios: {PosUserMessage.ForException(ex)}"; }
@@ -158,25 +172,68 @@ public partial class ProductDetailsWindow : Window
         try
         {
             await _viewModel.SetProductActiveAsync(_productId, next);
+            _hasChanges = true;
             await LoadAsync();
             DialogResult = true;
         }
         catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
     }
 
-    private async void History_Click(object sender, RoutedEventArgs e)
+    private void History_Click(object sender, RoutedEventArgs e)
     {
         if (_details is null) return;
-        var item = new InventoryItemInfo(_details.Id, _details.Sku, _details.Name, _details.UnitPrice,
-            _details.Currency, _details.Quantity, _details.HasImage)
+        var historyExtension = _modules
+            .SelectMany(module => module.Registry.InventoryHistoryExtensions
+                .Where(extension => module.Context.GrantedPermissions.Contains(extension.RequiredPermission))
+                .Select(extension => (module.Context, Extension: extension)))
+            .FirstOrDefault();
+        new InventoryMovementsWindow(_viewModel, ToInventoryItem(), historyExtension.Extension is null ? null : historyExtension.Context,
+            historyExtension.Extension) { Owner = this }.ShowDialog();
+    }
+
+    private InventoryItemInfo ToInventoryItem() => new(_details!.Id, _details.Sku, _details.Name, _details.UnitPrice,
+        _details.Currency, _details.Quantity, _details.HasImage)
+    {
+        Active = _details.Active, Price2 = _details.Price2, Price3 = _details.Price3, UnitCost = _details.UnitCost,
+        MinimumStock = _details.MinimumStock, TaxTreatment = _details.TaxTreatment,
+        BaseUnitId = _details.BaseUnitId, BaseUnitName = _details.BaseUnitName,
+        BaseUnitAbbreviation = _details.BaseUnitAbbreviation,
+        BaseUnitAllowsFractional = _details.BaseUnitAllowsFractionalQuantities
+    };
+
+    private async void InitializeCost_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details is null || !_details.Active || _details.Quantity <= 0m || _details.UnitCost.HasValue) return;
+        if (new ProductPriceWindow(_viewModel, ToInventoryItem(), initialCostMode: true) { Owner = this }.ShowDialog() != true) return;
+        _hasChanges = true;
+        await LoadAsync();
+        StatusLabel.Text = "Costo inicial guardado y registrado.";
+    }
+
+    private async void ApplyStockAdjustment_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details is null || !_details.Active) return;
+        if (!PosNumberFormat.TryParseAmount(StockAdjustmentAmountBox.Text, out var delta) || delta == 0m || decimal.Round(delta, 3) != delta ||
+            !_details.BaseUnitAllowsFractionalQuantities && decimal.Round(delta, 0) != delta)
         {
-            Active = _details.Active, Price2 = _details.Price2, Price3 = _details.Price3, UnitCost = _details.UnitCost,
-            MinimumStock = _details.MinimumStock, TaxTreatment = _details.TaxTreatment,
-            BaseUnitId = _details.BaseUnitId, BaseUnitName = _details.BaseUnitName,
-            BaseUnitAbbreviation = _details.BaseUnitAbbreviation,
-            BaseUnitAllowsFractional = _details.BaseUnitAllowsFractionalQuantities
-        };
-        new InventoryMovementsWindow(_viewModel, item) { Owner = this }.ShowDialog();
+            StatusLabel.Text = _details.BaseUnitAllowsFractionalQuantities
+                ? "El ajuste debe ser distinto de cero y tener hasta tres decimales."
+                : "Esta unidad solo permite ajustes enteros.";
+            return;
+        }
+
+        ApplyStockAdjustmentButton.IsEnabled = false;
+        try
+        {
+            var quantity = await _viewModel.AdjustStockAsync(_productId, delta, StockAdjustmentReasonBox.Text.Trim());
+            _hasChanges = true;
+            StockAdjustmentAmountBox.Text = "1";
+            StockAdjustmentReasonBox.Clear();
+            await LoadAsync();
+            StatusLabel.Text = $"Existencia actualizada: {PosNumberFormat.FormatQuantity(quantity)} {_details.BaseUnitAbbreviation}.";
+        }
+        catch (Exception ex) { StatusLabel.Text = PosUserMessage.ForException(ex); }
+        finally { ApplyStockAdjustmentButton.IsEnabled = _details?.Active == true; }
     }
 
     private async void UploadImage_Click(object sender, RoutedEventArgs e)
@@ -191,8 +248,10 @@ public partial class ProductDetailsWindow : Window
             await _viewModel.UploadProductImageAsync(_productId, picker.FileName);
             _details = _details with { HasImage = true };
             ProductImagePreview.Source = LoadImage(File.ReadAllBytes(picker.FileName));
+            ProductImagePlaceholder.Visibility = Visibility.Collapsed;
             RemoveImageButton.IsEnabled = true;
             ImageStatusLabel.Text = "Foto guardada.";
+            _hasChanges = true;
         }
         catch (Exception ex) { ImageStatusLabel.Text = PosUserMessage.ForException(ex); }
     }
@@ -207,8 +266,11 @@ public partial class ProductDetailsWindow : Window
             await _viewModel.RemoveProductImageAsync(_productId);
             _details = _details with { HasImage = false };
             ProductImagePreview.Source = null;
+            ProductImagePlaceholder.Text = "Sin foto";
+            ProductImagePlaceholder.Visibility = Visibility.Visible;
             RemoveImageButton.IsEnabled = false;
             ImageStatusLabel.Text = "Foto quitada.";
+            _hasChanges = true;
         }
         catch (Exception ex) { ImageStatusLabel.Text = PosUserMessage.ForException(ex); }
     }
@@ -335,6 +397,7 @@ public partial class ProductDetailsWindow : Window
         {
             await _viewModel.SaveProductPresentationAsync(_productId, new ProductPresentationInput(_editingPresentationId, unit.Id,
                 unit.Name, factor, price1, price2, price3, PresentationBarcodeBox.Text.Trim()));
+            _hasChanges = true;
             _editingPresentationId = null;
             await LoadAsync();
             StatusLabel.Text = wasEditing ? "Cambios guardados." : "Forma de venta agregada.";
@@ -350,6 +413,7 @@ public partial class ProductDetailsWindow : Window
         try
         {
             await _viewModel.DeactivateProductPresentationAsync(_productId, id);
+            _hasChanges = true;
             await LoadAsync();
             StatusLabel.Text = "Presentación desactivada.";
         }
@@ -373,5 +437,5 @@ public partial class ProductDetailsWindow : Window
         return image;
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Close_Click(object sender, RoutedEventArgs e) => DialogResult = _hasChanges;
 }
