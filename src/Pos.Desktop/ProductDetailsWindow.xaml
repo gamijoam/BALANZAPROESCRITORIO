@@ -1,5 +1,5 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.ProductDetailsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ficha del producto" Width="1320" Height="850" MinWidth="900" MinHeight="620" WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI">
+        Title="Ficha del producto" Width="1320" Height="850" MinWidth="900" MinHeight="620" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI">
     <Window.Resources>
         <ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary>
     </Window.Resources>
@@ -18,7 +18,7 @@
                 </StackPanel>
             </Grid>
         </Border>
-        <TabControl Grid.Row="1" Background="White" BorderBrush="#D7DFEA">
+        <TabControl Grid.Row="1" Background="White" BorderBrush="#D5DFEB">
             <TabItem Header="Datos y precios">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="18">
@@ -31,35 +31,35 @@
                         </Grid.RowDefinitions>
                         <StackPanel Margin="0,0,10,12"><TextBlock Text="SKU / código" FontWeight="SemiBold"/><TextBox x:Name="SkuBox" Height="38" Padding="8" Margin="0,4,0,0"/></StackPanel>
                         <StackPanel Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="Nombre del producto" FontWeight="SemiBold"/><TextBox x:Name="NameBox" Height="38" Padding="8" Margin="0,4,0,0"/></StackPanel>
-                        <StackPanel Grid.Row="1" Margin="0,0,10,12"><TextBlock Text="Unidad base del inventario" FontWeight="SemiBold"/><ComboBox x:Name="BaseUnitBox" Height="38" Margin="0,4,0,0" DisplayMemberPath="DisplayLabel" IsEnabled="False"/><TextBlock Text="La unidad base queda fija para proteger el historial del inventario. Configura otras formas de venta en Presentaciones." Foreground="#63758B" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/></StackPanel>
+                        <StackPanel Grid.Row="1" Margin="0,0,10,12"><TextBlock Text="Unidad base del inventario" FontWeight="SemiBold"/><ComboBox x:Name="BaseUnitBox" Height="38" Margin="0,4,0,0" DisplayMemberPath="DisplayLabel" IsEnabled="False"/><TextBlock Text="La unidad base queda fija para proteger el historial del inventario. Configura otras formas de venta en Presentaciones." Foreground="#52677F" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/></StackPanel>
                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="Tratamiento de impuesto" FontWeight="SemiBold"/><ComboBox x:Name="TaxTreatmentBox" Height="38" Margin="0,4,0,0">
                             <ComboBoxItem Content="Gravado 16 %" Tag="Taxable16"/><ComboBoxItem Content="Gravado 8 %" Tag="Taxable8"/>
                             <ComboBoxItem Content="Gravado 0 %" Tag="Taxable0"/><ComboBoxItem Content="Exento" Tag="Exempt"/>
                             <ComboBoxItem Content="Pendiente de clasificar" Tag="Unclassified"/>
                         </ComboBox></StackPanel>
-                        <StackPanel Grid.Row="2" Margin="0,0,10,12"><TextBlock x:Name="MinimumStockLabel" Text="Aviso de bajo stock" FontWeight="SemiBold"/><TextBox x:Name="MinimumStockBox" Height="38" Padding="8" Margin="0,4,0,0"/><TextBlock Text="0 desactiva el aviso." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
-                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="Estado del producto" FontWeight="SemiBold"/><TextBlock x:Name="ActiveLabel" Height="38" VerticalAlignment="Center" Foreground="#173F78"/></StackPanel>
-                        <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="PRECIOS DE VENTA" Foreground="#173F78" FontWeight="Bold" FontSize="15" Margin="0,8,0,8"/>
+                        <StackPanel Grid.Row="2" Margin="0,0,10,12"><TextBlock x:Name="MinimumStockLabel" Text="Aviso de bajo stock" FontWeight="SemiBold"/><TextBox x:Name="MinimumStockBox" Height="38" Padding="8" Margin="0,4,0,0"/><TextBlock Text="0 desactiva el aviso." Foreground="#52677F" FontSize="11" Margin="0,3,0,0"/></StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="Estado del producto" FontWeight="SemiBold"/><TextBlock x:Name="ActiveLabel" Height="38" VerticalAlignment="Center" Foreground="#132D4F"/></StackPanel>
+                        <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="PRECIOS DE VENTA" Foreground="#132D4F" FontWeight="Bold" FontSize="15" Margin="0,8,0,8"/>
                         <Grid Grid.Row="4" Grid.ColumnSpan="2">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,8,12"><TextBlock Text="Precio 1 · principal" FontWeight="SemiBold"/><TextBox x:Name="Price1Box" Height="38" Padding="8" Margin="0,4,0,0"/></StackPanel>
                             <StackPanel Grid.Column="1" Margin="4,0,4,12"><TextBlock Text="Precio 2 · opcional" FontWeight="SemiBold"/><TextBox x:Name="Price2Box" Height="38" Padding="8" Margin="0,4,0,0"/></StackPanel>
                             <StackPanel Grid.Column="2" Margin="8,0,0,12"><TextBlock Text="Precio 3 · opcional" FontWeight="SemiBold"/><TextBox x:Name="Price3Box" Height="38" Padding="8" Margin="0,4,0,0"/></StackPanel>
                         </Grid>
-                        <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="Si cambias un precio, indica el motivo para guardarlo en el historial." Foreground="#63758B" TextWrapping="Wrap"/>
+                        <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="Si cambias un precio, indica el motivo para guardarlo en el historial." Foreground="#52677F" TextWrapping="Wrap"/>
                         <TextBox x:Name="PriceReasonBox" Grid.Row="6" Grid.ColumnSpan="2" Height="42" Padding="8" Margin="0,6,0,12" AutomationProperties.Name="Motivo del cambio de precio"/>
                         <TextBlock Grid.Row="7" Text="Costo promedio" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="UnitCostLabel" Grid.Row="7" Grid.Column="1" Foreground="#173F78" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="UnitCostLabel" Grid.Row="7" Grid.Column="1" Foreground="#132D4F" VerticalAlignment="Center"/>
                         <StackPanel Grid.Row="8" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
                             <TextBlock Text="Foto del producto" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                            <Border Width="62" Height="62" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="4" Margin="0,0,8,0" Background="#F5F7FA">
+                            <Border Width="62" Height="62" BorderBrush="#D5DFEB" BorderThickness="1" CornerRadius="4" Margin="0,0,8,0" Background="#F5F7FA">
                                 <Image x:Name="ProductImagePreview" Stretch="UniformToFill"/>
                             </Border>
                             <Button Content="Subir o cambiar foto" Height="40" Padding="12,4" Click="UploadImage_Click"/>
                             <Button x:Name="RemoveImageButton" Content="Quitar foto" Height="40" Padding="12,4" Margin="8,0,0,0" Click="RemoveImage_Click"/>
-                            <TextBlock x:Name="ImageStatusLabel" Foreground="#63758B" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBlock x:Name="ImageStatusLabel" Foreground="#52677F" VerticalAlignment="Center" Margin="12,0,0,0"/>
                         </StackPanel>
-                        <TextBlock Grid.Row="9" Grid.ColumnSpan="2" Text="Los costos se actualizan al recibir compras. El stock, los ajustes y las compras siempre usan la unidad base." Foreground="#63758B" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                        <TextBlock Grid.Row="9" Grid.ColumnSpan="2" Text="Los costos se actualizan al recibir compras. El stock, los ajustes y las compras siempre usan la unidad base." Foreground="#52677F" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"/>
                         <StackPanel Grid.Row="10" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,14,0,0">
                             <Button x:Name="SaveDetailsButton" Content="Guardar datos" Width="140" Height="42" Click="SaveDetails_Click" Style="{StaticResource PosWindow.PrimaryButton}"/>
                             <Button x:Name="ToggleActiveButton" Content="Desactivar producto" Width="155" Height="42" Margin="8,0,0,0" Click="ToggleActive_Click"/>
@@ -72,8 +72,8 @@
                 <Grid Margin="16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <StackPanel Margin="0,0,0,10">
-                        <TextBlock Text="¿Cómo se vende este producto?" FontSize="17" FontWeight="Bold" Foreground="#173F78"/>
-                        <TextBlock Text="Cada forma indica cuántas unidades del inventario descuenta. Ejemplo: 1 Par = 2 Unidades." Foreground="#63758B" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="¿Cómo se vende este producto?" FontSize="17" FontWeight="Bold" Foreground="#132D4F"/>
+                        <TextBlock Text="Cada forma indica cuántas unidades del inventario descuenta. Ejemplo: 1 Par = 2 Unidades." Foreground="#52677F" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <TextBlock x:Name="BaseUnitSummaryLabel" Foreground="#52677F" FontWeight="SemiBold" Margin="0,6,0,0"/>
                     </StackPanel>
                     <DataGrid x:Name="PresentationsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Single" SelectionChanged="PresentationsGrid_SelectionChanged" RowHeaderWidth="0" Background="White">
@@ -85,8 +85,8 @@
                         </DataGrid.Columns>
                     </DataGrid>
                     <StackPanel Grid.Row="2" Margin="0,12,0,6">
-                        <TextBlock x:Name="PresentationEditorTitle" Text="Agregar forma de venta" FontWeight="Bold" Foreground="#173F78"/>
-                        <TextBlock Text="Selecciona la forma y define su contenido. Los precios y el código se guardan al pulsar Agregar o Guardar cambios." Foreground="#63758B" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="PresentationEditorTitle" Text="Agregar forma de venta" FontWeight="Bold" Foreground="#132D4F"/>
+                        <TextBlock Text="Selecciona la forma y define su contenido. Los precios y el código se guardan al pulsar Agregar o Guardar cambios." Foreground="#52677F" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                     </StackPanel>
                     <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -100,7 +100,7 @@
                                 <TextBox x:Name="ConversionFactorBox" Height="36" Width="110" Padding="7" TextChanged="ConversionFactorBox_TextChanged"/>
                                 <TextBlock x:Name="BaseUnitFactorLabel" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#52677F"/>
                             </DockPanel>
-                            <TextBlock x:Name="ConversionHintLabel" FontSize="10" Foreground="#63758B" Margin="0,3,0,0"/>
+                            <TextBlock x:Name="ConversionHintLabel" FontSize="10" Foreground="#52677F" Margin="0,3,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="2" Content="Agregar tipo" Height="40" Padding="10,4" Margin="4,18,6,0" Click="CreateUnit_Click"/>
                         <Button x:Name="SavePresentationButton" Grid.Column="3" Content="Agregar" Height="40" Padding="16,4" Margin="4,18,6,0" Click="SavePresentation_Click" Style="{StaticResource PosWindow.PrimaryButton}"/>
@@ -111,7 +111,7 @@
                         <Grid Margin="0,6,0,0">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.3*"/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Row="0" Grid.ColumnSpan="4" Text="Deja el precio vacío para calcularlo con el precio de la unidad base × el contenido de esta forma. Escribe un importe si quieres cobrar un precio especial por Par, Cartón o Caja." Foreground="#63758B" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Grid.Row="0" Grid.ColumnSpan="4" Text="Deja el precio vacío para calcularlo con el precio de la unidad base × el contenido de esta forma. Escribe un importe si quieres cobrar un precio especial por Par, Cartón o Caja." Foreground="#52677F" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
                             <StackPanel Grid.Row="1" Margin="0,0,8,0"><TextBlock Text="Precio 1 de esta forma" FontSize="11" FontWeight="SemiBold"/><TextBox x:Name="PresentationPrice1Box" Height="34" Padding="6"/></StackPanel>
                             <StackPanel Grid.Row="1" Grid.Column="1" Margin="4,0"><TextBlock Text="Precio 2 de esta forma" FontSize="11" FontWeight="SemiBold"/><TextBox x:Name="PresentationPrice2Box" Height="34" Padding="6"/></StackPanel>
                             <StackPanel Grid.Row="1" Grid.Column="2" Margin="4,0"><TextBlock Text="Precio 3 de esta forma" FontSize="11" FontWeight="SemiBold"/><TextBox x:Name="PresentationPrice3Box" Height="34" Padding="6"/></StackPanel>

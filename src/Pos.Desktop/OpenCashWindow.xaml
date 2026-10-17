@@ -1,8 +1,9 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.OpenCashWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Abrir caja" Width="460" Height="420" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
+        Title="Abrir caja" Width="460" Height="420" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}">
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="24">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel><TextBlock Text="ABRIR TURNO DE CAJA" Foreground="#173F78" FontSize="23" FontWeight="Bold"/><TextBlock Text="Registra el efectivo inicial por separado. La venta puede recibir pagos en VES y USD." Foreground="#63758B" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="16,12"><StackPanel><TextBlock Text="Abrir turno de caja" Foreground="White" FontSize="22" FontWeight="Bold"/><TextBlock Text="Registra el efectivo inicial por separado. La venta puede recibir pagos en VES y USD." Foreground="#D7E3F2" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel></Border>
         <StackPanel Grid.Row="1" VerticalAlignment="Center">
             <TextBlock Text="Saldo inicial en bolívares (VES)" FontWeight="SemiBold" Margin="0,0,0,5"/>
             <TextBox x:Name="BalanceVesBox" Text="0,00" Height="40" Padding="9" FontSize="18"/>
@@ -12,7 +13,7 @@
         </StackPanel>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Ahora no" Width="95" Height="40" Margin="0,0,10,0" Click="Cancel_Click"/>
-            <Button Content="Abrir caja" Width="120" Height="40" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Open_Click"/>
+            <Button Content="Abrir caja" Width="130" Height="42" Style="{StaticResource PosWindow.PrimaryButton}" Click="Open_Click"/>
         </StackPanel>
     </Grid>
 </Window>

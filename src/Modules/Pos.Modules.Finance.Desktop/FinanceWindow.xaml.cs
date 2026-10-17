@@ -752,17 +752,21 @@ internal sealed class ReceiptQuantityWindow : Window
         Height = Math.Min(Height, workArea.Height - 48);
         MinWidth = Math.Min(MinWidth, Width);
         MinHeight = Math.Min(MinHeight, Height);
-        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = System.Windows.Media.Brushes.White;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(242, 245, 249));
         Language = System.Windows.Markup.XmlLanguage.GetLanguage("es-VE");
         var layout = new Grid { Margin = new Thickness(16) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var description = new TextBlock { Text = "Indica cuánto recibiste ahora de cada artículo. Puedes registrar una recepción parcial.",
-            Foreground = System.Windows.Media.Brushes.DimGray, Margin = new Thickness(2, 0, 2, 10), TextWrapping = TextWrapping.Wrap };
-        Grid.SetRow(description, 0); layout.Children.Add(description);
+        var heading = new Border { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 45, 80)),
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12), Margin = new Thickness(0, 0, 0, 10) };
+        var headingContent = new StackPanel();
+        headingContent.Children.Add(new TextBlock { Text = "Recepción de mercancía", Foreground = System.Windows.Media.Brushes.White, FontSize = 20, FontWeight = FontWeights.Bold });
+        headingContent.Children.Add(new TextBlock { Text = "Indica cuánto recibiste ahora de cada artículo. Puedes registrar una recepción parcial.",
+            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(215, 227, 242)), Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap });
+        heading.Child = headingContent; Grid.SetRow(heading, 0); layout.Children.Add(heading);
         var grid = new DataGrid { ItemsSource = _lines, AutoGenerateColumns = false, CanUserAddRows = false,
-            IsReadOnly = false, HeadersVisibility = DataGridHeadersVisibility.Column, RowHeight = 34, Margin = new Thickness(0, 0, 0, 10) };
+            IsReadOnly = false, HeadersVisibility = DataGridHeadersVisibility.Column, RowHeight = 44, Margin = new Thickness(0, 0, 0, 10) };
         grid.Columns.Add(new DataGridTextColumn { Header = "Código", Binding = new Binding(nameof(ReceiptLineDraft.Sku)), IsReadOnly = true, Width = 110 });
         grid.Columns.Add(new DataGridTextColumn { Header = "Artículo", Binding = new Binding(nameof(ReceiptLineDraft.Name)), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         grid.Columns.Add(new DataGridTextColumn { Header = "Pendiente", Binding = new Binding(nameof(ReceiptLineDraft.Remaining)) { StringFormat = "0.###" }, IsReadOnly = true, Width = 120 });
@@ -772,7 +776,7 @@ internal sealed class ReceiptQuantityWindow : Window
         var cancel = new Button { Content = "Cancelar", Padding = new Thickness(16, 7, 16, 7), Margin = new Thickness(4) };
         cancel.Click += (_, _) => { DialogResult = false; Close(); };
         var save = new Button { Content = "Confirmar recepción", Padding = new Thickness(16, 7, 16, 7), Margin = new Thickness(4),
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(46, 100, 183)), Foreground = System.Windows.Media.Brushes.White };
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(8, 103, 213)), Foreground = System.Windows.Media.Brushes.White };
         save.Click += (_, _) =>
         {
             grid.CommitEdit(DataGridEditingUnit.Cell, true); grid.CommitEdit(DataGridEditingUnit.Row, true);
@@ -793,17 +797,22 @@ internal static class TextEntryWindow
     {
         var dialog = new Window { Title = title, Width = 470, SizeToContent = SizeToContent.Height, MinHeight = 180,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = owner, ResizeMode = ResizeMode.NoResize,
-            Background = System.Windows.Media.Brushes.White };
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(242, 245, 249)) };
         var layout = new Grid { Margin = new Thickness(18) };
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(145) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var heading = new Border { Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 45, 80)),
+            CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 12) };
+        heading.Child = new TextBlock { Text = title, Foreground = System.Windows.Media.Brushes.White, FontSize = 18, FontWeight = FontWeights.Bold };
+        Grid.SetRow(heading, 0); Grid.SetColumnSpan(heading, 2); layout.Children.Add(heading);
         var inputs = new Dictionary<string, TextBox>(StringComparer.Ordinal);
         for (var index = 0; index < fields.Count; index++)
         {
             layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var label = new TextBlock { Text = fields[index].Label, Margin = new Thickness(0, 6, 10, 6), VerticalAlignment = VerticalAlignment.Center };
             var input = new TextBox { Text = fields[index].Value, Margin = new Thickness(0, 3, 0, 3), MinWidth = 240 };
-            Grid.SetRow(label, index); Grid.SetColumn(label, 0); Grid.SetRow(input, index); Grid.SetColumn(input, 1);
+            Grid.SetRow(label, index + 1); Grid.SetColumn(label, 0); Grid.SetRow(input, index + 1); Grid.SetColumn(input, 1);
             layout.Children.Add(label); layout.Children.Add(input); inputs[fields[index].Key] = input;
         }
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -811,10 +820,10 @@ internal static class TextEntryWindow
         var accepted = false;
         var cancel = new Button { Content = "Cancelar", IsCancel = true, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(4) };
         var save = new Button { Content = "Guardar", IsDefault = true, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(4),
-            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(46, 100, 183)), Foreground = System.Windows.Media.Brushes.White };
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(8, 103, 213)), Foreground = System.Windows.Media.Brushes.White };
         save.Click += (_, _) => { accepted = true; dialog.Close(); };
         actions.Children.Add(cancel); actions.Children.Add(save);
-        Grid.SetRow(actions, fields.Count); Grid.SetColumnSpan(actions, 2); layout.Children.Add(actions); dialog.Content = layout;
+        Grid.SetRow(actions, fields.Count + 1); Grid.SetColumnSpan(actions, 2); layout.Children.Add(actions); dialog.Content = layout;
         dialog.Loaded += (_, _) => inputs.Values.FirstOrDefault()?.Focus();
         dialog.ShowDialog();
         return accepted ? inputs.ToDictionary(pair => pair.Key, pair => pair.Value.Text, StringComparer.Ordinal) : null;

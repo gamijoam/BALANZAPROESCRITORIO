@@ -3,17 +3,19 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Pos.Modules.Warehouses.Desktop"
         Title="Almacenes y traslados" Height="720" Width="1120" MinHeight="620" MinWidth="980"
-        WindowStartupLocation="CenterOwner" Background="#EEF3F9" Loaded="Window_Loaded" Language="es-VE">
+        WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}" Loaded="Window_Loaded" Language="es-VE">
     <Window.Resources>
         <local:WarehouseQuantityConverter x:Key="WarehouseQuantityConverter"/>
         <local:WarehouseAmountConverter x:Key="WarehouseAmountConverter"/>
     </Window.Resources>
     <Grid Margin="18">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel Grid.Row="0" Margin="0,0,0,12">
-            <TextBlock Text="ALMACENES Y TRASLADOS" FontSize="24" FontWeight="Bold" Foreground="#18395F"/>
-            <TextBlock Text="Consulta existencias por ubicación y mueve productos con registro de despacho y recepción." Foreground="#58718F" Margin="0,4,0,0"/>
-        </StackPanel>
+        <Border Grid.Row="0" Background="#102D50" CornerRadius="9" Padding="16,12" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Almacenes y traslados" FontSize="22" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="Consulta existencias por ubicación y mueve productos con registro de despacho y recepción." Foreground="#D7E3F2" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
         <TabControl Grid.Row="1" Background="White" Padding="8">
             <TabItem Header="Almacenes y existencias">
                 <Grid Margin="10">
@@ -23,7 +25,7 @@
                         <TextBlock Grid.Column="0" Text="Almacén:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="WarehousePicker" Grid.Column="1" MinWidth="180" DisplayMemberPath="Name" SelectionChanged="WarehousePicker_SelectionChanged"/>
                         <Button Grid.Column="2" Content="Actualizar" Margin="8,0,0,0" Padding="12,6" Click="Refresh_Click"/>
-                        <Button x:Name="AssignTerminalButton" Grid.Column="3" Content="Asignar terminal" Margin="8,0,0,0" Padding="12,6" Background="#2E64B7" Foreground="White" Click="AssignTerminal_Click"/>
+                        <Button x:Name="AssignTerminalButton" Grid.Column="3" Content="Asignar terminal" Margin="8,0,0,0" Padding="12,6" Background="#0867D5" Foreground="White" Click="AssignTerminal_Click"/>
                         <Button x:Name="DeactivateWarehouseButton" Grid.Column="4" Content="Desactivar" Margin="8,0,0,0" Padding="12,6" IsEnabled="False" Click="DeactivateWarehouse_Click"/>
                     </Grid>
                     <GroupBox x:Name="CreateWarehouseGroup" Grid.Row="1" Header="Crear almacén" Margin="0,0,0,8" Padding="8">
@@ -33,7 +35,7 @@
                             <TextBox x:Name="WarehouseCodeBox" Grid.Column="1" MaxLength="20" Height="32" VerticalContentAlignment="Center"/>
                             <TextBlock Grid.Column="2" Text="Nombre" VerticalAlignment="Center" Margin="12,0,8,0"/>
                             <TextBox x:Name="WarehouseNameBox" Grid.Column="3" MaxLength="100" Height="32" VerticalContentAlignment="Center"/>
-                            <Button Grid.Column="4" Content="Crear" Margin="8,0,0,0" Padding="14,6" Background="#2E64B7" Foreground="White" Click="CreateWarehouse_Click"/>
+                            <Button Grid.Column="4" Content="Crear" Margin="8,0,0,0" Padding="14,6" Background="#0867D5" Foreground="White" Click="CreateWarehouse_Click"/>
                         </Grid>
                     </GroupBox>
                     <GroupBox Grid.Row="2" Header="Existencias del almacén seleccionado" Padding="8">
@@ -90,16 +92,16 @@
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,6,0">
                                                     <TextBlock x:Name="SelectedTransferProductName" Text="Busca y selecciona un producto" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                                                AutomationProperties.Name="Nombre del producto seleccionado"/>
-                                                    <TextBlock x:Name="SelectedTransferProductSku" Text="Código: —" FontSize="11" Foreground="#58718F"
+                                                    <TextBlock x:Name="SelectedTransferProductSku" Text="Código: —" FontSize="11" Foreground="#52677F"
                                                                AutomationProperties.Name="Código del producto seleccionado"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0">
-                                                    <TextBlock Text="Disponible" FontSize="10" Foreground="#58718F"/>
+                                                    <TextBlock Text="Disponible" FontSize="10" Foreground="#52677F"/>
                                                     <TextBlock x:Name="SelectedTransferProductSourceStock" Text="—" FontWeight="SemiBold"
                                                                AutomationProperties.Name="Existencia del producto en el almacén de origen"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" Margin="6,0">
-                                                    <TextBlock Text="Cantidad" FontSize="10" Foreground="#58718F" Margin="0,0,0,2"/>
+                                                    <TextBlock Text="Cantidad" FontSize="10" Foreground="#52677F" Margin="0,0,0,2"/>
                                                     <TextBox x:Name="TransferQuantityBox" Text="1" Height="30" Padding="5" VerticalContentAlignment="Center"
                                                              KeyDown="TransferQuantityBox_KeyDown" AutomationProperties.Name="Cantidad a trasladar"/>
                                                 </StackPanel>
@@ -121,7 +123,7 @@
                                             </DataGrid.Columns>
                                         </DataGrid>
                                         <Button x:Name="CreateTransferButton" Grid.Row="1" Content="Crear traslado en borrador" HorizontalAlignment="Right" MinWidth="205" Margin="0,8,0,0" Padding="14,8"
-                                                Background="#2E64B7" Foreground="White" Click="CreateTransfer_Click" AutomationProperties.Name="Crear el traslado en estado borrador"/>
+                                                Background="#0867D5" Foreground="White" Click="CreateTransfer_Click" AutomationProperties.Name="Crear el traslado en estado borrador"/>
                                     </Grid>
                                 </GroupBox>
                             </Grid>
@@ -131,7 +133,7 @@
                         <Grid Margin="10">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                             <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
-                                <TextBlock Text="Selecciona un traslado para revisar sus productos y cantidades." VerticalAlignment="Center" Foreground="#58718F" DockPanel.Dock="Left"/>
+                                <TextBlock Text="Selecciona un traslado para revisar sus productos y cantidades." VerticalAlignment="Center" Foreground="#52677F" DockPanel.Dock="Left"/>
                                 <Button x:Name="RefreshTransfersButton" Content="Actualizar" Margin="8,0,0,0" Padding="12,6" Click="RefreshTransfers_Click"
                                         AutomationProperties.Name="Actualizar traslados recientes"/>
                                 <Button x:Name="DispatchTransferButton" Content="Despachar" Margin="8,0,0,0" Padding="12,6" IsEnabled="False" Click="DispatchTransfer_Click"

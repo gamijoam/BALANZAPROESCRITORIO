@@ -1,15 +1,17 @@
 <Window x:Class="Pos.Desktop.OperatorPermissionsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Permisos del operador" Width="820" Height="650" MinWidth="700" MinHeight="520" WindowStartupLocation="CenterOwner" Background="#EEF2F7">
+        Title="Permisos del operador" Width="820" Height="650" MinWidth="700" MinHeight="520" WindowStartupLocation="CenterOwner" Background="{StaticResource PosWindow.Background}">
     <DockPanel Margin="18">
-        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <TextBlock Text="PERMISOS DEL OPERADOR" FontSize="22" FontWeight="Bold" Foreground="#173F78"/>
-            <TextBlock x:Name="OperatorLabel" Margin="0,4,0,0" Foreground="#52677F"/>
-            <TextBlock Text="Heredar usa los permisos del rol. Para las acciones protegidas se puede pedir autorización de administrador." Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#52677F"/>
-        </StackPanel>
+        <Border DockPanel.Dock="Top" Background="#102D50" CornerRadius="9" Padding="16,12" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Permisos del operador" FontSize="21" FontWeight="Bold" Foreground="White"/>
+                <TextBlock x:Name="OperatorLabel" Margin="0,4,0,0" Foreground="#D7E3F2"/>
+                <TextBlock Text="Heredar usa los permisos del rol. Para las acciones protegidas se puede pedir autorización de administrador." Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#D7E3F2"/>
+            </StackPanel>
+        </Border>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
             <TextBlock x:Name="StatusLabel" VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#52677F"/>
             <Button Content="Cancelar" Width="100" Height="36" Margin="0,0,8,0" Click="Cancel_Click"/>
-            <Button Content="Guardar permisos" Width="150" Height="36" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Save_Click"/>
+            <Button Content="Guardar permisos" Width="170" Height="42" Background="#0867D5" Foreground="White" FontWeight="Bold" Click="Save_Click"/>
         </StackPanel>
         <DataGrid x:Name="PermissionGrid" AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" RowHeaderWidth="0" SelectionMode="Single" SelectionUnit="FullRow" HeadersVisibility="Column">
             <DataGrid.Columns>

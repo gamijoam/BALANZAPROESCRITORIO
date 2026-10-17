@@ -35,9 +35,9 @@
                 <StackPanel HorizontalAlignment="Center" Margin="0,0,0,14">
                     <Image Source="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro-logo.png" Width="64" Height="64" Stretch="Uniform"
                            HorizontalAlignment="Center" AutomationProperties.Name="Símbolo de BalanzaPro"/>
-                    <TextBlock Text="BalanzaPro" Foreground="#173F78" FontSize="30" FontWeight="Bold"
+                    <TextBlock Text="BalanzaPro" Foreground="#132D4F" FontSize="30" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,7,0,0"/>
-                    <TextBlock Text="PUNTO DE VENTA" Foreground="#63758B" FontSize="12" FontWeight="Bold"
+                    <TextBlock Text="PUNTO DE VENTA" Foreground="#52677F" FontSize="12" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,2,0,0"/>
                 </StackPanel>
 
@@ -66,7 +66,7 @@
                 </StackPanel>
 
                 <Button x:Name="LoginButton" Grid.Row="2" Content="Iniciar sesión" IsDefault="True" Height="48"
-                        Margin="0,12,0,0" Background="#2858A2" Foreground="White" FontSize="16"
+                        Margin="0,12,0,0" Background="#0867D5" Foreground="White" FontSize="16"
                         FontWeight="Bold" BorderThickness="0" Click="Login_Click"
                         AutomationProperties.Name="Iniciar sesión" AutomationProperties.AutomationId="LoginSubmit"/>
                 <TextBlock Grid.Row="3" Text="Acceso protegido a tu negocio" Foreground="#71839A" FontSize="12"

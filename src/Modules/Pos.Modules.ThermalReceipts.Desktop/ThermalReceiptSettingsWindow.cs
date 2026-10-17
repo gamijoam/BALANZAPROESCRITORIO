@@ -32,7 +32,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
         _context = context;
         _canConfigure = context.GrantedPermissions.Contains("ThermalReceipts.Configure");
         Title = "Configurar ticket térmico"; Width = 1000; Height = 780; MinWidth = 850; MinHeight = 650;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = new SolidColorBrush(Color.FromRgb(238, 242, 247));
+        WindowStartupLocation = WindowStartupLocation.CenterOwner; Background = new SolidColorBrush(Color.FromRgb(242, 245, 249));
         Content = BuildLayout();
         Loaded += async (_, _) => await LoadTemplateAsync();
     }
@@ -40,10 +40,12 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     private UIElement BuildLayout()
     {
         var root = new DockPanel { Margin = new Thickness(16) };
-        var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
-        heading.Children.Add(new TextBlock { Text = "TICKET TÉRMICO", FontSize = 24, FontWeight = FontWeights.Bold, Foreground = Brush("#173F78") });
-        heading.Children.Add(new TextBlock { Text = "Diseño compartido entre terminales; cada caja usa su impresora local. Comprobante comercial no fiscal.",
-            Foreground = Brush("#52677F"), Margin = new Thickness(0, 4, 0, 0) });
+        var heading = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(16, 12), Margin = new Thickness(0, 0, 0, 12) };
+        var headingContent = new StackPanel();
+        headingContent.Children.Add(new TextBlock { Text = "Ticket térmico", FontSize = 22, FontWeight = FontWeights.Bold, Foreground = Brushes.White });
+        headingContent.Children.Add(new TextBlock { Text = "Diseño compartido entre terminales; cada caja usa su impresora local. Comprobante comercial no fiscal.",
+            Foreground = Brush("#D7E3F2"), Margin = new Thickness(0, 4, 0, 0) });
+        heading.Child = headingContent;
         DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -62,7 +64,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
         var stack = new StackPanel();
         var printerGroup = Group("Impresora de esta terminal");
         printerGroup.Children.Add(Row(("Impresora instalada", _printer), ("Copias", _copies)));
-        printerGroup.Children.Add(new TextBlock { Text = "La impresora y las copias se guardan solo en esta computadora.", Foreground = Brush("#63758B"), Margin = new Thickness(3) });
+        printerGroup.Children.Add(new TextBlock { Text = "La impresora y las copias se guardan solo en esta computadora.", Foreground = Brush("#52677F"), Margin = new Thickness(3) });
         stack.Children.Add(printerGroup);
 
         var layoutGroup = Group("Diseño compartido del comprobante");
@@ -152,12 +154,20 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     private Task PreviewAsync()
     {
         var window = new Window { Title = "Vista previa del ticket", Width = 460, Height = 680, Owner = this,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Brushes.White };
-        window.Content = new FlowDocumentScrollViewer
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Brush("#F2F5F9") };
+        var layout = new Grid { Margin = new Thickness(16) };
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        var header = new Border { Background = Brush("#102D50"), CornerRadius = new CornerRadius(9), Padding = new Thickness(14, 10), Margin = new Thickness(0, 0, 0, 10) };
+        header.Child = new TextBlock { Text = "Vista previa del ticket", Foreground = Brushes.White, FontSize = 19, FontWeight = FontWeights.Bold };
+        Grid.SetRow(header, 0); layout.Children.Add(header);
+        var preview = new Border { Background = Brushes.White, BorderBrush = Brush("#D5DFEB"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(10) };
+        preview.Child = new FlowDocumentScrollViewer
         {
             Document = ThermalReceiptDocumentBuilder.Build(SampleReceipt(), BuildTemplate()),
-            IsToolBarVisible = false, Margin = new Thickness(12), VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            IsToolBarVisible = false, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
+        Grid.SetRow(preview, 1); layout.Children.Add(preview); window.Content = layout;
         window.ShowDialog();
         return Task.CompletedTask;
     }
@@ -237,7 +247,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     private static StackPanel Group(string title)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
-        panel.Children.Add(new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeights.Bold, Foreground = Brush("#173F78"), Margin = new Thickness(0, 8, 0, 6) });
+        panel.Children.Add(new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeights.Bold, Foreground = Brush("#132D4F"), Margin = new Thickness(0, 8, 0, 6) });
         return panel;
     }
     private static TextBlock SectionLabel(string text) => new() { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(3, 8, 3, 2) };
@@ -253,8 +263,9 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     }
     private static Button ActionButton(string text, RoutedEventHandler click, bool primary = false)
     {
-        var button = new Button { Content = text, Height = 36, Padding = new Thickness(14, 0, 14, 0), Margin = new Thickness(5),
-            Background = primary ? Brush("#245CA6") : Brush("#E5EAF0"), Foreground = primary ? Brushes.White : Brushes.Black };
+        var button = new Button { Content = text, Height = 42, Padding = new Thickness(14, 0, 14, 0), Margin = new Thickness(5),
+            Background = primary ? Brush("#0867D5") : Brush("#FFFFFF"), Foreground = primary ? Brushes.White : Brush("#132D4F"),
+            BorderBrush = primary ? Brush("#0867D5") : Brush("#D5DFEB") };
         button.Click += click; return button;
     }
     private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));

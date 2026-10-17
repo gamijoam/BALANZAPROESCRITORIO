@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Agregar tipo de unidad" Width="440" Height="300" MinWidth="400" MinHeight="280"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#F2F5F9" FontFamily="Segoe UI">
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="{StaticResource PosWindow.Background}" FontFamily="Segoe UI">
     <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -19,7 +19,7 @@
         <Expander Grid.Row="2" Header="¿Se puede vender por fracción?" Margin="0,0,0,8">
             <StackPanel Margin="0,6,0,0">
                 <CheckBox x:Name="FractionalBox" Content="Permitir cantidades decimales" IsChecked="False"/>
-                <TextBlock Text="Actívalo para peso o medidas, como 0,5 kg." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/>
+                <TextBlock Text="Actívalo para peso o medidas, como 0,5 kg." Foreground="#52677F" FontSize="11" Margin="0,3,0,0"/>
             </StackPanel>
         </Expander>
         <TextBlock x:Name="ErrorLabel" Grid.Row="3" Foreground="#A33232" TextWrapping="Wrap" VerticalAlignment="Top"/>
