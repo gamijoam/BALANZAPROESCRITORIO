@@ -269,6 +269,11 @@ public partial class ManagementWindow : Window
             await LoadLicenseStatusAsync();
             LicenseStatus.Text = "Licencia activada correctamente.";
         }
+        catch (PosApiException exception) when (exception.Code == "license_document_invalid" &&
+                                                !string.IsNullOrWhiteSpace(exception.Detail))
+        {
+            LicenseStatus.Text = $"No se pudo instalar la licencia: {exception.Detail}";
+        }
         catch (Exception exception)
         {
             LicenseStatus.Text = PosUserMessage.ForException(exception);
