@@ -261,7 +261,7 @@
                             BorderThickness="1.5" CornerRadius="8" Padding="10,4"/>
                     <Grid Grid.Column="0" Margin="12,0,8,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Grid Grid.Column="0" Width="34" Height="30" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+                        <Grid Grid.Column="0" Width="34" Height="30" VerticalAlignment="Center">
                             <Rectangle Width="3" Height="23" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="1,0,0,0"/>
                             <Rectangle Width="2" Height="27" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="6,0,0,0"/>
                             <Rectangle Width="4" Height="22" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="11,0,0,0"/>
@@ -276,7 +276,7 @@
                                      AutomationProperties.Name="Escanear o buscar un producto"/>
                             <TextBlock Text="Escanea un código o busca un producto" Foreground="#718096"
                                        FontSize="18" VerticalAlignment="Center" Margin="10,0,0,0"
-                                       IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                                       IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -327,10 +327,8 @@
                                                         CornerRadius="7" Width="58" Height="58" ClipToBounds="True">
                                                     <Grid>
                                                         <TextBlock Text="IMG" Foreground="#718096" FontSize="11" FontWeight="Bold"
-                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                   AutomationProperties.AccessibilityView="Raw"/>
-                                                        <Image Stretch="Uniform" Margin="2" Tag="{Binding Product.Id}"
-                                                               AutomationProperties.AccessibilityView="Raw"/>
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        <Image Stretch="Uniform" Margin="2" Tag="{Binding Product.Id}"/>
                                                     </Grid>
                                                 </Border>
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -416,7 +414,7 @@
                         </DataGrid>
                         <TextBlock Text="Escanea o busca un producto para comenzar" Foreground="{StaticResource Pos.TextMuted}"
                                    FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                                   IsHitTestVisible="False">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -530,8 +528,7 @@
                         <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="▤" Foreground="{StaticResource Pos.Primary}" FontSize="24" FontWeight="Bold" Margin="0,0,12,0"
-                                   AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="▤" Foreground="{StaticResource Pos.Primary}" FontSize="24" FontWeight="Bold" Margin="0,0,12,0"/>
                         <TextBlock Text="Resumen de venta" Foreground="{StaticResource Pos.Navy}" FontSize="23" FontWeight="Bold"/>
                     </StackPanel>
                     <TextBlock Grid.Row="1" Text="{Binding CartLines.Count, StringFormat={}{0} líneas}"
@@ -577,7 +574,7 @@
                             Command="{Binding ChargeCommand}" IsEnabled="{Binding CanCharge}" MinHeight="78" Margin="0,0,0,10"
                             AutomationProperties.Name="Cobrar venta, tecla F4" AutomationProperties.AutomationId="ChargeSaleWide">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="▣" FontSize="22" Margin="0,0,12,0" AutomationProperties.AccessibilityView="Raw"/>
+                            <TextBlock Text="▣" FontSize="22" Margin="0,0,12,0"/>
                             <StackPanel>
                                 <TextBlock Text="Cobrar venta · F4" FontSize="19" FontWeight="Bold"/>
                                 <TextBlock Text="Elegir forma de pago" FontSize="13"/>
