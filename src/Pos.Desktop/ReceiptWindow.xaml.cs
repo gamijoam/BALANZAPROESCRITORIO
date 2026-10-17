@@ -46,7 +46,8 @@ public partial class ReceiptWindow : Window
             var taxDetail = line.TaxTreatment == "NotCaptured"
                 ? "\nImpuesto: no registrado en esta venta antigua"
                 : $"\n{line.TaxTreatmentLabel}: {receipt.Currency} {line.TaxAmount:N2}";
-            row.Cells.Add(new TableCell(new Paragraph(new Run($"{line.Description}\n{line.Sku} · {tierLabel}{sourcePrice}{taxDetail}"))));
+            var presentation = string.IsNullOrWhiteSpace(line.PresentationName) ? string.Empty : $" · {line.PresentationName}";
+            row.Cells.Add(new TableCell(new Paragraph(new Run($"{line.Description}{presentation}\n{line.Sku} · {tierLabel}{sourcePrice}{taxDetail}"))));
             row.Cells.Add(new TableCell(new Paragraph(new Run(PosNumberFormat.FormatQuantity(line.Quantity)))));
             row.Cells.Add(new TableCell(new Paragraph(new Run(PosNumberFormat.FormatAmount(line.Total))))); group.Rows.Add(row);
         }

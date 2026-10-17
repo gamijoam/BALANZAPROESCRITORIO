@@ -468,21 +468,37 @@ public sealed class PosViewModel : INotifyPropertyChanged
             var needsReview = false;
             foreach (var saved in workspace.Lines)
             {
+                var currentSaleUnit = new ProductSaleUnitInfo(saved.PresentationId, saved.CurrentPresentationUnitId ?? saved.PresentationUnitId ?? Guid.Empty,
+                    saved.CurrentPresentationName, saved.CurrentPresentationUnitName, saved.CurrentPresentationUnitAbbreviation,
+                    saved.CurrentConversionFactor, saved.CurrentSaleUnitPrice1 > 0m ? saved.CurrentSaleUnitPrice1 : saved.CurrentPrice1,
+                    saved.CurrentSaleUnitPrice2 ?? saved.CurrentPrice2, saved.CurrentSaleUnitPrice3 ?? saved.CurrentPrice3,
+                    null, saved.CurrentSaleUnitAllowsFractionalQuantities) { BaseUnitAbbreviation = saved.BaseUnitAbbreviation };
                 var product = new ProductInfo(saved.ProductId, saved.CurrentSku ?? saved.Sku, saved.CurrentName ?? saved.Name,
                     saved.CurrentPrice1, saved.CurrentCurrency, false, saved.CurrentStock, saved.CurrentPrice2, saved.CurrentPrice3,
-                    saved.CurrentTaxTreatment, saved.ProductActive);
-                var line = new CartLineViewModel(product, saved.Quantity, Currency, _usdToVesRate);
+                    saved.CurrentTaxTreatment, saved.ProductActive)
+                {
+                    BaseUnitId = saved.BaseUnitId ?? saved.CurrentPresentationUnitId ?? saved.PresentationUnitId ?? Guid.Empty,
+                    BaseUnitName = saved.BaseUnitName,
+                    BaseUnitAbbreviation = saved.BaseUnitAbbreviation,
+                    BaseUnitAllowsFractional = saved.BaseUnitAllowsFractionalQuantities,
+                    SaleUnits = [currentSaleUnit]
+                };
+                var line = new CartLineViewModel(product, saved.Quantity, Currency, _usdToVesRate, currentSaleUnit);
                 var tierConfigured = saved.PriceTier switch
                 {
                     "Price1" => true,
-                    "Price2" => product.Price2.HasValue,
-                    "Price3" => product.Price3.HasValue,
+                    "Price2" => currentSaleUnit.Price2.HasValue,
+                    "Price3" => currentSaleUnit.Price3.HasValue,
                     _ => false
                 };
                 line.RestoreEdits(saved.Quantity, saved.PriceTier, saved.UnitPriceOverride, saved.PriceOverrideReason,
                     saved.SavedUnitPrice, tierConfigured);
                 if (!product.Active) line.ResumeIssue = "Producto inactivo; retíralo o solicita su reactivación.";
-                else if (product.StockQuantity is { } stock && saved.Quantity > stock)
+                else if (!saved.PresentationActive)
+                    line.ResumeIssue = "La presentación guardada ya no está activa; retírala o selecciona otra.";
+                else if (!product.BaseUnitAllowsFractional && decimal.Round(saved.Quantity * saved.CurrentConversionFactor, 0) != saved.Quantity * saved.CurrentConversionFactor)
+                    line.ResumeIssue = "La presentación actual consumiría una fracción no permitida de la unidad base.";
+                else if (product.StockQuantity is { } stock && saved.Quantity * saved.CurrentConversionFactor > stock)
                     line.ResumeIssue = $"Existencia actual {stock:0.###}; reduce la cantidad o quita el artículo.";
                 else if (!product.IsTaxClassified) line.ResumeIssue = "El impuesto del producto está pendiente de clasificar.";
                 else if (!tierConfigured) line.ResumeIssue = "El nivel de precio guardado ya no está configurado.";
@@ -490,6 +506,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
                     line.ResumeIssue = $"Falta una tasa vigente para convertir de {saved.CurrentCurrency} a {Currency}.";
                 CartLines.Add(line);
                 if (line.UnitPrice != saved.SavedUnitPrice || line.TaxRate != saved.SavedTaxRate ||
+                    saved.ConversionFactor != saved.CurrentConversionFactor ||
                     line.LineTotal != saved.SavedLineTotal || saved.SavedCurrency != Currency) needsReview = true;
             }
             CurrentProduct = CartLines.LastOrDefault()?.Product;
@@ -577,7 +594,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
                     _pendingWorkspaceSaveRequest = new CartWorkspaceSaveRequest(previous?.Id, previous?.Version ?? 0,
                         Guid.NewGuid().ToString("N"), SelectedCustomer?.Id,
                         CartLines.Select(line => new CartWorkspaceLineInput(line.Product.Id, line.Quantity, line.PriceTier,
-                            line.UnitPriceOverride, line.PriceOverrideReason)).ToArray());
+                            line.UnitPriceOverride, line.PriceOverrideReason, line.SaleUnit.PresentationId)).ToArray());
                     _pendingWorkspaceSaveRevision = _workspaceRevision;
                 }
                 var request = _pendingWorkspaceSaveRequest;
@@ -662,12 +679,24 @@ public sealed class PosViewModel : INotifyPropertyChanged
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, string currency, decimal initialStock, CancellationToken cancellationToken = default)
         => _api.CreateProductAsync(sku, name, unitPrice, currency, initialStock, cancellationToken);
     public Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
-        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
-        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken, minimumStock);
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m, Guid? baseUnitId = null)
+        => _api.CreateProductAsync(sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, cancellationToken, minimumStock, baseUnitId);
+    public Task<ProductDetailsInfo> GetProductDetailsAsync(Guid productId, CancellationToken cancellationToken = default)
+        => _api.GetProductDetailsAsync(productId, cancellationToken);
+    public Task SaveProductDetailsAsync(Guid productId, string sku, string name, decimal minimumStock, Guid baseUnitId, CancellationToken cancellationToken = default)
+        => _api.SaveProductDetailsAsync(productId, sku, name, minimumStock, baseUnitId, cancellationToken);
+    public Task<IReadOnlyList<ProductUnitInfo>> GetProductUnitsAsync(CancellationToken cancellationToken = default)
+        => _api.GetProductUnitsAsync(cancellationToken);
+    public Task<ProductUnitInfo> CreateProductUnitAsync(string name, string abbreviation, bool allowsFractionalQuantities, CancellationToken cancellationToken = default)
+        => _api.CreateProductUnitAsync(name, abbreviation, allowsFractionalQuantities, cancellationToken);
+    public Task<ProductPresentationInfo> SaveProductPresentationAsync(Guid productId, ProductPresentationInput presentation, CancellationToken cancellationToken = default)
+        => _api.SaveProductPresentationAsync(productId, presentation, cancellationToken);
+    public Task DeactivateProductPresentationAsync(Guid productId, Guid presentationId, CancellationToken cancellationToken = default)
+        => _api.DeactivateProductPresentationAsync(productId, presentationId, cancellationToken);
     public Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
         => _api.SetProductTaxTreatmentAsync(productId, taxTreatment, cancellationToken);
-    public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
-        => _api.UpdateProductAsync(productId, sku, name, cancellationToken, minimumStock);
+    public Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null, Guid? baseUnitId = null)
+        => _api.UpdateProductAsync(productId, sku, name, cancellationToken, minimumStock, baseUnitId);
     public Task SetProductActiveAsync(Guid productId, bool active, CancellationToken cancellationToken = default)
         => _api.SetProductActiveAsync(productId, active, cancellationToken);
     public Task UploadProductImageAsync(Guid productId, string imagePath, CancellationToken cancellationToken = default)
@@ -783,11 +812,15 @@ public sealed class PosViewModel : INotifyPropertyChanged
             SearchResults.Clear();
             foreach (var product in results) SearchResults.Add(product);
             var exact = results.FirstOrDefault(x => string.Equals(x.Sku, term, StringComparison.OrdinalIgnoreCase));
-            if (exact is not null)
+            var barcodeMatch = results.FirstOrDefault(x => x.SuggestedPresentationId.HasValue);
+            if (barcodeMatch is not null)
             {
-                AddProduct(exact);
+                var saleUnit = barcodeMatch.SaleUnits.FirstOrDefault(x => x.PresentationId == barcodeMatch.SuggestedPresentationId);
+                AddProduct(barcodeMatch, saleUnit);
             }
-            else StatusMessage = results.Count == 0 ? "No encontramos ese producto." : $"{results.Count} productos. Selecciona uno para agregarlo.";
+            else if (exact is not null && exact.SaleUnits.Count <= 1)
+                AddProduct(exact, exact.SaleUnits.FirstOrDefault());
+            else StatusMessage = results.Count == 0 ? "No encontramos ese producto." : $"{results.Count} productos. Selecciona el producto y su presentación.";
         }
         catch (PosApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
@@ -798,11 +831,27 @@ public sealed class PosViewModel : INotifyPropertyChanged
         finally { IsBusy = false; }
     }
 
-    public bool AddProduct(ProductInfo product)
+    public bool AddProduct(ProductInfo product, ProductSaleUnitInfo? saleUnit = null)
     {
         if (!CanEditCart) { StatusMessage = "Hay una venta pendiente de confirmar. Reintenta antes de cambiar el carrito."; return false; }
         if (!product.IsTaxClassified) { StatusMessage = $"{product.Name} está pendiente de clasificar su impuesto. No se puede vender hasta asignarle una regla."; return false; }
         if (product.StockQuantity is <= 0m) { StatusMessage = $"{product.Name} está agotado y no se puede agregar."; return false; }
+        saleUnit ??= product.SaleUnits.FirstOrDefault(x => x.PresentationId == product.SuggestedPresentationId)
+            ?? product.SaleUnits.FirstOrDefault(x => x.PresentationId is null)
+            ?? new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
+                product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
+            { BaseUnitAbbreviation = product.BaseUnitAbbreviation };
+        if (!product.BaseUnitAllowsFractional && decimal.Round(saleUnit.ConversionFactor, 0) != saleUnit.ConversionFactor)
+        {
+            StatusMessage = "Esta presentación consumiría una fracción de la unidad base, que no está permitida.";
+            return false;
+        }
+        var currentBaseQuantity = CartLines.Where(x => x.Product.Id == product.Id).Sum(x => x.InventoryQuantity);
+        if (product.StockQuantity.HasValue && currentBaseQuantity + saleUnit.ConversionFactor > product.StockQuantity.Value)
+        {
+            StatusMessage = $"No hay existencia suficiente para agregar {saleUnit.Label} de {product.Name}.";
+            return false;
+        }
         if (product.Currency is not ("USD" or "VES"))
         {
             StatusMessage = "La moneda del producto no está soportada.";
@@ -814,8 +863,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
             StatusMessage = "Registra una tasa USD/VES vigente antes de agregar productos en monedas distintas.";
             return false;
         }
-        var line = CartLines.FirstOrDefault(x => x.Product.Id == product.Id);
-        if (line is null) CartLines.Add(new CartLineViewModel(product, 1m, targetCurrency, _usdToVesRate));
+        var line = CartLines.FirstOrDefault(x => x.Product.Id == product.Id && x.SaleUnit.PresentationId == saleUnit.PresentationId);
+        if (line is null) CartLines.Add(new CartLineViewModel(product, 1m, targetCurrency, _usdToVesRate, saleUnit));
         else line.Quantity++;
         CurrentProduct = product;
         SearchText = string.Empty;
@@ -823,8 +872,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CurrentUnitPrice)); OnPropertyChanged(nameof(CurrentPriceLabel)); OnPropertyChanged(nameof(ReferenceCurrentPriceLabel));
         RefreshTotals();
         StatusMessage = product.Currency == targetCurrency
-            ? $"{product.Name} agregado al carrito."
-            : $"{product.Name} convertido de {product.Currency} a {targetCurrency} con la tasa vigente.";
+            ? $"{product.Name} · {saleUnit.Label} agregado al carrito."
+            : $"{product.Name} · {saleUnit.Label} convertido de {product.Currency} a {targetCurrency} con la tasa vigente.";
         return true;
     }
 
@@ -846,7 +895,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
         if (!CanEditCart) { StatusMessage = "Confirma el resultado de la venta pendiente antes de modificarla."; return false; }
         if (line is null || !CartLines.Contains(line)) return false;
         if (priceTier is not ("Price1" or "Price2" or "Price3") ||
-            priceTier == "Price2" && line.Product.Price2 is null || priceTier == "Price3" && line.Product.Price3 is null)
+            priceTier == "Price2" && line.SaleUnit.Price2 is null || priceTier == "Price3" && line.SaleUnit.Price3 is null)
         {
             StatusMessage = "Ese nivel de precio no está configurado para el producto.";
             return false;
@@ -854,6 +903,23 @@ public sealed class PosViewModel : INotifyPropertyChanged
         if (quantity <= 0m || decimal.Round(quantity, 3) != quantity)
         {
             StatusMessage = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
+            return false;
+        }
+        if (!line.AllowsFractionalQuantity && decimal.Round(quantity, 0) != quantity)
+        {
+            StatusMessage = $"La presentación {line.SaleUnit.Label} solo permite cantidades enteras.";
+            return false;
+        }
+        var requestedInventoryQuantity = quantity * line.SaleUnit.ConversionFactor;
+        if (!line.Product.BaseUnitAllowsFractional && decimal.Round(requestedInventoryQuantity, 0) != requestedInventoryQuantity)
+        {
+            StatusMessage = "La cantidad elegida produciría una fracción de la unidad base, que no está permitida.";
+            return false;
+        }
+        var otherLinesInventoryQuantity = CartLines.Where(x => x.Product.Id == line.Product.Id && !ReferenceEquals(x, line)).Sum(x => x.InventoryQuantity);
+        if (line.Product.StockQuantity is { } available && otherLinesInventoryQuantity + requestedInventoryQuantity > available)
+        {
+            StatusMessage = "La cantidad supera la existencia disponible.";
             return false;
         }
         var reason = string.IsNullOrWhiteSpace(priceOverrideReason) ? null : priceOverrideReason.Trim();
@@ -905,14 +971,16 @@ public sealed class PosViewModel : INotifyPropertyChanged
             if (payments.Any(x => IsCreditPayment(x.Method)) && SelectedCustomer is null)
                 throw new ArgumentException("Selecciona un cliente antes de cobrar una parte a crédito.", nameof(payments));
             _pendingIdempotencyKey = Guid.NewGuid().ToString("N");
-            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason, x.PriceTier)).ToArray();
+            _pendingLines = CartLines.Select(x => new SaleLineInput(x.Product.Id, x.Quantity, x.UnitPriceOverride, x.PriceOverrideReason,
+                x.PriceTier, x.SaleUnit.PresentationId)).ToArray();
             _pendingPayments = payments.ToArray();
             _pendingCustomerId = SelectedCustomer?.Id;
             _pendingReceivableDueDate = payments.Any(x => IsCreditPayment(x.Method))
                 ? receivableDueDate ?? DateOnly.FromDateTime(DateTime.Today.AddDays(30))
                 : null;
             _pendingReceiptLines = CartLines.Select(x => new ReceiptLine(x.Product.Sku, x.Product.Name, x.Quantity, x.UnitPrice, x.LineTotal,
-                x.Product.UnitPrice, x.Product.Currency, x.AppliedExchangeRate, x.PriceTier, x.Product.TaxTreatment, x.TaxRate, x.TaxAmount)).ToArray();
+                x.CatalogUnitPrice, x.Product.Currency, x.AppliedExchangeRate, x.PriceTier, x.Product.TaxTreatment, x.TaxRate, x.TaxAmount)
+            { PresentationName = x.SaleUnit.Label, ConversionFactor = x.SaleUnit.ConversionFactor, InventoryQuantity = x.InventoryQuantity }).ToArray();
             _pendingTotal = Total;
             _pendingRoundingAdjustment = settlement.RoundingAdjustment;
             _pendingCurrency = Currency;
@@ -1069,7 +1137,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-public sealed class CartLineViewModel(ProductInfo product, decimal quantity, string settlementCurrency = "VES", ExchangeRateInfo? usdToVesRate = null) : INotifyPropertyChanged
+public sealed class CartLineViewModel(ProductInfo product, decimal quantity, string settlementCurrency = "VES", ExchangeRateInfo? usdToVesRate = null,
+    ProductSaleUnitInfo? saleUnit = null) : INotifyPropertyChanged
 {
     private decimal _quantity = quantity;
     private string _settlementCurrency = settlementCurrency;
@@ -1081,6 +1150,15 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
     private string? _resumeIssue;
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProductInfo Product { get; } = product;
+    public ProductSaleUnitInfo SaleUnit { get; } = saleUnit ?? product.SaleUnits.FirstOrDefault(x => x.PresentationId is null)
+        ?? new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
+            product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
+        { BaseUnitAbbreviation = product.BaseUnitAbbreviation };
+    public string DisplayName => $"{Product.Name} · {SaleUnit.Label}";
+    public string SaleUnitLabel => SaleUnit.Label;
+    public string QuantityLabel => SaleUnit.UnitAbbreviation;
+    public decimal InventoryQuantity => Quantity * SaleUnit.ConversionFactor;
+    public bool AllowsFractionalQuantity => SaleUnit.AllowsFractionalQuantities;
     public string SettlementCurrency => _settlementCurrency;
     public string PriceTier => _priceTier;
     public string PriceTierLabel => _priceTier switch { "Price2" => "Precio 2", "Price3" => "Precio 3", _ => "Precio 1" };
@@ -1089,15 +1167,15 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         get
         {
             var tiers = new List<string> { "Price1" };
-            if (Product.Price2.HasValue) tiers.Add("Price2");
-            if (Product.Price3.HasValue) tiers.Add("Price3");
+            if (SaleUnit.Price2.HasValue) tiers.Add("Price2");
+            if (SaleUnit.Price3.HasValue) tiers.Add("Price3");
             return tiers;
         }
     }
     public decimal CatalogUnitPrice => _savedPriceFallback ?? CatalogUnitPriceFor(PriceTier);
     public decimal CatalogUnitPriceFor(string priceTier)
     {
-        var source = priceTier switch { "Price1" => Product.UnitPrice, "Price2" => Product.Price2, "Price3" => Product.Price3, _ => null };
+        var source = priceTier switch { "Price1" => SaleUnit.Price1, "Price2" => SaleUnit.Price2, "Price3" => SaleUnit.Price3, _ => null };
         if (source is null) throw new ArgumentException("El nivel de precio no está configurado.", nameof(priceTier));
         return PosViewModel.ConvertPrice(source.Value, Product.Currency, SettlementCurrency, _usdToVesRate?.Rate);
     }

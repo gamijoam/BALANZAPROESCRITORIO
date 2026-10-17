@@ -239,7 +239,7 @@
                       ToolTip="F8 va a la cantidad; flechas arriba/abajo cambian de artículo; Supr elimina la fila.">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Código" Binding="{Binding Product.Sku}" Width="105" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Descripción" Binding="{Binding Product.Name}" Width="*" IsReadOnly="True">
+                    <DataGridTextColumn Header="Descripción" Binding="{Binding DisplayName}" Width="*" IsReadOnly="True">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextWrapping" Value="Wrap"/>
@@ -251,7 +251,8 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="115" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Cantidad" Width="75">
+                    <DataGridTextColumn Header="Presentación" Binding="{Binding SaleUnitLabel}" Width="110" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Cantidad" Width="75" IsReadOnly="True">
                         <DataGridTextColumn.Binding>
                             <Binding Path="Quantity" UpdateSourceTrigger="LostFocus" StringFormat="{}{0:0.###}" ValidatesOnExceptions="True" NotifyOnValidationError="True">
                                 <Binding.ValidationRules>
@@ -266,7 +267,7 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="Precio" MinWidth="50" Height="30" Padding="3,2" Margin="0,0,3,0" Background="#2858A2" Foreground="White"
+                                    <Button Content="Editar" MinWidth="50" Height="30" Padding="3,2" Margin="0,0,3,0" Background="#2858A2" Foreground="White"
                                             IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                             Click="EditCartLine_Click" AutomationProperties.Name="Elegir Precio 1, Precio 2 o Precio 3 para esta línea"
                                             ToolTip="Cambiar el nivel de precio de este artículo."/>

@@ -1,0 +1,30 @@
+<Window Language="es-VE" x:Class="Pos.Desktop.ProductUnitCreateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Crear unidad" Width="440" Height="330" MinWidth="400" MinHeight="300"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#EEF2F7">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,16">
+            <TextBlock Text="NUEVA UNIDAD" FontSize="20" FontWeight="Bold" Foreground="#173F78"/>
+            <TextBlock Text="Crea una unidad reutilizable para productos y presentaciones." Foreground="#52677F" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+            <TextBlock Text="Nombre" FontWeight="SemiBold"/>
+            <TextBox x:Name="NameBox" Height="36" Padding="8" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="2" Margin="0,0,0,12">
+            <TextBlock Text="Abreviatura" FontWeight="SemiBold"/>
+            <TextBox x:Name="AbbreviationBox" Height="36" Padding="8" Margin="0,4,0,0"/>
+        </StackPanel>
+        <CheckBox x:Name="FractionalBox" Grid.Row="3" Content="Permite cantidades decimales (por ejemplo, 0,5 kg)" IsChecked="True" Margin="0,0,0,8"/>
+        <TextBlock x:Name="ErrorLabel" Grid.Row="4" Foreground="#A33232" TextWrapping="Wrap" VerticalAlignment="Top"/>
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancelar" Width="100" Height="38" IsCancel="True" Margin="0,0,8,0" Click="Cancel_Click"/>
+            <Button Content="Crear unidad" Width="120" Height="38" Background="#2858A2" Foreground="White" FontWeight="SemiBold" Click="Create_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

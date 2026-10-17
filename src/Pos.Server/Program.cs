@@ -1122,29 +1122,57 @@ app.MapGet("/api/v1/products", async (HttpContext context, PosDbContext db, Auth
     var search = (query ?? string.Empty).Trim();
     if (search.Length > 100) return Results.BadRequest(new { error = "Search text is too long." });
     var products = await db.Products.AsNoTracking()
-        .Where(x => x.Active && (search == "" || EF.Functions.ILike(x.Sku, search + "%") || EF.Functions.ILike(x.Name, "%" + search + "%")))
+        .Where(x => x.Active && (search == "" || EF.Functions.ILike(x.Sku, search + "%") || EF.Functions.ILike(x.Name, "%" + search + "%") ||
+            db.ProductPresentations.Any(p => p.ProductId == x.Id && p.Active && p.Barcode == search)))
         .OrderBy(x => x.Name).Take(30)
-        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Price2, x.Price3, x.TaxTreatment, x.Currency, hasImage = x.ImageFileName != null })
+        .Select(x => new { x.Id, x.Sku, x.Name, x.UnitPrice, x.Price2, x.Price3, x.TaxTreatment, x.Currency, x.BaseUnitId, hasImage = x.ImageFileName != null })
         .ToListAsync(cancellationToken);
     var productIds = products.Select(x => x.Id).ToArray();
+    var unitIds = products.Select(x => x.BaseUnitId).Distinct().ToArray();
+    var baseUnits = await db.ProductUnits.AsNoTracking().Where(x => unitIds.Contains(x.Id))
+        .ToDictionaryAsync(x => x.Id, cancellationToken);
+    var salePresentations = await (from presentation in db.ProductPresentations.AsNoTracking()
+        join unit in db.ProductUnits.AsNoTracking() on presentation.UnitId equals unit.Id
+        where productIds.Contains(presentation.ProductId) && presentation.Active
+        select new { presentation.Id, presentation.ProductId, presentation.UnitId, presentation.Label, UnitName = unit.Name,
+            UnitAbbreviation = unit.Abbreviation, presentation.ConversionFactor, presentation.Price1, presentation.Price2,
+            presentation.Price3, presentation.Barcode, unit.AllowsFractionalQuantities }).ToListAsync(cancellationToken);
     var quantities = await WarehouseStockBridge.GetStockForTerminalAsync(db, access.TerminalId, productIds, cancellationToken);
     if (quantities is null)
     {
         quantities = await db.Stocks.AsNoTracking().Where(x => productIds.Contains(x.ProductId))
             .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, cancellationToken);
     }
-    return Results.Ok(products.Select(product => new
+    return Results.Ok(products.Select(product =>
     {
-        product.Id,
-        product.Sku,
-        product.Name,
-        product.UnitPrice,
-        product.Price2,
-        product.Price3,
-        product.TaxTreatment,
-        product.Currency,
-        product.hasImage,
-        quantity = quantities.GetValueOrDefault(product.Id)
+        var baseUnit = baseUnits.GetValueOrDefault(product.BaseUnitId);
+        var presentations = salePresentations.Where(x => x.ProductId == product.Id).Select(x => new
+        {
+            presentationId = (Guid?)x.Id, x.UnitId, x.Label, x.UnitName, x.UnitAbbreviation, x.ConversionFactor,
+            Price1 = x.Price1 ?? product.UnitPrice * x.ConversionFactor,
+            Price2 = x.Price2 ?? (product.Price2.HasValue ? product.Price2.Value * x.ConversionFactor : null),
+            Price3 = x.Price3 ?? (product.Price3.HasValue ? product.Price3.Value * x.ConversionFactor : null),
+            Barcode = (string?)x.Barcode, x.AllowsFractionalQuantities
+        }).ToList();
+        presentations.Insert(0, new
+        {
+            presentationId = (Guid?)null, UnitId = product.BaseUnitId,
+            Label = baseUnit?.Name ?? "Unidad", UnitName = baseUnit?.Name ?? "Unidad",
+            UnitAbbreviation = baseUnit?.Abbreviation ?? "ud", ConversionFactor = 1m,
+            Price1 = product.UnitPrice, Price2 = product.Price2, Price3 = product.Price3,
+            Barcode = (string?)null, AllowsFractionalQuantities = baseUnit?.AllowsFractionalQuantities ?? true
+        });
+        var matched = salePresentations.FirstOrDefault(x => x.ProductId == product.Id && x.Barcode == search);
+        return new
+        {
+            product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3,
+            product.TaxTreatment, product.Currency, product.hasImage,
+            quantity = quantities.GetValueOrDefault(product.Id),
+            baseUnitId = product.BaseUnitId, baseUnitName = baseUnit?.Name ?? "Unidad",
+            baseUnitAbbreviation = baseUnit?.Abbreviation ?? "ud",
+            baseUnitAllowsFractional = baseUnit?.AllowsFractionalQuantities ?? true,
+            suggestedPresentationId = matched?.Id, saleUnits = presentations
+        };
     }));
 });
 app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, AuthenticationService auth, SupervisorAuthorizationStore approvals, string? query, string? status, string? currency, string? stockStatus, bool? hasImage, CancellationToken cancellationToken) =>
@@ -1170,8 +1198,11 @@ app.MapGet("/api/v1/inventory", async (HttpContext context, PosDbContext db, Aut
     var inventoryQuery = from product in productsQuery
                            join stock in db.Stocks.AsNoTracking() on product.Id equals stock.ProductId into stockRows
                            from stockRow in stockRows.DefaultIfEmpty()
+                           join unit in db.ProductUnits.AsNoTracking() on product.BaseUnitId equals unit.Id
                            select new { product.Id, product.Sku, product.Name, product.UnitPrice, product.Price2, product.Price3, product.UnitCost,
                                product.MinimumStock,
+                               BaseUnitId = unit.Id, BaseUnitName = unit.Name, BaseUnitAbbreviation = unit.Abbreviation,
+                               BaseUnitAllowsFractional = unit.AllowsFractionalQuantities,
                                product.TaxTreatment, product.Currency, Quantity = stockRow == null ? 0m : stockRow.Quantity,
                                hasImage = product.ImageFileName != null, product.Active };
     if (stockFilter == "available") inventoryQuery = inventoryQuery.Where(x => x.Quantity > 0m);
@@ -1190,7 +1221,13 @@ app.MapPost("/api/v1/inventory/{productId:guid}/adjustments", async (Guid produc
     if (request.QuantityDelta == 0m || decimal.Round(request.QuantityDelta, 3) != request.QuantityDelta ||
         string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 250)
         return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = ["A nonzero quantity with at most three decimals and a reason up to 250 characters is required."] });
-    if (!await db.Products.AnyAsync(x => x.Id == productId && x.Active, cancellationToken)) return Results.NotFound();
+    var productUnit = await (from product in db.Products.AsNoTracking()
+        join unit in db.ProductUnits.AsNoTracking() on product.BaseUnitId equals unit.Id
+        where product.Id == productId && product.Active
+        select new { unit.AllowsFractionalQuantities }).SingleOrDefaultAsync(cancellationToken);
+    if (productUnit is null) return Results.NotFound();
+    if (!productUnit.AllowsFractionalQuantities && decimal.Round(request.QuantityDelta, 0) != request.QuantityDelta)
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["adjustment"] = ["La unidad base de este producto solo permite ajustes enteros."] });
     if (!await db.Stocks.AnyAsync(x => x.ProductId == productId, cancellationToken)) return Results.Conflict(new { error = "stock_record_missing" });
     StockMovement movement;
     try { movement = StockMovement.Create(productId, request.QuantityDelta, request.Reason, access.OperatorId, DateTimeOffset.UtcNow); }

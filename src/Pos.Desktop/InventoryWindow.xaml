@@ -22,13 +22,13 @@
         <WrapPanel x:Name="InventoryExtensionsPanel" Grid.Row="2" Margin="0,0,0,7" VerticalAlignment="Center"/>
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="350"/></Grid.ColumnDefinitions>
-            <DataGrid x:Name="InventoryGrid" SelectionChanged="InventoryGrid_SelectionChanged" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+            <DataGrid x:Name="InventoryGrid" SelectionChanged="InventoryGrid_SelectionChanged" MouseDoubleClick="InventoryGrid_MouseDoubleClick" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                       EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" ScrollViewer.CanContentScroll="True"
                       SelectionMode="Single" SelectionUnit="FullRow" RowHeaderWidth="0" Background="White" BorderBrush="#D7DFEA" FontSize="14" AutomationProperties.Name="Productos del inventario">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="130"/>
                     <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*"/>
-                    <DataGridTextColumn Header="Existencia" Binding="{Binding Quantity, StringFormat={}{0:0.###}}" Width="105"/>
+                    <DataGridTextColumn Header="Existencia" Binding="{Binding QuantityLabel}" Width="115"/>
                     <DataGridTextColumn Header="Precio" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="105"/>
                     <DataGridTextColumn Header="Moneda" Binding="{Binding Currency}" Width="72"/>
                     <DataGridTextColumn Header="Impuesto" Binding="{Binding TaxTreatmentLabel}" Width="130"/>
@@ -61,7 +61,7 @@
                     </Grid>
                     <Grid Grid.Row="5" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Button x:Name="EditProductButton" Content="Editar SKU/nombre" Height="32" Margin="0,0,4,0" Click="EditProduct_Click" IsEnabled="False"/>
+                        <Button x:Name="EditProductButton" Content="Ficha completa" Height="32" Margin="0,0,4,0" Click="EditProduct_Click" IsEnabled="False" ToolTip="Abre los datos, unidades y presentaciones del producto."/>
                         <Button x:Name="ChangePriceButton" Grid.Column="1" Content="Cambiar precio" Height="32" Margin="4,0,0,0" Click="ChangePrice_Click" IsEnabled="False"/>
                     </Grid>
                     <Button x:Name="InitializeCostButton" Grid.Row="6" Content="Asignar costo inicial" Height="32" Margin="0,2,0,4" Click="InitializeCost_Click" IsEnabled="False" AutomationProperties.Name="Asignar costo inicial del inventario"
@@ -78,7 +78,7 @@
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="145"/><ColumnDefinition Width="250"/><ColumnDefinition Width="*"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center"><TextBlock Text="AJUSTE DE EXISTENCIA" Foreground="#173F78" FontWeight="Bold"/><TextBlock Text="+ repone · − descuenta" Foreground="#63758B" FontSize="11" Margin="0,2,0,0"/></StackPanel>
-                <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Unidades (+/−)" FontWeight="SemiBold" FontSize="11"/><TextBox x:Name="DeltaBox" Text="1" Height="32" Padding="6" AutomationProperties.Name="Cantidad de unidades a sumar o descontar"/></StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock x:Name="AdjustUnitLabel" Text="Cantidad (+/−)" FontWeight="SemiBold" FontSize="11"/><TextBox x:Name="DeltaBox" Text="1" Height="32" Padding="6" AutomationProperties.Name="Cantidad a sumar o descontar"/></StackPanel>
                 <StackPanel Grid.Column="2" Margin="8,0,0,0"><TextBlock Text="Motivo del ajuste" FontWeight="SemiBold" FontSize="11"/><TextBox x:Name="ReasonBox" Height="32" Padding="6" AutomationProperties.Name="Motivo del ajuste de existencia"/></StackPanel>
                 <TextBlock x:Name="StatusLabel" Grid.Column="3" Foreground="#52677F" TextWrapping="Wrap" VerticalAlignment="Center" Margin="12,0"/>
                 <Button x:Name="AdjustButton" Grid.Column="4" Content="Aplicar ajuste" Height="36" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Adjust_Click" IsEnabled="False" AutomationProperties.Name="Aplicar ajuste de existencia"/>

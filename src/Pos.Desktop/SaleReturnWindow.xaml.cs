@@ -116,7 +116,7 @@ public partial class SaleReturnWindow : Window
     {
         public Guid Id { get; } = line.Id;
         public string Sku { get; } = line.Sku;
-        public string Description { get; } = line.Description;
+        public string Description { get; } = line.DisplayDescription;
         public decimal Quantity { get; } = line.Quantity;
         public decimal ReturnedQuantity { get; } = line.ReturnedQuantity;
         public decimal ReturnableQuantity { get; } = line.ReturnableQuantity;

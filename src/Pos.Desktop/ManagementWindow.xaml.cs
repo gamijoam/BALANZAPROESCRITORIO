@@ -576,7 +576,7 @@ public partial class ManagementWindow : Window
     {
         var rows = SalesDetailGrid.ItemsSource as IEnumerable<SaleDetailRow> ?? [];
         return ["Fecha;Venta;Cliente;Responsable;Código;Producto;Cantidad;Precio;Importe;Moneda de venta;Ajuste por redondeo;Pagos recibidos (moneda e importe real; equivalente según tasa registrada)",
-            .. rows.SelectMany(s => s.Lines.Select(line => $"{s.CreatedAtUtc:dd/MM/yyyy HH:mm:ss};{s.SaleNumber};{Csv(s.CustomerName)};{Csv(s.OperatorName)};{Csv(line.Sku)};{Csv(line.Description)};{PosNumberFormat.FormatQuantity(line.Quantity)};{PosNumberFormat.FormatAmount(line.UnitPrice)};{PosNumberFormat.FormatAmount(line.LineTotal)};{s.Currency};{Csv(s.RoundingAdjustmentLabel)};{Csv(string.Join(" | ", s.Payments.Select(payment => payment.DescribeForSaleCurrency(s.Currency))))}"))];
+            .. rows.SelectMany(s => s.Lines.Select(line => $"{s.CreatedAtUtc:dd/MM/yyyy HH:mm:ss};{s.SaleNumber};{Csv(s.CustomerName)};{Csv(s.OperatorName)};{Csv(line.Sku)};{Csv(line.DisplayDescription)};{PosNumberFormat.FormatQuantity(line.Quantity)};{PosNumberFormat.FormatAmount(line.UnitPrice)};{PosNumberFormat.FormatAmount(line.LineTotal)};{s.Currency};{Csv(s.RoundingAdjustmentLabel)};{Csv(string.Join(" | ", s.Payments.Select(payment => payment.DescribeForSaleCurrency(s.Currency))))}"))];
     }
 
     private List<string> ExportCashRows()

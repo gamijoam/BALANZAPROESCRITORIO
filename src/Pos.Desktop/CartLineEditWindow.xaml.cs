@@ -17,7 +17,8 @@ public partial class CartLineEditWindow : Window
     {
         _line = line;
         InitializeComponent();
-        ProductLabel.Text = $"{line.Product.Name} · Código {line.Product.Sku}";
+        ProductLabel.Text = $"{line.DisplayName} · Código {line.Product.Sku}";
+        UnitHintLabel.Text = $"Una {line.SaleUnit.Label} descuenta {PosNumberFormat.FormatQuantity(line.SaleUnit.ConversionFactor)} {line.Product.BaseUnitAbbreviation} del inventario.";
         QuantityBox.Text = line.Quantity.ToString("0.###", PosNumberFormat.Culture);
         foreach (var tier in line.AvailablePriceTiers)
             PriceTierBox.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = tier switch { "Price1" => "Precio 1 · Principal", "Price2" => "Precio 2", _ => "Precio 3" }, Tag = tier });
@@ -50,9 +51,11 @@ public partial class CartLineEditWindow : Window
     {
         ErrorLabel.Text = string.Empty;
         if (!decimal.TryParse(QuantityBox.Text.Trim(), NumberStyles.Number, PosNumberFormat.Culture, out var quantity) ||
-            quantity <= 0m || decimal.Round(quantity, 3) != quantity)
+            quantity <= 0m || decimal.Round(quantity, 3) != quantity || !_line.AllowsFractionalQuantity && decimal.Round(quantity, 0) != quantity)
         {
-            ErrorLabel.Text = "La cantidad debe ser mayor que cero y tener hasta tres decimales.";
+            ErrorLabel.Text = _line.AllowsFractionalQuantity
+                ? "La cantidad debe ser mayor que cero y tener hasta tres decimales."
+                : $"La cantidad de { _line.SaleUnit.Label } debe ser un número entero.";
             QuantityBox.Focus();
             QuantityBox.SelectAll();
             return;

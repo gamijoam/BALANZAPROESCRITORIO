@@ -23,7 +23,7 @@
                               Background="White" BorderBrush="#D7DFEA" FontSize="13">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Fecha local" Binding="{Binding OccurredAtLocal, StringFormat={}{0:dd/MM/yyyy HH:mm:ss}}" Width="155" />
-                            <DataGridTextColumn Header="Cambio" Binding="{Binding QuantityDelta, StringFormat={}{0:+0.###;-0.###;0}}" Width="100" />
+                            <DataGridTextColumn x:Name="MovementChangeColumn" Header="Cambio" Binding="{Binding QuantityDelta, StringFormat={}{0:+0.###;-0.###;0}}" Width="120" />
                             <DataGridTextColumn Header="Motivo" Binding="{Binding Reason}" Width="*" />
                             <DataGridTextColumn Header="Operador" Binding="{Binding OperatorLabel}" Width="165" />
                             <DataGridTextColumn Header="Terminal (ID)" Binding="{Binding TerminalId}" Width="260" />
@@ -47,7 +47,7 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Fecha local" Binding="{Binding OccurredAtLocal, StringFormat={}{0:dd/MM/yyyy HH:mm:ss}}" Width="155" />
                             <DataGridTextColumn Header="Movimiento" Binding="{Binding MovementType}" Width="110" />
-                            <DataGridTextColumn Header="Cambio" Binding="{Binding QuantityDelta, StringFormat={}{0:+0.###;-0.###;0}}" Width="90" />
+                            <DataGridTextColumn x:Name="TransferChangeColumn" Header="Cambio" Binding="{Binding QuantityDelta, StringFormat={}{0:+0.###;-0.###;0}}" Width="110" />
                             <DataGridTextColumn Header="Ruta del traslado" Binding="{Binding WarehouseRoute}" Width="*" />
                             <DataGridTextColumn Header="Referencia" Binding="{Binding Reference}" Width="130" />
                             <DataGridTextColumn Header="Operador" Binding="{Binding OperatorLabel}" Width="140" />

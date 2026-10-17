@@ -27,7 +27,9 @@ public partial class InventoryMovementsWindow : Window
         _product = product;
         _moduleContext = moduleContext;
         _historyExtension = historyExtension;
-        ProductLabel.Text = $"{product.Name} · SKU {product.Sku}";
+        ProductLabel.Text = $"{product.Name} · SKU {product.Sku} · unidad base {product.BaseUnitName} ({product.BaseUnitAbbreviation})";
+        MovementChangeColumn.Header = $"Cambio ({product.BaseUnitAbbreviation})";
+        TransferChangeColumn.Header = $"Cambio ({product.BaseUnitAbbreviation})";
         TransfersTab.Visibility = historyExtension is null || moduleContext is null ? Visibility.Collapsed : Visibility.Visible;
         Loaded += async (_, _) => await LoadPageAsync();
     }

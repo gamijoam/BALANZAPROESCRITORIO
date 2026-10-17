@@ -13,9 +13,10 @@
             <StackPanel>
                 <TextBlock Text="Cantidad" FontWeight="SemiBold" Margin="0,0,0,5"/>
                 <TextBox x:Name="QuantityBox" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Cantidad del artículo"/>
+                <TextBlock x:Name="UnitHintLabel" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,0"/>
                 <TextBlock Text="Nivel de precio del catálogo" FontWeight="SemiBold" Margin="0,15,0,5"/>
                 <ComboBox x:Name="PriceTierBox" Height="40" SelectionChanged="PriceTier_SelectionChanged" AutomationProperties.Name="Nivel de precio del artículo"/>
-                <TextBlock Text="Precio por unidad (moneda de la venta)" FontWeight="SemiBold" Margin="0,15,0,5"/>
+                <TextBlock Text="Precio por presentación (moneda de la venta)" FontWeight="SemiBold" Margin="0,15,0,5"/>
                 <TextBox x:Name="PriceOverrideBox" Height="42" Padding="10,6" FontSize="17" AutomationProperties.Name="Precio por unidad para esta venta"/>
                 <TextBlock x:Name="CatalogPriceLabel" Foreground="#52677F" TextWrapping="Wrap" Margin="0,7,0,0"/>
                 <TextBlock x:Name="TaxPreviewLabel" Foreground="#52677F" TextWrapping="Wrap" Margin="0,5,0,0"/>

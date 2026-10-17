@@ -102,15 +102,17 @@ public sealed class SaleReturnService(PosDbContext db)
 
         foreach (var item in validated.Where(x => x.Restock))
         {
-            var productId = saleLines.Single(x => x.Id == item.SaleLineId).ProductId;
-            var changed = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" + {item.Quantity}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {productId}", cancellationToken);
+            var original = saleLines.Single(x => x.Id == item.SaleLineId);
+            var productId = original.ProductId;
+            var inventoryQuantity = item.Quantity * original.ConversionFactor;
+            var changed = await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE stocks SET \"Quantity\" = \"Quantity\" + {inventoryQuantity}, \"Version\" = \"Version\" + 1 WHERE \"ProductId\" = {productId}", cancellationToken);
             if (changed != 1) throw new CheckoutRejectedException("stock_record_missing");
-            await WarehouseStockBridge.RestockSaleAsync(db, saleId, productId, item.Quantity, cancellationToken);
+            await WarehouseStockBridge.RestockSaleAsync(db, saleId, productId, inventoryQuantity, cancellationToken);
             var movementReason = $"Devolución {returnId:N}: {reason}";
             if (movementReason.Length > 250) movementReason = movementReason[..250];
             db.StockMovements.Add(new StockMovementRecord
             {
-                Id = Guid.NewGuid(), ProductId = productId, QuantityDelta = item.Quantity,
+                Id = Guid.NewGuid(), ProductId = productId, QuantityDelta = inventoryQuantity,
                 Reason = movementReason, ActorId = operatorId, TerminalId = terminalId, OccurredAtUtc = now
             });
         }

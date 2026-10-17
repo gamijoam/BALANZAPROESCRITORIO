@@ -180,16 +180,78 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         => await CreateProductAsync(sku, name, unitPrice, null, null, "Unclassified", currency, initialStock, cancellationToken);
 
     public async Task<InventoryItemInfo> CreateProductAsync(string sku, string name, decimal unitPrice, decimal? price2, decimal? price3,
-        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m)
+        string taxTreatment, string currency, decimal initialStock, CancellationToken cancellationToken = default, decimal minimumStock = 0m, Guid? baseUnitId = null)
     {
         using var request = CreateRequest(HttpMethod.Post, "api/v1/products");
-        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, minimumStock }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, unitPrice, price2, price3, taxTreatment, currency, initialStock, minimumStock, baseUnitId }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         var result = await response.Content.ReadFromJsonAsync<ProductCreateResponse>(JsonOptions, cancellationToken)
             ?? throw new InvalidDataException("The service returned an empty product response.");
         return new InventoryItemInfo(result.Id, result.Sku, result.Name, result.UnitPrice, result.Currency, result.InitialStock, result.HasImage)
-        { Price2 = result.Price2, Price3 = result.Price3, MinimumStock = result.MinimumStock, TaxTreatment = result.TaxTreatment };
+        { Price2 = result.Price2, Price3 = result.Price3, MinimumStock = result.MinimumStock, TaxTreatment = result.TaxTreatment,
+            BaseUnitId = result.BaseUnitId, BaseUnitName = result.BaseUnitName, BaseUnitAbbreviation = result.BaseUnitAbbreviation,
+            BaseUnitAllowsFractional = result.BaseUnitAllowsFractional };
+    }
+
+    public async Task<ProductDetailsInfo> GetProductDetailsAsync(Guid productId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, $"api/v1/products/{productId}/details");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ProductDetailsInfo>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió una ficha vacía.");
+    }
+
+    public async Task SaveProductDetailsAsync(Guid productId, string sku, string name, decimal minimumStock, Guid baseUnitId,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Patch, $"api/v1/products/{productId}");
+        request.Content = JsonContent.Create(new { sku, name, minimumStock, baseUnitId }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ProductUnitInfo>> GetProductUnitsAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Get, "api/v1/product-units");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<List<ProductUnitInfo>>(JsonOptions, cancellationToken) ?? [];
+    }
+
+    public async Task<ProductUnitInfo> CreateProductUnitAsync(string name, string abbreviation, bool allowsFractionalQuantities,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post, "api/v1/product-units");
+        request.Content = JsonContent.Create(new { name, abbreviation, allowsFractionalQuantities }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ProductUnitInfo>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió una unidad vacía.");
+    }
+
+    public async Task<ProductPresentationInfo> SaveProductPresentationAsync(Guid productId, ProductPresentationInput presentation,
+        CancellationToken cancellationToken = default)
+    {
+        var method = presentation.Id.HasValue ? HttpMethod.Put : HttpMethod.Post;
+        var route = presentation.Id.HasValue
+            ? $"api/v1/products/{productId}/presentations/{presentation.Id.Value}"
+            : $"api/v1/products/{productId}/presentations";
+        using var request = CreateRequest(method, route);
+        request.Content = JsonContent.Create(new { presentation.UnitId, presentation.Label, presentation.ConversionFactor,
+            presentation.Price1, presentation.Price2, presentation.Price3, presentation.Barcode }, options: JsonOptions);
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ProductPresentationInfo>(JsonOptions, cancellationToken)
+            ?? throw new InvalidDataException("El servicio devolvió una presentación vacía.");
+    }
+
+    public async Task DeactivateProductPresentationAsync(Guid productId, Guid presentationId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"api/v1/products/{productId}/presentations/{presentationId}");
+        using var response = await SendAuthorizedAsync(request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     public async Task SetProductTaxTreatmentAsync(Guid productId, string taxTreatment, CancellationToken cancellationToken = default)
@@ -200,10 +262,10 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
     }
 
-    public async Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null)
+    public async Task UpdateProductAsync(Guid productId, string sku, string name, CancellationToken cancellationToken = default, decimal? minimumStock = null, Guid? baseUnitId = null)
     {
         using var request = CreateRequest(HttpMethod.Patch, $"api/v1/products/{productId}");
-        request.Content = JsonContent.Create(new { sku, name, minimumStock }, options: JsonOptions);
+        request.Content = JsonContent.Create(new { sku, name, minimumStock, baseUnitId }, options: JsonOptions);
         using var response = await SendAuthorizedAsync(request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
     }
@@ -867,7 +929,15 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
         await EnsureSuccessAsync(response, cancellationToken);
         var results = await response.Content.ReadFromJsonAsync<List<ProductSearchResponse>>(JsonOptions, cancellationToken) ?? [];
         return results.Select(product => new ProductInfo(product.Id, product.Sku, product.Name, product.UnitPrice,
-            product.Currency, product.HasImage, product.Quantity, product.Price2, product.Price3, product.TaxTreatment)).ToArray();
+            product.Currency, product.HasImage, product.Quantity, product.Price2, product.Price3, product.TaxTreatment)
+        {
+            BaseUnitId = product.BaseUnitId,
+            BaseUnitName = product.BaseUnitName,
+            BaseUnitAbbreviation = product.BaseUnitAbbreviation,
+            BaseUnitAllowsFractional = product.BaseUnitAllowsFractional,
+            SuggestedPresentationId = product.SuggestedPresentationId,
+            SaleUnits = (product.SaleUnits ?? []).Select(unit => unit with { BaseUnitAbbreviation = product.BaseUnitAbbreviation }).ToArray()
+        }).ToArray();
     }
 
     public async Task<Guid> CheckoutAsync(Guid cashSessionId, IReadOnlyList<SaleLineInput> lines,
@@ -1084,6 +1154,10 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     private sealed record StockAdjustmentResponse(Guid Id, Guid ProductId, decimal QuantityDelta, decimal Quantity, string? Reason, DateTime OccurredAtUtc);
     private sealed record ProductCreateResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, decimal InitialStock, bool HasImage = false)
     {
+        public Guid BaseUnitId { get; init; }
+        public string BaseUnitName { get; init; } = "Unidad";
+        public string BaseUnitAbbreviation { get; init; } = "ud";
+        public bool BaseUnitAllowsFractional { get; init; } = true;
         public decimal? Price2 { get; init; }
         public decimal? Price3 { get; init; }
         public decimal MinimumStock { get; init; }
@@ -1091,6 +1165,12 @@ public sealed class PosApiClient : IPosApiClient, IDisposable
     }
     private sealed record ProductSearchResponse(Guid Id, string Sku, string Name, decimal UnitPrice, string Currency, bool HasImage, decimal Quantity)
     {
+        public Guid BaseUnitId { get; init; }
+        public string BaseUnitName { get; init; } = "Unidad";
+        public string BaseUnitAbbreviation { get; init; } = "ud";
+        public bool BaseUnitAllowsFractional { get; init; } = true;
+        public Guid? SuggestedPresentationId { get; init; }
+        public List<ProductSaleUnitInfo>? SaleUnits { get; init; }
         public decimal? Price2 { get; init; }
         public decimal? Price3 { get; init; }
         public string TaxTreatment { get; init; } = "Unclassified";

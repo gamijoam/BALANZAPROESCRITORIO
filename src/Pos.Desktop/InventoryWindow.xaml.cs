@@ -104,7 +104,7 @@ public partial class InventoryWindow : Window
         SelectedProductName.Text = item?.Name ?? "Selecciona un producto";
         SelectedProductSku.Text = item is null ? string.Empty : $"Código: {item.Sku}";
         SelectedProductCost.Text = item is null ? string.Empty : $"Costo promedio: {item.UnitCostLabel}";
-        SelectedProductMinimum.Text = item is null ? string.Empty : $"Aviso de bajo stock: {PosNumberFormat.FormatQuantity(item.MinimumStock)} unidades";
+        SelectedProductMinimum.Text = item is null ? string.Empty : $"Existencia mínima: {PosNumberFormat.FormatQuantity(item.MinimumStock)} {item.BaseUnitAbbreviation}";
         ProductImagePreview.Source = null;
         ProductImagePreview.Visibility = Visibility.Collapsed;
         ProductImagePlaceholder.Visibility = Visibility.Visible;
@@ -119,6 +119,7 @@ public partial class InventoryWindow : Window
         TaxTreatmentStatusLabel.Text = item is null ? string.Empty : $"Impuesto: {item.TaxTreatmentLabel}";
         ChangeTaxTreatmentButton.Content = item?.TaxTreatment == "Unclassified" ? "Asignar impuesto" : "Cambiar impuesto";
         AdjustButton.IsEnabled = item?.Active == true;
+        AdjustUnitLabel.Text = item is null ? "Cantidad (+/−)" : $"Cantidad {item.BaseUnitAbbreviation} (+/−)";
         if (item is null)
         {
             ImageStatusLabel.Text = string.Empty;
@@ -269,10 +270,21 @@ public partial class InventoryWindow : Window
     private async void EditProduct_Click(object sender, RoutedEventArgs e)
     {
         if (InventoryGrid.SelectedItem is not InventoryItemInfo item) { StatusLabel.Text = "Selecciona un producto."; return; }
-        if (new ProductEditWindow(_viewModel, item) { Owner = this }.ShowDialog() == true)
+        await OpenProductDetailsAsync(item);
+    }
+
+    private async void InventoryGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (InventoryGrid.SelectedItem is InventoryItemInfo item)
+            await OpenProductDetailsAsync(item);
+    }
+
+    private async Task OpenProductDetailsAsync(InventoryItemInfo item)
+    {
+        if (new ProductDetailsWindow(_viewModel, item) { Owner = this }.ShowDialog() == true)
         {
             await LoadAsync(item.Id);
-            StatusLabel.Text = "Datos del producto actualizados y registrados en auditoría.";
+            StatusLabel.Text = "Ficha del producto actualizada y registrada en auditoría.";
         }
     }
 
@@ -297,8 +309,9 @@ public partial class InventoryWindow : Window
     {
         if (InventoryGrid.SelectedItem is not InventoryItemInfo item) { StatusLabel.Text = "Selecciona un producto."; return; }
         if (!item.Active) { StatusLabel.Text = "Reactiva el producto antes de ajustar su existencia."; return; }
-        if (!PosNumberFormat.TryParseAmount(DeltaBox.Text, out var delta) || delta == 0m || decimal.Round(delta, 3) != delta)
-        { StatusLabel.Text = "El ajuste debe ser distinto de cero y tener hasta tres decimales."; return; }
+        if (!PosNumberFormat.TryParseAmount(DeltaBox.Text, out var delta) || delta == 0m || decimal.Round(delta, 3) != delta ||
+            !item.BaseUnitAllowsFractional && decimal.Round(delta, 0) != delta)
+        { StatusLabel.Text = item.BaseUnitAllowsFractional ? "El ajuste debe ser distinto de cero y tener hasta tres decimales." : "Esta unidad solo permite ajustes enteros."; return; }
         try
         {
             var quantity = await _viewModel.AdjustStockAsync(item.Id, delta, ReasonBox.Text.Trim());

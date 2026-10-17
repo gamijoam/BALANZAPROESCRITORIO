@@ -32,6 +32,7 @@ public partial class ProductSelectionWindow : Window
     }
 
     public ProductInfo? SelectedProduct => (ProductsList.SelectedItem as ProductSelectionEntry)?.Product;
+    public ProductSaleUnitInfo? SelectedSaleUnit => PresentationBox.SelectedItem as ProductSaleUnitInfo;
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
@@ -101,29 +102,70 @@ public partial class ProductSelectionWindow : Window
     private void ProductsList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         var entry = ProductsList.SelectedItem as ProductSelectionEntry;
-        AddProductButton.IsEnabled = entry?.Product.StockQuantity is null or > 0m && entry?.Product.IsTaxClassified == true;
+        IReadOnlyList<ProductSaleUnitInfo> units = entry is null ? Array.Empty<ProductSaleUnitInfo>() : AvailableUnits(entry.Product);
+        PresentationBox.ItemsSource = units;
+        PresentationBox.SelectedItem = entry is null ? null : units.FirstOrDefault(x => x.PresentationId == entry.Product.SuggestedPresentationId)
+            ?? units.FirstOrDefault(x => x.PresentationId is null)
+            ?? units.FirstOrDefault();
+        UpdateSelectionAvailability();
+    }
+
+    private void PresentationBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        => UpdateSelectionAvailability();
+
+    private void UpdateSelectionAvailability()
+    {
+        var entry = ProductsList.SelectedItem as ProductSelectionEntry;
+        var unit = SelectedSaleUnit;
+        var requiredBaseUnits = unit?.ConversionFactor ?? 1m;
+        var fractionalBaseStock = entry is not null && !entry.Product.BaseUnitAllowsFractional &&
+            decimal.Round(requiredBaseUnits, 0) != requiredBaseUnits;
+        AddProductButton.IsEnabled = entry?.Product.IsTaxClassified == true &&
+            !fractionalBaseStock && (entry.Product.StockQuantity is null || entry.Product.StockQuantity >= requiredBaseUnits);
         SelectionStatusText.Text = entry?.Product.StockQuantity is <= 0m
             ? "Producto agotado: no se puede agregar a la venta."
             : entry is not null && !entry.Product.IsTaxClassified
                 ? "Impuesto pendiente: clasifícalo en Inventario antes de venderlo."
-                : string.Empty;
+                : fractionalBaseStock
+                    ? "Esta presentación consumiría una fracción de la unidad base, que no está permitida."
+                : entry?.Product.StockQuantity is { } stock && stock < requiredBaseUnits
+                    ? $"No hay existencia suficiente para una unidad de {unit?.Label}."
+                    : string.Empty;
     }
 
     private void AcceptSelection()
     {
-        if (SelectedProduct is null) return;
-        if (SelectedProduct.StockQuantity is <= 0m)
+        var product = SelectedProduct;
+        var saleUnit = SelectedSaleUnit;
+        if (product is null || saleUnit is null) return;
+        if (product.StockQuantity is <= 0m)
         {
             SelectionStatusText.Text = "Producto agotado: no se puede agregar a la venta.";
             return;
         }
-        if (!SelectedProduct.IsTaxClassified)
+        if (!product.IsTaxClassified)
         {
             SelectionStatusText.Text = "Impuesto pendiente: clasifícalo en Inventario antes de venderlo.";
             return;
         }
+        var fractionalBaseStock = !product.BaseUnitAllowsFractional &&
+            decimal.Round(saleUnit.ConversionFactor, 0) != saleUnit.ConversionFactor;
+        var insufficientStock = product.StockQuantity is { } available && available < saleUnit.ConversionFactor;
+        if (fractionalBaseStock || insufficientStock)
+        {
+            SelectionStatusText.Text = fractionalBaseStock
+                ? "Esta presentación consumiría una fracción de la unidad base, que no está permitida."
+                : "La existencia no alcanza para la presentación seleccionada.";
+            return;
+        }
         DialogResult = true;
     }
+
+    private static IReadOnlyList<ProductSaleUnitInfo> AvailableUnits(ProductInfo product)
+        => product.SaleUnits.Count > 0 ? product.SaleUnits :
+        [new ProductSaleUnitInfo(null, product.BaseUnitId, product.BaseUnitName, product.BaseUnitName,
+            product.BaseUnitAbbreviation, 1m, product.UnitPrice, product.Price2, product.Price3, null, product.BaseUnitAllowsFractional)
+            { BaseUnitAbbreviation = product.BaseUnitAbbreviation }];
 }
 
 public sealed class ProductSelectionEntry(ProductInfo product) : INotifyPropertyChanged
@@ -145,7 +187,10 @@ public sealed class ProductSelectionEntry(ProductInfo product) : INotifyProperty
     }
     public string StockLabel => Product.StockQuantity is not { } quantity
         ? "No disponible"
-        : quantity <= 0m ? "0 · AGOTADO" : PosNumberFormat.FormatQuantity(quantity);
+        : quantity <= 0m ? "0 · AGOTADO" : $"{PosNumberFormat.FormatQuantity(quantity)} {Product.BaseUnitAbbreviation}";
+    public string SaleUnitsSummary => $"Unidad base: {Product.BaseUnitName}" +
+        (Product.SaleUnits.Count <= 1 ? string.Empty : " · También: " + string.Join(", ", Product.SaleUnits.Where(x => x.PresentationId.HasValue)
+            .Select(x => $"{x.Label} (×{PosNumberFormat.FormatQuantity(x.ConversionFactor)} {Product.BaseUnitAbbreviation})")));
 
     public void SetImage(ImageSource? image, string placeholderText)
     {
