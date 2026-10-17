@@ -69,7 +69,7 @@
                         Margin="0,12,0,0" Background="#0867D5" Foreground="White" FontSize="16"
                         FontWeight="Bold" BorderThickness="0" Click="Login_Click"
                         AutomationProperties.Name="Iniciar sesión" AutomationProperties.AutomationId="LoginSubmit"/>
-                <TextBlock Grid.Row="3" Text="Acceso protegido a tu negocio" Foreground="#71839A" FontSize="12"
+                <TextBlock Grid.Row="3" Text="Acceso protegido a tu negocio" Foreground="{StaticResource PosWindow.Muted}" FontSize="12"
                            HorizontalAlignment="Center" Margin="0,9,0,0"/>
                 </Grid>
             </Border>

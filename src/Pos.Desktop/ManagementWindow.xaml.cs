@@ -129,7 +129,7 @@ public partial class ManagementWindow : Window
             LicenseStateText.Foreground = license.State switch
             {
                 "Active" => System.Windows.Media.Brushes.DarkGreen,
-                "Grace" => System.Windows.Media.Brushes.DarkOrange,
+                "Grace" => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(128, 86, 0)),
                 "Recovery" => System.Windows.Media.Brushes.DarkBlue,
                 "Locked" or "Suspended" or "Invalid" or "ClockRollback" or "NotConfigured" or "Missing" => System.Windows.Media.Brushes.DarkRed,
                 _ => System.Windows.Media.Brushes.DarkSlateGray

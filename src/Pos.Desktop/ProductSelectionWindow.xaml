@@ -45,7 +45,7 @@
                         <Setter.Value>
                             <ControlTemplate TargetType="ListBoxItem">
                                 <Border x:Name="RowBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                                    <ContentPresenter/>
+                                    <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
@@ -57,11 +57,13 @@
                                     </Trigger>
                                     <DataTrigger Binding="{Binding Product.StockQuantity}" Value="0">
                                         <Setter Property="IsEnabled" Value="False"/>
-                                        <Setter Property="Opacity" Value="0.55"/>
+                                        <Setter Property="Background" Value="#F1F5F9"/>
+                                        <Setter Property="Foreground" Value="#526174"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Product.IsTaxClassified}" Value="False">
                                         <Setter Property="IsEnabled" Value="False"/>
-                                        <Setter Property="Opacity" Value="0.62"/>
+                                        <Setter Property="Background" Value="#F1F5F9"/>
+                                        <Setter Property="Foreground" Value="#526174"/>
                                     </DataTrigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>

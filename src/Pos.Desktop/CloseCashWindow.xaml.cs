@@ -42,7 +42,7 @@ public partial class CloseCashWindow : Window
         if (expected is null)
         {
             target.Text = "Diferencia no disponible";
-            target.Foreground = Brushes.DarkOrange;
+            target.Foreground = new SolidColorBrush(Color.FromRgb(128, 86, 0));
             return;
         }
         if (!PosNumberFormat.TryParseAmount(text, out var counted) || counted < 0m)
@@ -59,7 +59,11 @@ public partial class CloseCashWindow : Window
             < 0m => $"Faltante: {currency} {PosNumberFormat.FormatAmount(decimal.Abs(difference))}",
             _ => "Sin diferencia"
         };
-        target.Foreground = difference == 0m ? Brushes.SeaGreen : difference > 0m ? Brushes.DarkOrange : Brushes.Firebrick;
+        target.Foreground = difference == 0m
+            ? new SolidColorBrush(Color.FromRgb(21, 128, 61))
+            : difference > 0m
+                ? new SolidColorBrush(Color.FromRgb(128, 86, 0))
+                : Brushes.Firebrick;
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)

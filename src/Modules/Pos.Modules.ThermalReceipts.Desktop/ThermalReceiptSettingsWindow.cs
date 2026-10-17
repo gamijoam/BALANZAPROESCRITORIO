@@ -24,7 +24,7 @@ internal sealed class ThermalReceiptSettingsWindow : Window
     private readonly Dictionary<string, CheckBox> _sections = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TextBox> _labels = new(StringComparer.Ordinal);
     private readonly ListBox _itemColumns = new() { Height = 142, MinWidth = 230 };
-    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray, Margin = new Thickness(4) };
+    private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(82, 103, 127)), Margin = new Thickness(4) };
     private ThermalReceiptTemplate _template = ThermalReceiptTemplateDefaults.Default;
 
     public ThermalReceiptSettingsWindow(PosDesktopModuleContext context)

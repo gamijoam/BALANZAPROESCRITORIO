@@ -178,7 +178,9 @@ public partial class PaymentWindow : Window
         OtherCurrencyDueTitle.Text = $"EQUIVALENTE {OtherCurrency(_currency)}";
         OtherCurrencyDueLabel.Text = FormatOtherCurrencyEquivalent(summary.RemainingOtherCurrencyEquivalent, _currency);
         ErrorLabel.Text = _rows.Count == 0 ? "Selecciona un método de pago para continuar." : summary.Guidance;
-        ErrorLabel.Foreground = summary.RoundingAdjustment != 0m ? Brushes.SteelBlue : Brushes.Firebrick;
+        ErrorLabel.Foreground = summary.RoundingAdjustment != 0m
+            ? new SolidColorBrush(Color.FromRgb(8, 103, 213))
+            : Brushes.Firebrick;
         PaymentsPlaceholder.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (!_isRetry) PaymentMethodsPanel.IsEnabled = summary.CanAddPayment;
         ConfirmButton.IsEnabled = summary.CanConfirm;
