@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Pausar venta" Width="540" Height="365" ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner" Background="#EEF2F7" FontFamily="Segoe UI">
+        WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI">
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -12,10 +13,12 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel>
-            <TextBlock Text="PAUSAR VENTA" Foreground="#173F78" FontSize="23" FontWeight="Bold"/>
-            <TextBlock x:Name="SaleSummaryText" Margin="0,5,0,0" Foreground="#52667E" FontSize="13"/>
-        </StackPanel>
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="16,12">
+            <StackPanel>
+                <TextBlock Text="Pausar venta" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                <TextBlock x:Name="SaleSummaryText" Margin="0,5,0,0" Foreground="#D7E3F2" FontSize="13"/>
+            </StackPanel>
+        </Border>
 
         <TextBlock Grid.Row="1" Margin="0,20,0,7" Text="Nota opcional" Foreground="#173F78" FontWeight="SemiBold"/>
         <TextBox x:Name="NoteTextBox" Grid.Row="2" Height="86" MaxLength="250" AcceptsReturn="True"
@@ -26,9 +29,8 @@
                    Text="La venta quedará guardada en esta terminal. No se cobra ni se apartan existencias; el precio y el inventario se comprobarán al retomarla y cobrarla."/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-            <Button Content="Cancelar" Width="105" Height="38" Margin="0,0,8,0" IsCancel="True"/>
-            <Button x:Name="PauseButton" Content="Pausar venta" Width="135" Height="38" Background="#2858A2"
-                    Foreground="White" BorderThickness="0" FontWeight="SemiBold" IsDefault="True" Click="PauseButton_Click"/>
+            <Button Content="Cancelar" Width="105" Height="42" Margin="0,0,8,0" IsCancel="True"/>
+            <Button x:Name="PauseButton" Content="Pausar venta" Width="145" Height="42" Style="{StaticResource PosWindow.PrimaryButton}" IsDefault="True" Click="PauseButton_Click"/>
         </StackPanel>
     </Grid>
 </Window>

@@ -1,11 +1,14 @@
 <Window Language="es-VE" x:Class="Pos.Desktop.ProductCreateWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Crear producto" Width="700" Height="730" MinWidth="610" MinHeight="560" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="#F1F4F8">
+        Title="Crear producto" Width="700" Height="730" MinWidth="610" MinHeight="560" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI">
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries></ResourceDictionary></Window.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <StackPanel>
-            <TextBlock Text="NUEVO PRODUCTO" Foreground="#173F78" FontSize="22" FontWeight="Bold"/>
-            <TextBlock Text="Completa los datos del artículo. Antes de venderlo, asigna su tratamiento de impuesto." Foreground="#63758B" Margin="0,4,0,0" TextWrapping="Wrap"/>
-        </StackPanel>
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="16,12">
+            <StackPanel>
+                <TextBlock Text="Nuevo producto" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                <TextBlock Text="Completa los datos básicos. Luego podrás cambiar precios, foto y formas de venta desde la ficha." Foreground="#D7E3F2" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
         <ScrollViewer Grid.Row="1" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
             <Grid Margin="0,0,8,8">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -24,7 +27,7 @@
                 <Grid Grid.Row="4" Grid.ColumnSpan="2" Margin="0,0,0,12">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <StackPanel><TextBlock Text="Inventario contado por" FontWeight="SemiBold"/><ComboBox x:Name="BaseUnitBox" Height="38" Margin="0,4,0,0" DisplayMemberPath="DisplayLabel" SelectionChanged="BaseUnitBox_SelectionChanged" AutomationProperties.Name="Unidad base del producto"/><TextBlock Text="Elige cómo cuentas las existencias de este producto." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
-                    <Button Grid.Column="1" Content="Agregar tipo" Height="38" Padding="12,4" Margin="10,22,0,0" VerticalAlignment="Top" Click="CreateUnit_Click"/>
+                    <Button Grid.Column="1" Content="Agregar tipo" Height="42" Padding="12,4" Margin="10,22,0,0" VerticalAlignment="Top" Click="CreateUnit_Click"/>
                 </Grid>
                 <StackPanel Grid.Row="5" Margin="0,0,10,12"><TextBlock x:Name="InitialStockLabel" Text="Existencia inicial" FontWeight="SemiBold"/><TextBox x:Name="StockBox" Text="0" Height="38" Padding="8" Margin="0,4,0,0" AutomationProperties.Name="Existencia inicial del producto"/><TextBlock Text="Ingresa 0 si todavía no tienes existencia." Foreground="#63758B" FontSize="11" Margin="0,3,0,0"/></StackPanel>
                 <StackPanel Grid.Row="5" Grid.Column="1" Margin="10,0,0,12" VerticalAlignment="Bottom">
@@ -35,6 +38,6 @@
             </Grid>
         </ScrollViewer>
         <TextBlock x:Name="ErrorLabel" Grid.Row="2" Foreground="#B43B42" TextWrapping="Wrap" Margin="0,8,0,0"/>
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Content="Cancelar" Width="105" Height="40" Margin="0,0,10,0" IsCancel="True" Click="Cancel_Click"/><Button Content="Crear producto" Width="145" Height="40" Background="#2858A2" Foreground="White" FontWeight="Bold" IsDefault="True" Click="Create_Click" AutomationProperties.Name="Crear producto"/></StackPanel>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Content="Cancelar" Width="105" Height="42" Margin="0,0,10,0" IsCancel="True" Click="Cancel_Click"/><Button Content="Crear producto" Width="145" Height="42" IsDefault="True" Click="Create_Click" AutomationProperties.Name="Crear producto" Style="{StaticResource PosWindow.PrimaryButton}"/></StackPanel>
     </Grid>
 </Window>

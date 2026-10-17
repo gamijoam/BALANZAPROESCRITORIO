@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Pos.Desktop"
         Title="Cobrar venta" Width="900" Height="640" MinWidth="760" MinHeight="560"
-        WindowStartupLocation="CenterOwner" Background="#F1F4F8"
+        WindowStartupLocation="CenterOwner" Background="#F2F5F9" FontFamily="Segoe UI"
         PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded">
-    <Window.Resources>
+    <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries><ResourceDictionary Source="/Pos.Desktop;component/Styles/PosModernWindowTheme.xaml"/></ResourceDictionary.MergedDictionaries>
         <Style x:Key="PaymentMethodButton" TargetType="Button">
             <Setter Property="Height" Value="42"/>
             <Setter Property="Margin" Value="0,0,0,5"/>
@@ -38,7 +38,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-    </Window.Resources>
+    </ResourceDictionary></Window.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -46,15 +46,15 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Border Background="#E74D54" CornerRadius="8" Padding="16,12">
+        <Border Background="{StaticResource PosWindow.Navy}" CornerRadius="9" Padding="18,14">
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="TOTAL A COBRAR" Foreground="#FFE8E8" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="TotalLabel" Foreground="White" FontSize="32" FontWeight="Bold"/>
+                    <TextBlock Text="Total de la venta" Foreground="#D7E3F2" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TotalLabel" Foreground="White" FontSize="34" FontWeight="Bold"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <TextBlock x:Name="TotalOtherCurrencyTitle" Text="EQUIVALENTE USD" Foreground="#FFE8E8" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="TotalOtherCurrencyTitle" Text="EQUIVALENTE USD" Foreground="#D7E3F2" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                     <TextBlock x:Name="TotalOtherCurrencyLabel" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right"/>
                 </StackPanel>
             </Grid>
@@ -127,7 +127,7 @@
             <TextBlock x:Name="ErrorLabel" Grid.Column="0" Foreground="#B43B42" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" MaxHeight="40" Margin="0,0,10,0"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button Content="Cancelar" Width="95" Height="42" Margin="0,0,10,0" Click="Cancel_Click" IsCancel="True" TabIndex="6" AutomationProperties.Name="Cancelar el cobro"/>
-                <Button x:Name="ConfirmButton" Content="Confirmar venta" Width="145" Height="42" Background="#2858A2" Foreground="White" FontWeight="Bold" Click="Confirm_Click" IsDefault="True" TabIndex="7" AutomationProperties.Name="Confirmar venta"/>
+                <Button x:Name="ConfirmButton" Content="Confirmar venta" Width="145" Height="42" Click="Confirm_Click" IsDefault="True" TabIndex="7" AutomationProperties.Name="Confirmar venta" Style="{StaticResource PosWindow.PrimaryButton}"/>
             </StackPanel>
         </Grid>
     </Grid>
