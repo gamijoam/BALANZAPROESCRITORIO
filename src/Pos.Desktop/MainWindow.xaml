@@ -705,50 +705,48 @@
                     CornerRadius="9" Padding="14">
                 <ScrollViewer MaxHeight="620" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="OPERACIÓN" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                        <TextBlock Text="Operación" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
                                    FontWeight="Bold" Margin="2,0,0,6"/>
                         <UniformGrid Columns="2">
-                            <Button x:Name="FirstNavigationButton" Style="{StaticResource Pos.MenuButton}" Content="Venta"
-                                    Tag="Venta" Click="NavigationMenu_Click" AutomationProperties.Name="Venta" AutomationProperties.AutomationId="NavigateSale"/>
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Historial de ventas"
+                            <Button x:Name="FirstNavigationButton" Style="{StaticResource Pos.MenuButton}" Content="Historial de ventas"
                                     Tag="Historial" Click="NavigationMenu_Click" AutomationProperties.Name="Historial de ventas" AutomationProperties.AutomationId="NavigateSalesHistory"/>
                             <Button Style="{StaticResource Pos.MenuButton}" Content="Caja · F12"
                                     Tag="Caja" Click="NavigationMenu_Click" AutomationProperties.Name="Caja" AutomationProperties.AutomationId="NavigateCash"/>
                             <Button Style="{StaticResource Pos.MenuButton}" Content="Clientes"
                                     Tag="Clientes" Click="NavigationMenu_Click" AutomationProperties.Name="Clientes" AutomationProperties.AutomationId="NavigateCustomers"/>
                             <Button Style="{StaticResource Pos.MenuButton}" Content="{Binding OperatorSessionActionLabel}"
-                                    Tag="Sesion" Click="NavigationMenu_Click" IsEnabled="{Binding CanUseSessionAction}"
+                                    Tag="Sesion" Click="NavigationMenu_Click" IsEnabled="{Binding IsAuthenticated}"
                                     ToolTip="{Binding OperatorSessionActionToolTip}"
                                     AutomationProperties.Name="{Binding OperatorSessionActionLabel}" AutomationProperties.AutomationId="OperatorSessionAction"/>
                         </UniformGrid>
-                        <TextBlock Text="PRODUCTOS" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                        <TextBlock Text="Productos" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
                                    FontWeight="Bold" Margin="2,12,0,6"/>
                         <UniformGrid Columns="2">
                             <Button Style="{StaticResource Pos.MenuButton}" Content="Inventario"
                                     Tag="Inventario" Click="NavigationMenu_Click" AutomationProperties.Name="Inventario" AutomationProperties.AutomationId="NavigateInventory"/>
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Precios y tasa"
-                                    Tag="Tasa" Click="NavigationMenu_Click" AutomationProperties.Name="Precios y tasa" AutomationProperties.AutomationId="NavigateExchangeRate"/>
                         </UniformGrid>
-                        <TextBlock Text="ADMINISTRACIÓN" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                        <TextBlock Text="Administración" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
                                    FontWeight="Bold" Margin="2,12,0,6"/>
                         <UniformGrid Columns="2">
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Auditoría"
-                                    Tag="Auditoría" Click="NavigationMenu_Click" AutomationProperties.Name="Auditoría" AutomationProperties.AutomationId="NavigateAudit"/>
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Reportes"
-                                    Tag="Reportes" Click="NavigationMenu_Click" AutomationProperties.Name="Reportes" AutomationProperties.AutomationId="NavigateReports"/>
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Operadores"
-                                    Tag="Operadores" Click="NavigationMenu_Click" AutomationProperties.Name="Operadores" AutomationProperties.AutomationId="NavigateOperators"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Administración"
+                                    Tag="Administración" Click="ManagementTool_Click" AutomationProperties.Name="Administración" AutomationProperties.AutomationId="OpenAdministration"/>
+                            <Button x:Name="ReportsButton" Style="{StaticResource Pos.MenuButton}" Content="Reportes avanzados"
+                                    Tag="Reportes" Click="NavigationMenu_Click" Visibility="Collapsed"
+                                    AutomationProperties.Name="Reportes avanzados" AutomationProperties.AutomationId="OpenAdvancedReports"/>
+                        </UniformGrid>
+                        <TextBlock Text="Sistema" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                   FontWeight="Bold" Margin="2,12,0,6"/>
+                        <UniformGrid Columns="2">
                             <Button Style="{StaticResource Pos.MenuButton}" Content="Actualizar POS"
                                     Tag="Actualizar POS" Click="NavigationMenu_Click" AutomationProperties.Name="Actualizar POS"/>
-                            <Button Style="{StaticResource Pos.MenuButton}" Content="Actualizar módulos"
-                                    Tag="Actualizar módulos" Click="NavigationMenu_Click" AutomationProperties.Name="Actualizar módulos"/>
-                            <Button x:Name="ModulesButton" Style="{StaticResource Pos.MenuButton}" Content="Módulos y extensiones"
-                                    Click="ModulesButton_Click" AutomationProperties.Name="Módulos y extensiones"
-                                    AutomationProperties.AutomationId="NavigateModules" ToolTip="Abre las funciones de módulos instalados">
+                            <Button x:Name="ModulesButton" Style="{StaticResource Pos.MenuButton}" Content="Extensiones"
+                                    Visibility="Collapsed"
+                                    Click="ModulesButton_Click" AutomationProperties.Name="Extensiones"
+                                    AutomationProperties.AutomationId="OpenExtensions" ToolTip="Abre las funciones adicionales instaladas">
                                 <Button.ContextMenu>
                                     <ContextMenu x:Name="ModulesPopup" Placement="Bottom" StaysOpen="False" HasDropShadow="True"
                                                  Opened="ModulesPopup_Opened" PreviewKeyDown="ModulesPopup_PreviewKeyDown"
-                                                 AutomationProperties.Name="Accesos de módulos">
+                                                 AutomationProperties.Name="Funciones adicionales">
                                         <ContextMenu.Resources>
                                             <Style TargetType="MenuItem">
                                                 <Setter Property="FontSize" Value="14"/>
@@ -757,11 +755,6 @@
                                                 <Setter Property="MinWidth" Value="220"/>
                                             </Style>
                                         </ContextMenu.Resources>
-                                        <MenuItem x:Name="ModuleMenuEmpty" Header="No hay módulos disponibles" IsEnabled="False"/>
-                                        <Separator/>
-                                        <MenuItem x:Name="AdminModulesMenuItem" Header="Administrar módulos" Tag="Módulos"
-                                                  Visibility="Collapsed" Click="ManagementTool_Click"
-                                                  AutomationProperties.Name="Administrar módulos" AutomationProperties.AutomationId="ManageModules"/>
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>

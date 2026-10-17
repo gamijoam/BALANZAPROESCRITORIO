@@ -1147,7 +1147,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
         var now = DateTime.UtcNow;
         var current = (await _api.GetExchangeRatesAsync(cancellationToken))
             .Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= now)
-            .OrderByDescending(x => x.EffectiveAtUtc).ThenBy(x => x.FromCurrency == "USD" ? 0 : 1).FirstOrDefault();
+            .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+            .ThenByDescending(x => x.EffectiveAtUtc).FirstOrDefault();
         _usdToVesRate = current is null ? null : current.FromCurrency == "USD" ? current : current with { FromCurrency = "USD", ToCurrency = "VES", Rate = 1m / current.Rate };
         foreach (var line in CartLines) line.SetPricing(Currency, _usdToVesRate);
         OnPropertyChanged(nameof(CurrentUnitPrice)); OnPropertyChanged(nameof(CurrentPriceLabel)); OnPropertyChanged(nameof(ReferenceCurrentPriceLabel)); OnPropertyChanged(nameof(ReferenceTotalLabel)); RefreshTotals();

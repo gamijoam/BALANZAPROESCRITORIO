@@ -87,11 +87,13 @@ public sealed class SalesService(PosDbContext db)
         var needsConversion = products.Values.Any(x => x.Currency != currency) || request.Payments.Any(x => x.Currency != currency) || needsUsdReceivableRate;
         var appliedRate = needsConversion
             ? await db.ExchangeRates.Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= DateTime.UtcNow)
-                .OrderByDescending(x => x.EffectiveAtUtc).ThenBy(x => x.FromCurrency == "USD" ? 0 : 1).FirstOrDefaultAsync(cancellationToken)
+                .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+                .ThenByDescending(x => x.EffectiveAtUtc).FirstOrDefaultAsync(cancellationToken)
                 ?? throw new CheckoutRejectedException("exchange_rate_unavailable")
             : null;
         var referenceRate = appliedRate ?? await db.ExchangeRates.Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= DateTime.UtcNow)
-            .OrderByDescending(x => x.EffectiveAtUtc).ThenBy(x => x.FromCurrency == "USD" ? 0 : 1).FirstOrDefaultAsync(cancellationToken);
+            .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+            .ThenByDescending(x => x.EffectiveAtUtc).FirstOrDefaultAsync(cancellationToken);
         if (needsConversion && request.ExchangeRateId != appliedRate!.Id)
             throw new CheckoutRejectedException("exchange_rate_changed");
         var usdToVes = appliedRate is null ? 1m : appliedRate.FromCurrency == "USD" ? appliedRate.Rate : 1m / appliedRate.Rate;

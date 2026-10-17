@@ -77,8 +77,9 @@ public partial class ManagementWindow : Window
 
     private async void ManagementTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_managementReady && ReferenceEquals(sender, ManagementTabs) && ReferenceEquals(ManagementTabs.SelectedItem, LicenseTab))
-            await LoadLicenseStatusAsync();
+        if (!_managementReady || !ReferenceEquals(sender, ManagementTabs)) return;
+        if (ReferenceEquals(ManagementTabs.SelectedItem, LicenseTab)) await LoadLicenseStatusAsync();
+        else if (ReferenceEquals(ManagementTabs.SelectedItem, ModulesTab)) await LoadInstalledModulesAsync();
     }
 
     private async Task LoadLicenseStatusAsync()
@@ -311,7 +312,34 @@ public partial class ManagementWindow : Window
     }
 
     private static string Selected(ComboBox box) => (box.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? (box.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? string.Empty;
-    private async Task LoadRatesAsync() { try { RatesGrid.ItemsSource = await _viewModel.GetExchangeRatesAsync(); RateStatus.Text = "La tasa USD/VES vigente se aplica automáticamente a productos con moneda distinta a la caja."; } catch (Exception ex) { RateStatus.Text = PosUserMessage.ForException(ex); } }
+    private async Task LoadRatesAsync()
+    {
+        try
+        {
+            var rates = await _viewModel.GetExchangeRatesAsync();
+            RatesGrid.ItemsSource = rates;
+            var now = DateTime.UtcNow;
+            var current = rates
+                .Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= now && x.Rate > 0m)
+                .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+                .ThenByDescending(x => x.EffectiveAtUtc)
+                .FirstOrDefault();
+
+            if (current is null)
+            {
+                RateBox.Clear();
+                RateStatus.Text = "No hay una tasa activa. Indica cuántos VES equivalen a 1 USD.";
+                return;
+            }
+
+            var usdToVes = current.FromCurrency == "USD" ? current.Rate : 1m / current.Rate;
+            RateBox.Text = usdToVes.ToString("0.####", PosNumberFormat.Culture);
+            RateStatus.Text = current.FromCurrency == "USD"
+                ? $"Tasa activa: 1 USD = {PosNumberFormat.FormatAmount(usdToVes)} VES. Se aplica al convertir precios y pagos entre USD y VES."
+                : $"Tasa activa heredada: 1 USD = {PosNumberFormat.FormatAmount(usdToVes)} VES. Guarda una tasa nueva para registrarla en la dirección recomendada USD → VES.";
+        }
+        catch (Exception ex) { RateStatus.Text = PosUserMessage.ForException(ex); }
+    }
     private async Task LoadOperatorsAsync() { try { OperatorsGrid.ItemsSource = await _viewModel.GetOperatorsAsync(); OperatorStatus.Text = "Los cambios de rol se aplican a las sesiones activas."; } catch (Exception ex) { OperatorStatus.Text = PosUserMessage.ForException(ex); } }
     private async Task LoadAuditAsync() { try { AuditGrid.ItemsSource = await _viewModel.GetAuditAsync(); AuditStatus.Text = "Últimos 200 eventos. Solo roles autorizados pueden consultar."; } catch (Exception ex) { AuditStatus.Text = PosUserMessage.ForException(ex); } }
 
@@ -319,7 +347,8 @@ public partial class ManagementWindow : Window
     {
         if (!PosNumberFormat.TryParseAmount(RateBox.Text, out var rate) || rate <= 0m)
         { RateStatus.Text = "La tasa debe ser mayor que cero."; return; }
-        try { await _viewModel.SetExchangeRateAsync(Selected(FromCurrencyBox), Selected(ToCurrencyBox), rate, DateTime.UtcNow, RateSourceBox.Text.Trim()); RateStatus.Text = "Tasa guardada."; await LoadRatesAsync(); }
+        var source = string.IsNullOrWhiteSpace(RateSourceBox.Text) ? "Manual" : RateSourceBox.Text.Trim();
+        try { await _viewModel.SetExchangeRateAsync("USD", "VES", rate, DateTime.UtcNow, source); RateSourceBox.Clear(); await LoadRatesAsync(); }
         catch (Exception ex) { RateStatus.Text = PosUserMessage.ForException(ex); }
     }
 

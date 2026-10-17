@@ -1005,7 +1005,8 @@ internal static class Hito4Endpoints
     {
         var rate = await db.ExchangeRates.AsNoTracking()
             .Where(x => ((x.FromCurrency == "USD" && x.ToCurrency == "VES") || (x.FromCurrency == "VES" && x.ToCurrency == "USD")) && x.EffectiveAtUtc <= atUtc)
-            .OrderByDescending(x => x.EffectiveAtUtc).ThenBy(x => x.FromCurrency == "USD" ? 0 : 1)
+            .OrderBy(x => x.FromCurrency == "USD" && x.ToCurrency == "VES" ? 0 : 1)
+            .ThenByDescending(x => x.EffectiveAtUtc)
             .Select(x => new { x.FromCurrency, x.Rate }).FirstOrDefaultAsync(ct);
         if (rate is null || rate.Rate <= 0m) return null;
         return rate.FromCurrency == "USD" ? rate.Rate : 1m / rate.Rate;

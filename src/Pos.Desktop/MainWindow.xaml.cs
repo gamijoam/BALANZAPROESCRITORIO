@@ -72,14 +72,12 @@ public partial class MainWindow : Window
         if (sender is not FrameworkElement { Tag: string section }) return;
         switch (section)
         {
-            case "Venta": SaleTool_Click(sender, e); break;
             case "Historial": SalesHistoryTool_Click(sender, e); break;
             case "Caja": CashTool_Click(sender, e); break;
             case "Clientes": Customer_Click(sender, e); break;
             case "Inventario": InventoryTool_Click(sender, e); break;
             case "Sesion": OperatorSessionAction_Click(sender, e); break;
             case "Actualizar POS": UpdatePos_Click(sender, e); break;
-            case "Actualizar módulos": new ManagementWindow(_viewModel, "Módulos", _restartLocalServiceAsync) { Owner = this }.ShowDialog(); RefocusScanner(); break;
             default: ManagementTool_Click(sender, e); break;
         }
     }
@@ -546,7 +544,12 @@ public partial class MainWindow : Window
 
     private async void OperatorSessionAction_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.IsBusy) return;
+        if (_viewModel.IsBusy)
+        {
+            MessageBox.Show(this, "Espera a que termine la operación actual antes de cambiar de operador.",
+                "Operación en curso", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_viewModel.HasPendingCheckout)
         {
             MessageBox.Show(this, "Hay una venta pendiente de confirmar. Resuelve el resultado antes de cerrar la sesión.",
@@ -1101,13 +1104,6 @@ public partial class MainWindow : Window
         finally { RefocusScanner(); }
     }
 
-    private void SaleTool_Click(object sender, RoutedEventArgs e)
-    {
-        SearchBox.Focus();
-        SearchBox.SelectAll();
-        _viewModel.SetStatus("Venta actual. Escanea un código o escribe el nombre del producto.");
-    }
-
     private void SalesHistoryTool_Click(object sender, RoutedEventArgs e)
     {
         new SalesHistoryWindow(_viewModel, CreateReceiptPreviewWindow) { Owner = this }.ShowDialog();
@@ -1124,24 +1120,8 @@ public partial class MainWindow : Window
     {
         foreach (var item in _moduleMenuItems) ModulesPopup.Items.Remove(item);
         _moduleMenuItems.Clear();
-        ModuleMenuEmpty.Visibility = Visibility.Visible;
-        AdminModulesMenuItem.Visibility = Visibility.Collapsed;
-        AdminModulesMenuItem.Header = "Administrar módulos";
-        try
-        {
-            var managementAccess = await _apiClient.GetModuleManagementAccessAsync(cancellationToken);
-            if (managementAccess.CanOpenManagement)
-            {
-                AdminModulesMenuItem.Visibility = Visibility.Visible;
-                if (managementAccess.RequiresAdministratorPin)
-                    AdminModulesMenuItem.Header = "Administrar módulos (requiere PIN)";
-            }
-        }
-        catch (NotSupportedException) { }
-        catch (Exception exception)
-        {
-            _viewModel.SetStatus($"No se pudo consultar el acceso a módulos: {PosUserMessage.ForException(exception)}");
-        }
+        ModulesButton.Visibility = Visibility.Collapsed;
+        ReportsButton.Visibility = Visibility.Collapsed;
 
         foreach (var loaded in _desktopModules) loaded.LoadContext.Unload();
         _desktopModules.Clear();
@@ -1184,7 +1164,6 @@ public partial class MainWindow : Window
                 foreach (var menu in module.Registry.Menus)
                 {
                     if (!module.Context.GrantedPermissions.Contains(menu.RequiredPermission)) continue;
-                    ModuleMenuEmpty.Visibility = Visibility.Collapsed;
                     var menuItem = new MenuItem
                     {
                         Header = menu.Label,
@@ -1193,7 +1172,7 @@ public partial class MainWindow : Window
                     System.Windows.Automation.AutomationProperties.SetName(menuItem, menu.Label);
                     System.Windows.Automation.AutomationProperties.SetAutomationId(menuItem, $"Module_{module.ModuleId}_{menu.Id}");
                     menuItem.Click += ModuleMenu_Click;
-                    ModulesPopup.Items.Insert(1 + _moduleMenuItems.Count, menuItem);
+                    ModulesPopup.Items.Insert(_moduleMenuItems.Count, menuItem);
                     _moduleMenuItems.Add(menuItem);
                 }
             }
@@ -1203,6 +1182,12 @@ public partial class MainWindow : Window
                 allModulesLoaded = false;
             }
         }
+
+        ModulesButton.Visibility = _moduleMenuItems.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ReportsButton.Visibility = _desktopModules.Any(loaded => loaded.Registry.ReportCenter is { } center &&
+            loaded.Context.GrantedPermissions.Contains(center.RequiredPermission))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         return allModulesLoaded;
     }
 

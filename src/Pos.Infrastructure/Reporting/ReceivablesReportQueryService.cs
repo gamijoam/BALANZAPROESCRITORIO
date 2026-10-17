@@ -148,8 +148,8 @@ public sealed class ReceivablesReportQueryService(PosDbContext db)
         var rate = await db.ExchangeRates.AsNoTracking()
             .Where(row => ((row.FromCurrency == "USD" && row.ToCurrency == "VES") ||
                            (row.FromCurrency == "VES" && row.ToCurrency == "USD")) && row.EffectiveAtUtc <= atUtc)
-            .OrderByDescending(row => row.EffectiveAtUtc)
-            .ThenBy(row => row.FromCurrency == "USD" ? 0 : 1)
+            .OrderBy(row => row.FromCurrency == "USD" && row.ToCurrency == "VES" ? 0 : 1)
+            .ThenByDescending(row => row.EffectiveAtUtc)
             .Select(row => new { row.FromCurrency, row.Rate })
             .FirstOrDefaultAsync(cancellationToken);
         if (rate is null || rate.Rate <= 0m) return null;
