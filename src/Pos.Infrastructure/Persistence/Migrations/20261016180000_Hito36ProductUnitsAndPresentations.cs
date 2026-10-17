@@ -26,21 +26,21 @@ public partial class Hito36ProductUnitsAndPresentations : Migration
             },
             constraints: table => table.PrimaryKey("PK_product_units", x => x.Id));
 
-        var seededAt = new DateTime(2026, 10, 16, 0, 0, 0, DateTimeKind.Utc);
-        migrationBuilder.InsertData(
-            table: "product_units",
-            columns: new[] { "Id", "Name", "Abbreviation", "AllowsFractionalQuantities", "IsSystem", "Active", "CreatedAtUtc" },
-            values: new object[,]
-            {
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240001"), "Unidad", "ud", true, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240002"), "Par", "par", false, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240003"), "Caja", "caja", false, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240004"), "Docena", "doc", false, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240005"), "Kilogramo", "kg", true, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240006"), "Gramo", "g", true, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240007"), "Litro", "L", true, true, true, seededAt },
-                { new Guid("6ef79e43-cbf6-4d79-ae5b-ef5533240008"), "Metro", "m", true, true, true, seededAt }
-            });
+        // This hand-authored migration has no generated target-model designer.
+        // Seed with SQL so EF does not need entity-property mappings for InsertData.
+        migrationBuilder.Sql("""
+            INSERT INTO "product_units"
+                ("Id", "Name", "Abbreviation", "AllowsFractionalQuantities", "IsSystem", "Active", "CreatedAtUtc")
+            VALUES
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240001', 'Unidad', 'ud', TRUE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240002', 'Par', 'par', FALSE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240003', 'Caja', 'caja', FALSE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240004', 'Docena', 'doc', FALSE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240005', 'Kilogramo', 'kg', TRUE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240006', 'Gramo', 'g', TRUE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240007', 'Litro', 'L', TRUE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00'),
+                ('6ef79e43-cbf6-4d79-ae5b-ef5533240008', 'Metro', 'm', TRUE, TRUE, TRUE, TIMESTAMPTZ '2026-10-16 00:00:00+00');
+            """);
 
         migrationBuilder.CreateIndex(name: "IX_product_units_Name", table: "product_units", column: "Name", unique: true);
         migrationBuilder.CreateIndex(name: "IX_product_units_Abbreviation", table: "product_units", column: "Abbreviation", unique: true);
