@@ -38,7 +38,7 @@ Instalación/desinstalación de PostgreSQL, restauración destructiva en sitio, 
 ## Instalación y uso
 
 1. En la PC con PostgreSQL instalado y activo, extrae `local-pos-win-x64.zip`.
-2. Abre `Iniciar POS.cmd`. El inicio normal no requiere abrir PowerShell ni ejecutar scripts manualmente.
+2. Abre `Iniciar POS.vbs`. El inicio normal no muestra consola ni requiere ejecutar scripts manualmente.
 3. Si es la primera ejecución y no hay una conexión heredada de User Secrets, completa una sola vez la ventana de conexión PostgreSQL. La configuración se guarda cifrada para el usuario actual.
 4. El escritorio inicia o reutiliza el servidor local, espera a PostgreSQL y prepara las migraciones antes de mostrar el login. Si PostgreSQL no está disponible, inicia el servicio y elige **Sí** para volver a comprobarlo; no hace falta cerrar y abrir el POS.
 5. Solo si la base todavía no tiene un operador inicial, usa el flujo de configuración del operador incluido en `scripts`. Para la instalación opcional en el perfil de Windows, usa `scripts\Install-LocalPos.ps1 -PackageDirectory .`; agrega `-ScheduleDailyBackup` para programar respaldos a las 20:00 y conservar los últimos 14.

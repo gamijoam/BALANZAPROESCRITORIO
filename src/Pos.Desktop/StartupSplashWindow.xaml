@@ -26,12 +26,16 @@
                 <TextBlock Text="BALANZAPRO" Foreground="White" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Punto de venta" Foreground="#D7E3F2" FontSize="14" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
-            <Grid x:Name="LogoStage" Grid.Row="1" Width="250" Height="250" ClipToBounds="True" HorizontalAlignment="Center">
+            <Grid x:Name="LogoStage" Grid.Row="1" Width="250" Height="250" ClipToBounds="True" HorizontalAlignment="Center"
+                  RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <ScaleTransform x:Name="LogoScaleTransform" ScaleX="1" ScaleY="1"/>
+                </Grid.RenderTransform>
                 <Image x:Name="ScalePart" Width="250" Height="125" VerticalAlignment="Top" Stretch="Fill" Opacity="0">
-                    <Image.RenderTransform><TranslateTransform x:Name="ScaleTransform" Y="-150"/></Image.RenderTransform>
+                    <Image.RenderTransform><TranslateTransform x:Name="BalanceTranslateTransform" Y="-180"/></Image.RenderTransform>
                 </Image>
                 <Image x:Name="RegisterPart" Width="250" Height="125" VerticalAlignment="Bottom" Stretch="Fill" Opacity="0">
-                    <Image.RenderTransform><TranslateTransform x:Name="RegisterTransform" Y="150"/></Image.RenderTransform>
+                    <Image.RenderTransform><TranslateTransform x:Name="RegisterTranslateTransform" Y="180"/></Image.RenderTransform>
                 </Image>
             </Grid>
             <TextBlock x:Name="StartupStatus" Grid.Row="2" Text="Preparando el punto de venta…" Foreground="#D7E3F2"

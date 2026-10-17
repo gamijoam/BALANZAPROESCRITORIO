@@ -64,7 +64,7 @@ Para un VPS sin Traefik en Docker, desde una copia actualizada del repositorio e
 
 ## Confiar en la llave pública
 
-El paquete oficial de Windows descarga este anillo desde el endpoint HTTPS al prepararse. El ZIP incluye `trusted-license-keys.json`; al abrir `Iniciar POS.cmd`, se instala en la carpeta local de licencias. Al configurar el servicio, `Administrar servicio POS.cmd` también lo instala bajo `%ProgramData%` para que `BalanzaProPosServer` pueda leerlo. Así, la llave queda preparada antes de importar una licencia, incluso si la computadora del POS no tiene Internet.
+El paquete oficial de Windows descarga este anillo desde el endpoint HTTPS al prepararse. El ZIP incluye `trusted-license-keys.json`; al abrir `Iniciar POS.vbs`, se instala en la carpeta local de licencias. Al configurar el servicio, `Administrar servicio POS.cmd` también lo instala bajo `%ProgramData%` para que `BalanzaProPosServer` pueda leerlo. Así, la llave queda preparada antes de importar una licencia, incluso si la computadora del POS no tiene Internet.
 
 La llave pública no es secreta y es la misma para el comercio. Solo se instala en el servidor POS; las terminales cliente se conectan a ese servidor y no necesitan su propia copia. El archivo `.poslic` sí corresponde al ID de instalación y debe copiarse al POS por USB cuando se active sin Internet.
 

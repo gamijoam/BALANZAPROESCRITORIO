@@ -104,20 +104,6 @@ function Write-WindowsCommandFile {
     $windowsContent = $Content -replace "`r?`n", "`r`n"
     [IO.File]::WriteAllText($Path, $windowsContent, [Text.Encoding]::ASCII)
 }
-$launcherPath = Join-Path $packageDirectory 'Iniciar POS.cmd'
-$launcherContent = @'
-@echo off
-setlocal
-set "LAUNCHER=%~dp0Iniciar POS.vbs"
-if not exist "%LAUNCHER%" (
-  echo No se encontro la aplicacion del punto de venta.
-  pause
-  exit /b 1
-)
-start "" wscript.exe //B //NoLogo "%LAUNCHER%"
-exit /b 0
-'@
-Write-WindowsCommandFile -Path $launcherPath -Content $launcherContent
 $launcherVbsPath = Join-Path $packageDirectory 'Iniciar POS.vbs'
 $launcherVbsContent = @'
 Set fileSystem = CreateObject("Scripting.FileSystemObject")
