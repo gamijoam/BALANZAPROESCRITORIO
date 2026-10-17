@@ -51,6 +51,14 @@ if (-not (Test-Path $packageServer -PathType Leaf) -or -not (Test-Path $packageD
     -not (Test-Path (Join-Path $packageScripts 'Backup-LocalDatabase.ps1') -PathType Leaf)) {
     throw 'El paquete no está completo. Ejecuta primero Publish-LocalPos.ps1.'
 }
+$licenseKeyRingPath = Join-Path $package 'trusted-license-keys.json'
+$licenseTrustInstaller = Join-Path $packageScripts 'Install-PosLicenseTrustKeys.ps1'
+if (-not (Test-Path -LiteralPath $licenseKeyRingPath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $licenseTrustInstaller -PathType Leaf)) {
+    throw 'Este paquete no contiene la llave pública de licencias necesaria para activar el POS sin Internet. Descarga un paquete oficial reciente.'
+}
+& $licenseTrustInstaller -PublicKeyRingPath $licenseKeyRingPath -ValidateOnly
+if (-not $?) { throw 'La llave pública incluida en el paquete no pasó su validación.' }
 
 function Get-LocalPosServerProcessId {
     param([int]$Port = 5155, [string]$HealthUrl = 'http://127.0.0.1:5155/health/live', [string]$CertificateSha256)
