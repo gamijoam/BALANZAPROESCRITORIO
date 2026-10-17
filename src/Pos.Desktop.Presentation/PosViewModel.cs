@@ -137,6 +137,8 @@ public sealed class PosViewModel : INotifyPropertyChanged
             ? $"Caja abierta · {CashSession.Currency} · turno de {CashSession.OpenedByOperatorName}"
             : $"Caja abierta · en uso por {CashSession.ActiveOperatorName ?? "otro operador"}";
     public decimal Total => CartLines.Sum(x => x.LineTotal);
+    public decimal Subtotal => CartLines.Sum(x => x.Subtotal);
+    public decimal TaxTotal => CartLines.Sum(x => x.TaxAmount);
     public decimal ItemCount => CartLines.Sum(x => x.Quantity);
     public decimal CurrentUnitPrice => CurrentProduct is null ? 0m : ConvertPrice(CurrentProduct.UnitPrice, CurrentProduct.Currency, Currency, _usdToVesRate?.Rate);
     public string CurrentPriceLabel => $"{Currency} {CurrentUnitPrice:N2}";
@@ -1073,16 +1075,31 @@ public sealed class PosViewModel : INotifyPropertyChanged
         return _usdToVesRate;
     }
 
-    private void Increase(CartLineViewModel? line) { if (line is null || !CanEditCart) return; line.Quantity++; RefreshTotals(); }
+    private void Increase(CartLineViewModel? line)
+    {
+        if (line is null || !CanEditCart) return;
+        SelectedCartLine = line;
+        var otherInventoryQuantity = CartLines.Where(x => x.Product.Id == line.Product.Id && !ReferenceEquals(x, line))
+            .Sum(x => x.InventoryQuantity);
+        if (line.Product.StockQuantity is decimal stock &&
+            otherInventoryQuantity + line.InventoryQuantity + line.SaleUnit.ConversionFactor > stock)
+        {
+            StatusMessage = $"No hay existencia suficiente para agregar otra presentación de {line.Product.Name}.";
+            return;
+        }
+        line.Quantity++;
+        RefreshTotals();
+    }
     private void Decrease(CartLineViewModel? line)
     {
         if (line is null || !CanEditCart) return;
+        SelectedCartLine = line;
         if (line.Quantity <= 1)
         {
-            CartLines.Remove(line);
-            UpdatePreviewAfterRemoval(line);
+            StatusMessage = "La cantidad debe ser mayor que cero. Usa Quitar para retirar el artículo o Editar línea para cambiar una fracción.";
+            return;
         }
-        else line.Quantity--;
+        line.Quantity--;
         RefreshTotals();
     }
 
@@ -1091,7 +1108,7 @@ public sealed class PosViewModel : INotifyPropertyChanged
         if (CurrentProduct?.Id == removedLine.Product.Id)
             CurrentProduct = CartLines.LastOrDefault()?.Product;
     }
-    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanPauseSale)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); }
+    private void RefreshTotals() { OnPropertyChanged(nameof(Total)); OnPropertyChanged(nameof(Subtotal)); OnPropertyChanged(nameof(TaxTotal)); OnPropertyChanged(nameof(ReferenceTotalLabel)); OnPropertyChanged(nameof(ItemCount)); OnPropertyChanged(nameof(Currency)); OnPropertyChanged(nameof(CanCharge)); OnPropertyChanged(nameof(CanPauseSale)); OnPropertyChanged(nameof(CanUseSessionAction)); OnPropertyChanged(nameof(OperatorSessionActionToolTip)); NotifyChargeCommand(); }
 
     private void CartLines_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -1304,6 +1321,7 @@ public sealed class CartLineViewModel(ProductInfo product, decimal quantity, str
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineTotal)));
     }
     public decimal TaxRate => Product.TaxTreatment switch { "Taxable16" => 0.16m, "Taxable8" => 0.08m, _ => 0m };
-    public decimal TaxAmount => decimal.Round(decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero) * TaxRate, 2, MidpointRounding.AwayFromZero);
-    public decimal LineTotal => decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero) + TaxAmount;
+    public decimal Subtotal => decimal.Round(UnitPrice * Quantity, 2, MidpointRounding.AwayFromZero);
+    public decimal TaxAmount => decimal.Round(Subtotal * TaxRate, 2, MidpointRounding.AwayFromZero);
+    public decimal LineTotal => Subtotal + TaxAmount;
 }
