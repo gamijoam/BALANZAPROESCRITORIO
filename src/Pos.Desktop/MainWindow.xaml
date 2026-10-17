@@ -4,38 +4,62 @@
         xmlns:local="clr-namespace:Pos.Desktop"
         Title="BalanzaPro · Punto de venta" Language="es-VE"
         Icon="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro.ico"
-        Height="900" Width="1536" MinHeight="720" MinWidth="1180"
+        Height="900" Width="1536" MinHeight="500" MinWidth="800"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized" WindowStartupLocation="CenterScreen"
-        Background="#EEF2F7" PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded" Closing="Window_Closing">
+        Background="#F2F5F9" UseLayoutRounding="True"
+        PreviewKeyDown="Window_PreviewKeyDown" Loaded="Window_Loaded" Closing="Window_Closing" SizeChanged="Window_SizeChanged">
     <Window.Resources>
-        <SolidColorBrush x:Key="Navy" Color="#173F78"/>
-        <SolidColorBrush x:Key="Blue" Color="#2E64B7"/>
-        <SolidColorBrush x:Key="TextDark" Color="#172B45"/>
-        <Style x:Key="ToolButton" TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Background" Value="#214F91"/>
-            <Setter Property="FontSize" Value="14"/>
+        <SolidColorBrush x:Key="Pos.Navy" Color="#102D50"/>
+        <SolidColorBrush x:Key="Pos.Primary" Color="#0063CC"/>
+        <SolidColorBrush x:Key="Pos.PrimaryHover" Color="#0755A6"/>
+        <SolidColorBrush x:Key="Pos.Success" Color="#15803D"/>
+        <SolidColorBrush x:Key="Pos.SuccessHover" Color="#116B34"/>
+        <SolidColorBrush x:Key="Pos.Danger" Color="#B91C1C"/>
+        <SolidColorBrush x:Key="Pos.Background" Color="#F2F5F9"/>
+        <SolidColorBrush x:Key="Pos.Surface" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Pos.Text" Color="#132D4F"/>
+        <SolidColorBrush x:Key="Pos.TextMuted" Color="#475569"/>
+        <SolidColorBrush x:Key="Pos.Border" Color="#D5DFEB"/>
+        <SolidColorBrush x:Key="Pos.Selected" Color="#E6F1FF"/>
+
+        <Style x:Key="Pos.Button" TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="16"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding" Value="12,5"/>
-            <Setter Property="Margin" Value="0,2"/>
-            <Setter Property="MinHeight" Value="34"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource Pos.Text}"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Pos.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="MinHeight" Value="48"/>
+            <Setter Property="MinWidth" Value="48"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="ToolButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#3971C5"/></Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ToolButtonBorder" Property="BorderBrush" Value="#F3C969"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{StaticResource Pos.Primary}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="Opacity" Value="0.88"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{StaticResource Pos.Primary}"/>
+                                <Setter TargetName="ButtonSurface" Property="BorderThickness" Value="2"/>
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Background" Value="#435F83"/>
-                                <Setter Property="Foreground" Value="#D4DEED"/>
-                                <Setter Property="Opacity" Value="1"/>
+                                <Setter TargetName="ButtonSurface" Property="Background" Value="#E9EEF4"/>
+                                <Setter TargetName="ButtonSurface" Property="BorderBrush" Value="#CFD8E3"/>
+                                <Setter Property="Foreground" Value="#526174"/>
                                 <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -43,299 +67,615 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="ChargeButton" TargetType="Button">
-            <Setter Property="Background" Value="#D94D52"/>
+        <Style x:Key="Pos.HeaderButton" TargetType="Button" BasedOn="{StaticResource Pos.Button}">
+            <Setter Property="Background" Value="#174982"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ChargeBorder" Background="{TemplateBinding Background}" CornerRadius="7">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ChargeBorder" Property="Background" Value="#C83F45"/></Trigger>
-                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ChargeBorder" Property="Background" Value="#64758A"/><Setter Property="Foreground" Value="White"/></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="BorderBrush" Value="#2B5C95"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="MinHeight" Value="50"/>
+            <Setter Property="Padding" Value="16,8"/>
         </Style>
-        <Style x:Key="Card" TargetType="Border">
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="14"/>
-            <Setter Property="Margin" Value="5"/>
+        <Style x:Key="Pos.PrimaryButton" TargetType="Button" BasedOn="{StaticResource Pos.Button}">
+            <Setter Property="Background" Value="{StaticResource Pos.Primary}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Pos.Primary}"/>
+        </Style>
+        <Style x:Key="Pos.SuccessButton" TargetType="Button" BasedOn="{StaticResource Pos.Button}">
+            <Setter Property="Background" Value="{StaticResource Pos.Success}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Pos.Success}"/>
+        </Style>
+        <Style x:Key="Pos.DangerOutlineButton" TargetType="Button" BasedOn="{StaticResource Pos.Button}">
+            <Setter Property="Foreground" Value="{StaticResource Pos.Danger}"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#F0C8C8"/>
+        </Style>
+        <Style x:Key="Pos.MenuButton" TargetType="Button" BasedOn="{StaticResource Pos.Button}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="MinHeight" Value="44"/>
+            <Setter Property="Padding" Value="12,7"/>
         </Style>
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#152B45"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="{StaticResource Pos.Text}"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="10,12"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style TargetType="DataGridRow">
-            <Setter Property="MinHeight" Value="42"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#172B45"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Pos.Border}"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="BorderBrush" Value="#E5EAF1"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+        <Style x:Key="Pos.CartRow" TargetType="DataGridRow">
+            <Setter Property="MinHeight" Value="88"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource Pos.Text}"/>
+            <Setter Property="BorderBrush" Value="#E4EAF1"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Style.Triggers>
-                <Trigger Property="AlternationIndex" Value="1"><Setter Property="Background" Value="#F5F7FA"/></Trigger>
-                <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#DCE9FF"/><Setter Property="Foreground" Value="#173F78"/></Trigger>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#FBFCFE"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Pos.Selected}"/>
+                    <Setter Property="Foreground" Value="{StaticResource Pos.Text}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource Pos.Primary}"/>
+                    <Setter Property="BorderThickness" Value="4,0,0,1"/>
+                </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="Pos.CartCompactRow" TargetType="DataGridRow" BasedOn="{StaticResource Pos.CartRow}">
+            <Setter Property="MinHeight" Value="72"/>
+        </Style>
     </Window.Resources>
-    <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="104"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="46"/></Grid.RowDefinitions>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/><ColumnDefinition Width="220"/></Grid.ColumnDefinitions>
 
-        <Border Grid.Row="0" Grid.ColumnSpan="3" Background="#102B4D" Padding="16,12">
+    <Grid Background="{StaticResource Pos.Background}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="76"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="38"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Pos.Navy}" Padding="20,10">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="1.7*"/><ColumnDefinition Width="1.2*"/><ColumnDefinition Width="0.85*"/><ColumnDefinition Width="2.2*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="PUNTO DE VENTA" Foreground="White" FontSize="24" FontWeight="Bold"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
-                        <TextBlock x:Name="ClockLabel" Foreground="#C6D7EF" FontSize="13"/>
-                        <TextBlock Text="  ·  " Foreground="#718EAF"/>
-                        <TextBlock Text="LOCAL" Foreground="#A8E8C5" FontSize="13" FontWeight="Bold"/>
-                        <TextBlock Text="  ·  " Foreground="#718EAF"/>
-                        <TextBlock Text="{Binding CashStatus}" Foreground="#DDE8F6" FontSize="13"/>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="310"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Width="48" Height="48" Stretch="Uniform"
+                           Source="pack://application:,,,/Pos.Desktop;component/Assets/balanzapro-logo.png"
+                           AutomationProperties.Name="BalanzaPro"/>
+                    <Border Width="1" Height="42" Background="#55708F" Margin="12,0"/>
+                    <TextBlock Text="Punto de venta" Foreground="White" FontSize="24" FontWeight="Bold"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="12" Height="12" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="#D97706"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CashSession.IsActiveForCurrentOperator}" Value="True">
+                                            <Setter Property="Fill" Value="#22C55E"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CashSession}" Value="{x:Null}">
+                                            <Setter Property="Fill" Value="#EF4444"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Text="{Binding CashStatus}" Foreground="White" FontSize="16" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding CashStatus}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="22,3,0,0">
+                        <TextBlock Text="{Binding OperatorName}" Foreground="#D7E3F2" FontSize="13"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding OperatorName}"/>
+                        <TextBlock Text="  ·  LOCAL  ·  " Foreground="#AFC3DC" FontSize="13"/>
+                        <TextBlock x:Name="ClockLabel" Foreground="#AFC3DC" FontSize="13"/>
                     </StackPanel>
                 </StackPanel>
-                <Border Grid.Column="1" Background="#54B85D" CornerRadius="8" Padding="12,8" Margin="4">
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="PRECIO/U · REF" Foreground="#E8F7E9" FontSize="12" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding ReferenceCurrentPriceLabel}" Foreground="White" FontSize="25" FontWeight="Bold"/>
-                    </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Background="#E9AD27" CornerRadius="8" Padding="12,8" Margin="4">
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="ARTÍCULOS" Foreground="#FFF5D7" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{Binding ItemCount, StringFormat={}{0:0.###}}" Foreground="White" FontSize="27" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-                <Border x:Name="TotalCard" Grid.Column="3" Background="#E74D54" CornerRadius="8" Padding="14,6" Margin="4">
-                    <Grid VerticalAlignment="Center">
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Grid x:Name="TotalCardLabels" Grid.Row="0">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="TOTAL A PAGAR" Foreground="#FFE8E8" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{Binding ReferenceTotalLabel}" Foreground="#FFE8E8" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        </Grid>
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Currency}" Foreground="White" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="{Binding Total, StringFormat={}{0:N2}}" Foreground="White" FontSize="30" FontWeight="Bold" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-                <Button x:Name="ExitButton" Grid.Column="4" Content="Salir" Width="82" Height="54" Margin="8,0,0,0"
-                        Background="#B43B42" Foreground="White" FontSize="14" FontWeight="Bold"
-                        BorderThickness="0" Click="ExitButton_Click" ToolTip="Cerrar BalanzaPro"
-                        AutomationProperties.Name="Salir del punto de venta" AutomationProperties.AutomationId="ExitPos"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="PausedSalesButton" Style="{StaticResource Pos.HeaderButton}"
+                            Content="Ventas pausadas · F7" Click="PausedSales_Click"
+                            IsEnabled="{Binding CanViewPausedSales}"
+                            AutomationProperties.Name="Ver ventas pausadas, tecla F7"
+                            ToolTip="Ver, retomar o descartar ventas de esta terminal (F7)"/>
+                    <Button x:Name="MenuButton" Style="{StaticResource Pos.HeaderButton}" Margin="10,0,0,0"
+                            Content="☰  Menú" Click="MenuButton_Click"
+                            AutomationProperties.Name="Abrir menú de secciones"
+                            AutomationProperties.AutomationId="OpenPosMenu"/>
+                    <Button x:Name="ExitButton" Style="{StaticResource Pos.HeaderButton}" Margin="10,0,0,0"
+                            Content="Salir" Background="{StaticResource Pos.Danger}" BorderBrush="{StaticResource Pos.Danger}"
+                            Click="ExitButton_Click" ToolTip="Cerrar BalanzaPro"
+                            AutomationProperties.Name="Salir del punto de venta" AutomationProperties.AutomationId="ExitPos"/>
+                </StackPanel>
             </Grid>
         </Border>
 
-        <Border x:Name="LicenseNoticeBanner" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"
-                Background="#FFF4D6" BorderBrush="#E4BD59" BorderThickness="0,0,0,1" Padding="16,9">
+        <Border x:Name="LicenseNoticeBanner" Grid.Row="1" Visibility="Collapsed"
+                Background="#FFF4D6" BorderBrush="#E4BD59" BorderThickness="0,0,0,1" Padding="16,8">
             <TextBlock x:Name="LicenseNoticeText" Foreground="#654B12" FontSize="13" FontWeight="SemiBold"
                        TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite"/>
         </Border>
 
-        <Border x:Name="ProductPreviewPanel" Grid.Row="2" Grid.Column="0" Background="#2858A2" Padding="9">
-            <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="PRODUCTO" Foreground="#D4E1F5" FontSize="12" FontWeight="Bold" Margin="2,2,0,8"/>
-                <Border Grid.Row="1" Background="#214B8A" CornerRadius="8" ClipToBounds="True">
-                    <Grid>
-                        <Image x:Name="ProductPreviewImage" Stretch="Uniform" Visibility="Collapsed" Margin="5"/>
-                        <StackPanel x:Name="ProductPreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="9">
-                            <TextBlock Text="FOTO DEL PRODUCTO" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" TextAlignment="Center"/>
-                            <TextBlock Text="Al agregar un artículo aparecerá aquí su imagen" Foreground="White" FontSize="13" TextAlignment="Center" TextWrapping="Wrap" Margin="0,7,0,0"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-                <Border Grid.Row="2" Background="#173F78" CornerRadius="8" Padding="9,8" Margin="0,8,0,0">
-                    <StackPanel>
-                        <TextBlock x:Name="ProductPreviewName" Text="Sin producto seleccionado" Foreground="White" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Text, ElementName=ProductPreviewName}"/>
-                        <TextBlock x:Name="ProductPreviewSku" Foreground="#C6D7EF" FontSize="11" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Text, ElementName=ProductPreviewSku}" Margin="0,3,0,0"/>
-                        <TextBlock x:Name="ProductPreviewPrice" Foreground="White" FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
+        <Grid x:Name="MainBodyGrid" Grid.Row="2" Margin="16,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="SummaryGapColumn" Width="16"/>
+                <ColumnDefinition x:Name="SummaryColumn" Width="360"/>
+            </Grid.ColumnDefinitions>
 
-        <Grid Grid.Row="2" Grid.Column="1" Margin="12,10,10,10">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <Grid x:Name="SaleContextBar" Grid.Row="0" Margin="0,0,0,8">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="9,6" Margin="0,0,4,0">
+            <Grid x:Name="SaleWorkspaceGrid" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="76"/>
+                    <RowDefinition Height="64"/>
+                    <RowDefinition Height="42"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition x:Name="SelectedProductRow" Height="82"/>
+                    <RowDefinition Height="32"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource Pos.Border}" BorderThickness="1"
+                        CornerRadius="8" Padding="14,9" Margin="0,0,0,8">
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
-                            <TextBlock Text="F1 · CLIENTE" Foreground="#63758B" FontSize="11" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding SelectedCustomer.Name, TargetNullValue=Venta general, FallbackValue=Venta general}" Foreground="#173F78" FontSize="15" FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedCustomer.Name, TargetNullValue=Venta general}"/>
-                            <TextBlock Text="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado, FallbackValue=Sin cliente asignado}" Foreground="#63758B" FontSize="11"
-                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado}"/>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Border Background="#F0F4F8" CornerRadius="7" Width="44" Height="44" VerticalAlignment="Center">
+                            <Grid>
+                                <Ellipse Width="14" Height="14" Fill="#173F78" VerticalAlignment="Top" Margin="0,7,0,0"/>
+                                <Border Width="24" Height="12" CornerRadius="7,7,4,4" Background="#173F78"
+                                        VerticalAlignment="Bottom" Margin="0,0,0,6"/>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,12,0">
+                            <TextBlock Text="Cliente" Foreground="{StaticResource Pos.TextMuted}" FontSize="14"/>
+                            <TextBlock Text="{Binding SelectedCustomer.Name, TargetNullValue=Venta general, FallbackValue=Venta general}"
+                                       Foreground="{StaticResource Pos.Text}" FontSize="18" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding SelectedCustomer.Name, TargetNullValue=Venta general}"/>
+                            <TextBlock Text="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado, FallbackValue=Sin cliente asignado}"
+                                       Foreground="{StaticResource Pos.TextMuted}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding SelectedCustomer.DocumentNumber, TargetNullValue=Sin cliente asignado}"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Asignar / cambiar" Padding="8,5" Background="#214B8A" Foreground="White" BorderThickness="0"
-                                FontSize="12" FontWeight="SemiBold" Click="Customer_Click" ToolTip="Asignar un cliente a la venta (F1)"/>
+                        <Button Grid.Column="2" Style="{StaticResource Pos.PrimaryButton}" Content="Cambiar · F1"
+                                Click="Customer_Click" ToolTip="Asignar o cambiar el cliente (F1)"
+                                AutomationProperties.Name="Cambiar cliente, tecla F1"/>
                     </Grid>
                 </Border>
-                <Border Grid.Column="1" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="7" Padding="9,6" Margin="4,0,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center" Margin="0,0,8,0">
-                            <TextBlock Text="CAJERO · TURNO" Foreground="#63758B" FontSize="11" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding OperatorName}" Foreground="#173F78" FontSize="15" FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding OperatorName}"/>
-                            <TextBlock Text="{Binding CashStatus}" Foreground="#63758B" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding CashStatus}"/>
-                        </StackPanel>
-                        <Button Grid.Column="1" Style="{StaticResource ToolButton}" Content="{Binding OperatorSessionActionLabel}" IsEnabled="{Binding CanUseSessionAction}"
-                                Padding="8,5" Background="#214B8A" Foreground="White" BorderThickness="0" FontSize="12" FontWeight="SemiBold"
-                                HorizontalContentAlignment="Center" Margin="0" MinHeight="0"
-                                AutomationProperties.Name="Cambiar operador o cerrar sesión" ToolTipService.ShowOnDisabled="True"
-                                ToolTip="{Binding OperatorSessionActionToolTip}" Click="OperatorSessionAction_Click"/>
-                    </Grid>
-                </Border>
-            </Grid>
-            <Grid Grid.Row="1" Margin="0,0,0,8">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
-                <TextBox x:Name="SearchBox" Grid.Column="0" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchBox_KeyDown" Height="54" FontSize="22" Padding="14,8" VerticalContentAlignment="Center"
-                         BorderBrush="#8BA6C9" BorderThickness="2" ToolTip="Escanea un código o escribe el nombre y presiona Enter"/>
-                <Button Grid.Column="1" Content="Buscar" Margin="8,0,0,0" FontSize="17" FontWeight="Bold" Background="#2E64B7" Foreground="White" BorderThickness="0" Click="Search_Click"/>
-            </Grid>
-            <Border x:Name="CurrentProductSummary" Grid.Row="2" Margin="0,0,0,8" Padding="10,6" Background="White" BorderBrush="#D7DFEA" BorderThickness="1" CornerRadius="6">
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <Grid>
-                        <Grid x:Name="ProductSummaryDetails" Visibility="Collapsed">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="PRODUCTO AGREGADO" Foreground="#63758B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                            <TextBlock x:Name="ProductSummaryCode" Grid.Column="1" Foreground="#2858A2" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                            <TextBlock x:Name="ProductSummaryName" Grid.Column="2" Foreground="#172B45" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0"/>
-                            <TextBlock x:Name="ProductSummaryPrice" Grid.Column="3" Foreground="#173F78" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="166"/></Grid.ColumnDefinitions>
+                    <Border Grid.ColumnSpan="2" Background="White" BorderBrush="{StaticResource Pos.Primary}"
+                            BorderThickness="1.5" CornerRadius="8" Padding="10,4"/>
+                    <Grid Grid.Column="0" Margin="12,0,8,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Width="34" Height="30" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw">
+                            <Rectangle Width="3" Height="23" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="1,0,0,0"/>
+                            <Rectangle Width="2" Height="27" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="6,0,0,0"/>
+                            <Rectangle Width="4" Height="22" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="11,0,0,0"/>
+                            <Rectangle Width="2" Height="27" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="18,0,0,0"/>
+                            <Rectangle Width="3" Height="24" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="23,0,0,0"/>
+                            <Rectangle Width="2" Height="28" Fill="{StaticResource Pos.Navy}" HorizontalAlignment="Left" Margin="29,0,0,0"/>
                         </Grid>
-                        <TextBlock x:Name="CartWorkspaceStatusLabel" Text="{Binding CartWorkspaceStatus}" Foreground="#52667E" FontSize="12"
-                                   VerticalAlignment="Center" ToolTip="Estado del guardado del carrito en el servidor"/>
+                        <Grid Grid.Column="1">
+                            <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     KeyDown="SearchBox_KeyDown" FontSize="20" Padding="6,7" VerticalContentAlignment="Center"
+                                     BorderThickness="0" Background="Transparent" ToolTip="Escanea un código o escribe el nombre y presiona Enter"
+                                     AutomationProperties.Name="Escanear o buscar un producto"/>
+                            <TextBlock Text="Escanea un código o busca un producto" Foreground="#718096"
+                                       FontSize="18" VerticalAlignment="Center" Margin="10,0,0,0"
+                                       IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SearchText}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </Grid>
-                    <Button Grid.Column="1" Content="Pausar venta · F6" IsEnabled="{Binding CanPauseSale}" Click="PauseSale_Click"
-                            Padding="12,7" Margin="8,0,0,0" Background="#EAF1FB" Foreground="#214B8A" BorderBrush="#C7D7ED"
-                            FontWeight="SemiBold" ToolTip="Guardar esta venta y comenzar otra (F6)" AutomationProperties.Name="Pausar venta, tecla F6"/>
-                    <Button Grid.Column="2" Content="Ventas pausadas · F7" IsEnabled="{Binding CanViewPausedSales}" Click="PausedSales_Click"
-                            Padding="12,7" Margin="8,0,0,0" Background="#214B8A" Foreground="White" BorderThickness="0"
-                            FontWeight="SemiBold" ToolTip="Ver, retomar o descartar ventas de esta terminal (F7)" AutomationProperties.Name="Ver ventas pausadas, tecla F7"/>
-                    <Button x:Name="AcceptCartValuesButton" Grid.Column="3" Content="Aceptar valores actuales" Visibility="Collapsed" Click="AcceptCartValues_Click"
-                            Padding="12,7" Margin="8,0,0,0" Background="#FFF4D6" Foreground="#714C00" BorderBrush="#E8C66B"
-                            FontWeight="SemiBold" ToolTip="Confirma los precios, impuestos y moneda actuales antes de continuar"/>
+                    <Button x:Name="SearchButton" Grid.Column="1" Style="{StaticResource Pos.PrimaryButton}" Content="Buscar · F2"
+                            Click="Search_Click" AutomationProperties.Name="Buscar producto, tecla F2"/>
+                </Grid>
+
+                <Grid Grid.Row="2" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Productos de la venta" Foreground="{StaticResource Pos.Text}" FontSize="20"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Border Grid.Column="1" Background="#E8EEF5" CornerRadius="15" Padding="12,5" Margin="12,0,0,0">
+                        <TextBlock Text="{Binding CartLines.Count, StringFormat={}{0} líneas}" Foreground="{StaticResource Pos.Text}"
+                                   FontSize="14" FontWeight="SemiBold"/>
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="3" Background="White" BorderBrush="{StaticResource Pos.Border}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                    <Grid>
+                        <DataGrid x:Name="CartGrid" ItemsSource="{Binding CartLines}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" CanUserDeleteRows="False" CanUserResizeRows="False" CanUserReorderColumns="False"
+                                  IsReadOnly="False" HeadersVisibility="Column" GridLinesVisibility="None" AlternationCount="2"
+                                  Background="White" BorderThickness="0" SelectionMode="Single" SelectionUnit="FullRow"
+                                  SelectedItem="{Binding SelectedCartLine, Mode=TwoWay}" RowHeaderWidth="0" FontSize="15"
+                                  EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                                  RowStyle="{StaticResource Pos.CartRow}"
+                                  SelectionChanged="CartGrid_SelectionChanged" LoadingRow="CartGrid_LoadingRow"
+                                  AutomationProperties.Name="Artículos de la venta"
+                                  ToolTip="Usa + o − en la fila; F8 abre el editor de cantidad; Supr quita el artículo seleccionado.">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Producto" Width="*" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="4,4,10,4">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="60"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1"
+                                                        CornerRadius="7" Width="58" Height="58" ClipToBounds="True">
+                                                    <Grid>
+                                                        <TextBlock Text="IMG" Foreground="#718096" FontSize="11" FontWeight="Bold"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   AutomationProperties.AccessibilityView="Raw"/>
+                                                        <Image Stretch="Uniform" Margin="2" Tag="{Binding Product.Id}"
+                                                               AutomationProperties.AccessibilityView="Raw"/>
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Product.Name}" Foreground="{StaticResource Pos.Text}"
+                                                               FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" MaxHeight="42"
+                                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Product.Name}"/>
+                                                    <TextBlock Foreground="{StaticResource Pos.TextMuted}" FontSize="13" Margin="0,3,0,0"
+                                                               TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding Product.Sku}"/><Run Text="  ·  "/><Run Text="{Binding SaleUnitLabel}"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Precio unit." Width="128" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding SettlementCurrency}" Foreground="{StaticResource Pos.TextMuted}"
+                                                           FontSize="12" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding UnitPrice, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"
+                                                           FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Cantidad" Width="172" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Button Content="−" Width="42" Height="42" Padding="0" FontSize="24"
+                                                        Command="{Binding DataContext.DecreaseLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        AutomationProperties.Name="Disminuir cantidad"/>
+                                                <Border MinWidth="44" Height="42" Margin="5,0" BorderBrush="{StaticResource Pos.Border}"
+                                                        BorderThickness="1" CornerRadius="5" Background="White">
+                                                    <TextBlock Text="{Binding Quantity, StringFormat={}{0:0.###}}" Foreground="{StaticResource Pos.Text}"
+                                                               FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <Button Content="+" Width="42" Height="42" Padding="0" FontSize="22"
+                                                        Style="{StaticResource Pos.PrimaryButton}"
+                                                        Command="{Binding DataContext.IncreaseLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        AutomationProperties.Name="Aumentar cantidad"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Importe" Width="126" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding SettlementCurrency}" Foreground="{StaticResource Pos.TextMuted}"
+                                                           FontSize="12" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding LineTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"
+                                                           FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Acciones" Width="104" IsReadOnly="True">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Button Content="Editar" FontSize="12" MinWidth="56" MinHeight="42" Padding="6,4"
+                                                        Style="{StaticResource Pos.PrimaryButton}"
+                                                        IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        Click="EditCartLine_Click"
+                                                        AutomationProperties.Name="Editar la presentación, cantidad o precio de esta línea"/>
+                                                <Button Content="×" FontSize="23" Width="42" Height="42" Padding="0" Margin="4,0,0,0"
+                                                        Style="{StaticResource Pos.DangerOutlineButton}"
+                                                        IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        Click="RemoveCartLine_Click" AutomationProperties.Name="Quitar artículo de esta fila"
+                                                        ToolTip="Quitar este artículo del carrito."/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBlock Text="Escanea o busca un producto para comenzar" Foreground="{StaticResource Pos.TextMuted}"
+                                   FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CartLines.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="ProductPreviewPanel" Grid.Row="4" Background="White" BorderBrush="{StaticResource Pos.Border}"
+                        BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="#F1F5F9" BorderBrush="#DCE5EF" BorderThickness="1" CornerRadius="7"
+                                Width="60" Height="60" ClipToBounds="True">
+                            <Grid>
+                                <TextBlock x:Name="ProductPreviewPlaceholder" Text="IMG" Foreground="#718096" FontSize="11" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image x:Name="ProductPreviewImage" Stretch="Uniform" Margin="2" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
+                            <TextBlock Text="Producto seleccionado" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"/>
+                            <TextBlock x:Name="ProductPreviewName" Text="Selecciona un producto" Foreground="{StaticResource Pos.Text}"
+                                       FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Text, ElementName=ProductPreviewName}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ProductPreviewSku" Foreground="{StaticResource Pos.TextMuted}" FontSize="13"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, ElementName=ProductPreviewSku}"/>
+                                <TextBlock x:Name="ProductPreviewPrice" Foreground="{StaticResource Pos.Primary}" FontSize="15"
+                                           FontWeight="Bold" Margin="10,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="EditSelectedLineButton" Style="{StaticResource Pos.MenuButton}" Content="Editar línea"
+                                    Click="EditSelectedCartLine_Click" IsEnabled="{Binding CanEditSelectedLine}"
+                                    AutomationProperties.Name="Editar línea seleccionada"/>
+                            <Button x:Name="ChangeQuantityButton" Style="{StaticResource Pos.MenuButton}" Content="Cantidad · F8"
+                                    Margin="6,0,0,0" Click="ChangeSelectedQuantity_Click" IsEnabled="{Binding CanEditSelectedLine}"
+                                    AutomationProperties.Name="Cambiar cantidad de la línea seleccionada, tecla F8"/>
+                            <Button x:Name="RemoveSelectedLineButton" Style="{StaticResource Pos.DangerOutlineButton}" Content="Quitar · Supr"
+                                    Margin="6,0,0,0" Click="RemoveSelectedCartLine_Click" IsEnabled="{Binding CanEditSelectedLine}"
+                                    AutomationProperties.Name="Quitar la línea seleccionada, tecla Suprimir"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="5" Background="#EAF0F6" CornerRadius="6" Padding="10,4" Margin="0,6,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="CartWorkspaceStatusLabel" Text="{Binding CartWorkspaceStatus}"
+                                   Foreground="{StaticResource Pos.TextMuted}" FontSize="12" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" ToolTip="Estado del guardado del carrito en el servidor"/>
+                        <Button x:Name="AcceptCartValuesButton" Grid.Column="1" Content="Aceptar valores actuales"
+                                Visibility="Collapsed" Click="AcceptCartValues_Click" MinHeight="28" Padding="8,2"
+                                Background="#FFF4D6" Foreground="#714C00" BorderBrush="#E8C66B" FontSize="12"
+                                FontWeight="SemiBold" ToolTip="Confirma los precios, impuestos y moneda actuales antes de continuar"/>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="CompactSummaryPanel" Grid.Row="6" Background="White" BorderBrush="{StaticResource Pos.Border}"
+                        BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,8,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CartLines.Count, StringFormat={}{0} líneas en la venta}"
+                                       Foreground="{StaticResource Pos.TextMuted}" FontSize="13"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Currency}" Foreground="{StaticResource Pos.Text}" FontSize="17" FontWeight="Bold" Margin="0,0,7,0"/>
+                                <TextBlock Text="{Binding Total, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Navy}"
+                                           FontSize="30" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding ReferenceTotalLabel}" Foreground="{StaticResource Pos.TextMuted}"
+                                           FontSize="13" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Row="0" Grid.Column="1" Style="{StaticResource Pos.SuccessButton}" Content="Cobrar · F4"
+                                Command="{Binding ChargeCommand}" IsEnabled="{Binding CanCharge}" MinWidth="168" MinHeight="64"
+                                AutomationProperties.Name="Cobrar venta, tecla F4" AutomationProperties.AutomationId="ChargeSale"/>
+                        <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource Pos.Button}" Content="Pausar · F6"
+                                IsEnabled="{Binding CanPauseSale}" Click="PauseSale_Click" MinWidth="120" MinHeight="64" Margin="8,0,0,0"
+                                ToolTip="Guardar esta venta y comenzar otra (F6)" AutomationProperties.Name="Pausar venta, tecla F6"/>
+                        <Expander Grid.Row="1" Grid.ColumnSpan="3" Header="Ver subtotal e impuestos incluidos" FontSize="12"
+                                  Foreground="{StaticResource Pos.TextMuted}" HorizontalAlignment="Left" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Margin="4,4,0,0">
+                                <TextBlock Text="Subtotal: " Foreground="{StaticResource Pos.TextMuted}"/>
+                                <TextBlock Text="{Binding Currency}" Foreground="{StaticResource Pos.Text}"/>
+                                <TextBlock Text="  "/>
+                                <TextBlock Text="{Binding Subtotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"/>
+                                <TextBlock Text="   Impuestos: " Foreground="{StaticResource Pos.TextMuted}"/>
+                                <TextBlock Text="{Binding Currency}" Foreground="{StaticResource Pos.Text}"/>
+                                <TextBlock Text="  "/>
+                                <TextBlock Text="{Binding TaxTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"/>
+                            </StackPanel>
+                        </Expander>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border x:Name="WideSummaryPanel" Grid.Column="2" Background="White" BorderBrush="{StaticResource Pos.Border}"
+                    BorderThickness="1" CornerRadius="10" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="▤" Foreground="{StaticResource Pos.Primary}" FontSize="24" FontWeight="Bold" Margin="0,0,12,0"
+                                   AutomationProperties.AccessibilityView="Raw"/>
+                        <TextBlock Text="Resumen de venta" Foreground="{StaticResource Pos.Navy}" FontSize="23" FontWeight="Bold"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Text="{Binding CartLines.Count, StringFormat={}{0} líneas}"
+                               Foreground="{StaticResource Pos.TextMuted}" FontSize="16" Margin="0,8,0,20"/>
+                    <Grid Grid.Row="2" Margin="0,0,0,9">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Subtotal" Foreground="{StaticResource Pos.Text}" FontSize="16"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBlock Text="{Binding Currency}" Foreground="{StaticResource Pos.TextMuted}" FontSize="14" Margin="0,1,5,0"/>
+                            <TextBlock Text="{Binding Subtotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.Text}"
+                                       FontSize="16" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="3" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="Impuestos incluidos" Foreground="{StaticResource Pos.TextMuted}" FontSize="14"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBlock Text="{Binding Currency}" Foreground="{StaticResource Pos.TextMuted}" FontSize="13" Margin="0,1,5,0"/>
+                            <TextBlock Text="{Binding TaxTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource Pos.TextMuted}"
+                                       FontSize="14"/>
+                        </StackPanel>
+                    </Grid>
+                    <Border Grid.Row="4" Height="1" Background="{StaticResource Pos.Border}"/>
+                    <Border Grid.Row="5" Background="{StaticResource Pos.Navy}" CornerRadius="8" Padding="18,18" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="TOTAL A PAGAR" Foreground="#C8D9EE" FontSize="15" FontWeight="SemiBold"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,2" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Currency}" Foreground="White" FontSize="19" FontWeight="Bold"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding Total, StringFormat={}{0:N2}}" Foreground="White" FontSize="40"
+                                           FontWeight="Bold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ReferenceTotalLabel}" Foreground="#E0EAF5" FontSize="17" Margin="0,0,0,12"/>
+                            <Border Height="1" Background="#7590B0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Ellipse Width="18" Height="18" Fill="#69B7FF" VerticalAlignment="Top" Margin="0,2,9,0"/>
+                                <TextBlock Text="El total usa los precios y la tasa vigentes de esta venta."
+                                           Foreground="#E0EAF5" FontSize="13" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Button x:Name="WideChargeButton" Grid.Row="6" Style="{StaticResource Pos.SuccessButton}"
+                            Command="{Binding ChargeCommand}" IsEnabled="{Binding CanCharge}" MinHeight="78" Margin="0,0,0,10"
+                            AutomationProperties.Name="Cobrar venta, tecla F4" AutomationProperties.AutomationId="ChargeSaleWide">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="▣" FontSize="22" Margin="0,0,12,0" AutomationProperties.AccessibilityView="Raw"/>
+                            <StackPanel>
+                                <TextBlock Text="Cobrar venta · F4" FontSize="19" FontWeight="Bold"/>
+                                <TextBlock Text="Elegir forma de pago" FontSize="13"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Row="7" Style="{StaticResource Pos.Button}" Content="Pausar venta · F6"
+                            IsEnabled="{Binding CanPauseSale}" Click="PauseSale_Click" MinHeight="62"
+                            ToolTip="Guardar esta venta y comenzar otra (F6)" AutomationProperties.Name="Pausar venta, tecla F6"/>
+                    <TextBlock Grid.Row="8" Text="Elige una línea para editar su presentación, cantidad o precio."
+                               Foreground="{StaticResource Pos.TextMuted}" FontSize="13" TextWrapping="Wrap"
+                               VerticalAlignment="Bottom" Margin="0,18,0,0"/>
                 </Grid>
             </Border>
-            <DataGrid x:Name="CartGrid" Grid.Row="3" Margin="0,0,0,0" ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
-                      HeadersVisibility="Column" GridLinesVisibility="None" AlternationCount="2" Background="White" BorderBrush="#D7DFEA"
-                      SelectionMode="Single" SelectionUnit="FullRow" SelectedItem="{Binding SelectedCartLine, Mode=TwoWay}" RowHeaderWidth="0" FontSize="14"
-                      PreviewKeyDown="CartGrid_PreviewKeyDown" LoadingRow="CartGrid_LoadingRow" AutomationProperties.Name="Artículos de la venta"
-                      ToolTip="F8 va a la cantidad; flechas arriba/abajo cambian de artículo; Supr elimina la fila.">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Código" Binding="{Binding Product.Sku}" Width="105" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Descripción" Binding="{Binding DisplayName}" Width="*" IsReadOnly="True">
-                        <DataGridTextColumn.ElementStyle>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="TextWrapping" Value="Wrap"/>
-                                <Setter Property="MaxHeight" Value="36"/>
-                                <Setter Property="LineHeight" Value="18"/>
-                                <Setter Property="VerticalAlignment" Value="Center"/>
-                                <Setter Property="Margin" Value="6,2"/>
-                            </Style>
-                        </DataGridTextColumn.ElementStyle>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Precio unitario" Binding="{Binding UnitPrice, StringFormat={}{0:N2}}" Width="115" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Presentación" Binding="{Binding SaleUnitLabel}" Width="110" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Cantidad" Width="75" IsReadOnly="True">
-                        <DataGridTextColumn.Binding>
-                            <Binding Path="Quantity" UpdateSourceTrigger="LostFocus" StringFormat="{}{0:0.###}" ValidatesOnExceptions="True" NotifyOnValidationError="True">
-                                <Binding.ValidationRules>
-                                    <local:CartQuantityValidationRule/>
-                                </Binding.ValidationRules>
-                            </Binding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Total" Binding="{Binding LineTotal, StringFormat={}{0:N2}}" Width="95" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="Nivel" Binding="{Binding PriceTierLabel}" Width="95" IsReadOnly="True"/>
-                    <DataGridTemplateColumn Header="Acciones" Width="120" IsReadOnly="True">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="Editar" MinWidth="50" Height="30" Padding="3,2" Margin="0,0,3,0" Background="#2858A2" Foreground="White"
-                                            IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            Click="EditCartLine_Click" AutomationProperties.Name="Editar la presentación, cantidad o precio de esta línea"
-                                            ToolTip="Cambiar Unidad, Par, Cartón u otra forma de venta; también ajustar cantidad y precio."/>
-                                    <Button Content="Quitar" MinWidth="56" Height="30" Padding="3,2" Background="#A52F3B" Foreground="White"
-                                            IsEnabled="{Binding DataContext.CanEditCart, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            Click="RemoveCartLine_Click" AutomationProperties.Name="Eliminar artículo de esta fila"
-                                            ToolTip="Quitar este artículo del carrito."/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
         </Grid>
 
-        <Border x:Name="RightNavigationPanel" Grid.Row="2" Grid.Column="2" Background="#173F78" Padding="13">
+        <Border Grid.Row="3" Background="#E5ECF4" Padding="14,6">
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="SECCIONES" Foreground="#BFD2F0" FontSize="12" FontWeight="Bold" Margin="4,6,0,9"/>
-                <StackPanel Grid.Row="1">
-                    <Button Style="{StaticResource ToolButton}" Content="▣   _Venta" Click="SaleTool_Click" AutomationProperties.Name="Venta" AutomationProperties.AutomationId="NavigateSale"/>
-                    <Button Style="{StaticResource ToolButton}" Content="▤   _Historial de ventas" Click="SalesHistoryTool_Click" AutomationProperties.Name="Historial de ventas" AutomationProperties.AutomationId="NavigateSalesHistory"/>
-                    <Button Style="{StaticResource ToolButton}" Content="▤   _Caja" Click="CashTool_Click" AutomationProperties.Name="Caja" AutomationProperties.AutomationId="NavigateCash"/>
-                    <Button Style="{StaticResource ToolButton}" Content="♙   C_lientes" Click="Customer_Click" AutomationProperties.Name="Clientes" AutomationProperties.AutomationId="NavigateCustomers"/>
-                    <Button Style="{StaticResource ToolButton}" Content="▦   _Inventario" Click="InventoryTool_Click" AutomationProperties.Name="Inventario" AutomationProperties.AutomationId="NavigateInventory"/>
-                    <Button Style="{StaticResource ToolButton}" Content="＄   Precios y _tasa" Tag="Tasa" Click="ManagementTool_Click" AutomationProperties.Name="Precios y tasa" AutomationProperties.AutomationId="NavigateExchangeRate"/>
-                    <Button Style="{StaticResource ToolButton}" Content="◷   _Auditoría" Tag="Auditoría" Click="ManagementTool_Click" AutomationProperties.Name="Auditoría" AutomationProperties.AutomationId="NavigateAudit"/>
-                    <Button Style="{StaticResource ToolButton}" Content="▥   _Reportes" Tag="Reportes" Click="ManagementTool_Click" AutomationProperties.Name="Reportes" AutomationProperties.AutomationId="NavigateReports"/>
-                    <Button Style="{StaticResource ToolButton}" Content="⚙   _Operadores" Tag="Operadores" Click="ManagementTool_Click" AutomationProperties.Name="Operadores" AutomationProperties.AutomationId="NavigateOperators"/>
-                    <Button x:Name="ModulesButton" Style="{StaticResource ToolButton}" Content="▣   _Módulos" Click="ModulesButton_Click" AutomationProperties.Name="Módulos y extensiones" AutomationProperties.AutomationId="NavigateModules" ToolTip="Abre las funciones de módulos instalados">
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="ModulesPopup" Placement="Left" StaysOpen="False" HasDropShadow="True"
-                                         Opened="ModulesPopup_Opened" PreviewKeyDown="ModulesPopup_PreviewKeyDown"
-                                         AutomationProperties.Name="Accesos de módulos">
-                                <ContextMenu.Resources>
-                                    <Style TargetType="MenuItem">
-                                        <Setter Property="FontSize" Value="14"/>
-                                        <Setter Property="Padding" Value="14,8"/>
-                                        <Setter Property="Foreground" Value="#172B45"/>
-                                        <Setter Property="MinWidth" Value="210"/>
-                                    </Style>
-                                </ContextMenu.Resources>
-                                <MenuItem x:Name="ModuleMenuEmpty" Header="No hay módulos disponibles" IsEnabled="False"/>
-                                <Separator/>
-                                <MenuItem x:Name="AdminModulesMenuItem" Header="Administrar módulos" Tag="Módulos"
-                                          Visibility="Collapsed" Click="ManagementTool_Click"
-                                          AutomationProperties.Name="Administrar módulos" AutomationProperties.AutomationId="ManageModules"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Fill="#16A34A" Margin="0,0,9,0"/>
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#344B67" FontSize="13"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMessage}"/>
                 </StackPanel>
-                    <Button Grid.Row="2" Style="{StaticResource ChargeButton}" Command="{Binding ChargeCommand}" Height="72" MinWidth="0" HorizontalAlignment="Stretch" Margin="0,12,0,2" ToolTip="Abre los medios de pago para confirmar la venta" AutomationProperties.Name="Cobrar venta. Atajo F4" AutomationProperties.AutomationId="ChargeSale">
-                        <StackPanel HorizontalAlignment="Center">
-                            <TextBlock Text="Cobrar venta" FontSize="19" FontWeight="Bold" HorizontalAlignment="Center"/>
-                            <TextBlock Text="F4 · elegir forma de pago" FontSize="12" HorizontalAlignment="Center" Margin="0,3,0,0"/>
-                        </StackPanel>
-                    </Button>
+                <TextBlock x:Name="ShortcutHints" Grid.Column="1"
+                           Text="F1 Cliente   ·   F2 Buscar   ·   F4 Cobrar   ·   F6 Pausar   ·   F8 Cantidad   ·   F12 Caja"
+                           Foreground="#344B67" FontSize="12" VerticalAlignment="Center" TextAlignment="Right"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="F1 cliente; F2 buscar o escanear; F4 cobrar; F6 pausar; F8 cantidad; flechas arriba/abajo cambiar artículo; Supr quitar artículo; F12 caja."/>
             </Grid>
         </Border>
 
-        <Border Grid.Row="3" Grid.ColumnSpan="3" Background="#DCE4EF" Padding="12,7">
-            <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Foreground="#344B67" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMessage}"/>
-                <TextBlock Grid.Column="1" Text="F1 Cliente   ·   F2 Buscar / escanear   ·   F4 Cobrar venta   ·   F8 Editar cantidad   ·   ↑/↓ Artículo   ·   Supr Quitar   ·   F12 Caja"
-                           Foreground="#344B67" FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis"
-                           ToolTip="Atajos: F1 cliente; F2 buscar/escanear; F4 cobrar; F8 editar cantidad en el carrito; flechas arriba/abajo cambiar artículo; Supr quitar artículo; F12 caja."/>
-            </Grid>
-        </Border>
+        <Popup x:Name="MainMenuPopup" PlacementTarget="{Binding ElementName=MenuButton}" Placement="Bottom"
+               HorizontalOffset="-250" VerticalOffset="8" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Width="360" Background="White" BorderBrush="{StaticResource Pos.Border}" BorderThickness="1"
+                    CornerRadius="9" Padding="14">
+                <ScrollViewer MaxHeight="620" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="OPERACIÓN" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                   FontWeight="Bold" Margin="2,0,0,6"/>
+                        <UniformGrid Columns="2">
+                            <Button x:Name="FirstNavigationButton" Style="{StaticResource Pos.MenuButton}" Content="Venta"
+                                    Tag="Venta" Click="NavigationMenu_Click" AutomationProperties.Name="Venta" AutomationProperties.AutomationId="NavigateSale"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Historial de ventas"
+                                    Tag="Historial" Click="NavigationMenu_Click" AutomationProperties.Name="Historial de ventas" AutomationProperties.AutomationId="NavigateSalesHistory"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Caja · F12"
+                                    Tag="Caja" Click="NavigationMenu_Click" AutomationProperties.Name="Caja" AutomationProperties.AutomationId="NavigateCash"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Clientes"
+                                    Tag="Clientes" Click="NavigationMenu_Click" AutomationProperties.Name="Clientes" AutomationProperties.AutomationId="NavigateCustomers"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="{Binding OperatorSessionActionLabel}"
+                                    Tag="Sesion" Click="NavigationMenu_Click" IsEnabled="{Binding CanUseSessionAction}"
+                                    ToolTip="{Binding OperatorSessionActionToolTip}"
+                                    AutomationProperties.Name="{Binding OperatorSessionActionLabel}" AutomationProperties.AutomationId="OperatorSessionAction"/>
+                        </UniformGrid>
+                        <TextBlock Text="PRODUCTOS" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                   FontWeight="Bold" Margin="2,12,0,6"/>
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Inventario"
+                                    Tag="Inventario" Click="NavigationMenu_Click" AutomationProperties.Name="Inventario" AutomationProperties.AutomationId="NavigateInventory"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Precios y tasa"
+                                    Tag="Tasa" Click="NavigationMenu_Click" AutomationProperties.Name="Precios y tasa" AutomationProperties.AutomationId="NavigateExchangeRate"/>
+                        </UniformGrid>
+                        <TextBlock Text="ADMINISTRACIÓN" Foreground="{StaticResource Pos.TextMuted}" FontSize="12"
+                                   FontWeight="Bold" Margin="2,12,0,6"/>
+                        <UniformGrid Columns="2">
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Auditoría"
+                                    Tag="Auditoría" Click="NavigationMenu_Click" AutomationProperties.Name="Auditoría" AutomationProperties.AutomationId="NavigateAudit"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Reportes"
+                                    Tag="Reportes" Click="NavigationMenu_Click" AutomationProperties.Name="Reportes" AutomationProperties.AutomationId="NavigateReports"/>
+                            <Button Style="{StaticResource Pos.MenuButton}" Content="Operadores"
+                                    Tag="Operadores" Click="NavigationMenu_Click" AutomationProperties.Name="Operadores" AutomationProperties.AutomationId="NavigateOperators"/>
+                            <Button x:Name="ModulesButton" Style="{StaticResource Pos.MenuButton}" Content="Módulos y extensiones"
+                                    Click="ModulesButton_Click" AutomationProperties.Name="Módulos y extensiones"
+                                    AutomationProperties.AutomationId="NavigateModules" ToolTip="Abre las funciones de módulos instalados">
+                                <Button.ContextMenu>
+                                    <ContextMenu x:Name="ModulesPopup" Placement="Bottom" StaysOpen="False" HasDropShadow="True"
+                                                 Opened="ModulesPopup_Opened" PreviewKeyDown="ModulesPopup_PreviewKeyDown"
+                                                 AutomationProperties.Name="Accesos de módulos">
+                                        <ContextMenu.Resources>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="FontSize" Value="14"/>
+                                                <Setter Property="Padding" Value="14,8"/>
+                                                <Setter Property="Foreground" Value="#172B45"/>
+                                                <Setter Property="MinWidth" Value="220"/>
+                                            </Style>
+                                        </ContextMenu.Resources>
+                                        <MenuItem x:Name="ModuleMenuEmpty" Header="No hay módulos disponibles" IsEnabled="False"/>
+                                        <Separator/>
+                                        <MenuItem x:Name="AdminModulesMenuItem" Header="Administrar módulos" Tag="Módulos"
+                                                  Visibility="Collapsed" Click="ManagementTool_Click"
+                                                  AutomationProperties.Name="Administrar módulos" AutomationProperties.AutomationId="ManageModules"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                        </UniformGrid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

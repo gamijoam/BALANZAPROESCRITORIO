@@ -23,6 +23,8 @@ public partial class MainWindow : Window
     private bool _licenseAccessBlocked;
     private readonly List<LoadedDesktopModule> _desktopModules = [];
     private readonly List<MenuItem> _moduleMenuItems = [];
+    private readonly Dictionary<Guid, ImageSource?> _productImageCache = [];
+    private readonly HashSet<Guid> _productImageLoadsInProgress = [];
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _licenseNoticeTimer = new() { Interval = TimeSpan.FromMinutes(5) };
     private bool _licenseNoticeRefreshInProgress;
@@ -39,6 +41,7 @@ public partial class MainWindow : Window
         _restartLocalServiceAsync = restartLocalServiceAsync;
         _stopsLocalServerOnExit = stopsLocalServerOnExit;
         DataContext = viewModel;
+        MainMenuPopup.DataContext = viewModel;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         _viewModel.ChargeRequested += ChargeRequested;
         _clock.Tick += (_, _) => ClockLabel.Text = DateTime.Now.ToString("dd/MM/yyyy  HH:mm:ss");
@@ -49,6 +52,57 @@ public partial class MainWindow : Window
     }
 
     private void ExitButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void MenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        MainMenuPopup.PlacementTarget = MenuButton;
+        MainMenuPopup.IsOpen = !MainMenuPopup.IsOpen;
+        if (MainMenuPopup.IsOpen)
+            Dispatcher.BeginInvoke(() => FirstNavigationButton.Focus(), DispatcherPriority.Input);
+    }
+
+    private void NavigationMenu_Click(object sender, RoutedEventArgs e)
+    {
+        MainMenuPopup.IsOpen = false;
+        if (sender is not FrameworkElement { Tag: string section }) return;
+        switch (section)
+        {
+            case "Venta": SaleTool_Click(sender, e); break;
+            case "Historial": SalesHistoryTool_Click(sender, e); break;
+            case "Caja": CashTool_Click(sender, e); break;
+            case "Clientes": Customer_Click(sender, e); break;
+            case "Inventario": InventoryTool_Click(sender, e); break;
+            case "Sesion": OperatorSessionAction_Click(sender, e); break;
+            default: ManagementTool_Click(sender, e); break;
+        }
+    }
+
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyResponsiveLayout();
+
+    private void ApplyResponsiveLayout()
+    {
+        var isWide = ActualWidth >= 1200;
+        var isCompact = ActualWidth < 960;
+        SummaryColumn.Width = isWide ? new GridLength(360) : new GridLength(0);
+        SummaryGapColumn.Width = isWide ? new GridLength(16) : new GridLength(0);
+        WideSummaryPanel.Visibility = isWide ? Visibility.Visible : Visibility.Collapsed;
+        CompactSummaryPanel.Visibility = isWide ? Visibility.Collapsed : Visibility.Visible;
+
+        SearchBox.FontSize = isCompact ? 18 : 20;
+        SearchButton.Content = isCompact ? "Buscar" : "Buscar · F2";
+        PausedSalesButton.Content = isCompact ? "Pausadas · F7" : "Ventas pausadas · F7";
+        MenuButton.Content = isCompact ? "☰" : "☰  Menú";
+        EditSelectedLineButton.Content = isCompact ? "Editar" : "Editar línea";
+        ChangeQuantityButton.Content = isCompact ? "Cantidad · F8" : "Cambiar cantidad · F8";
+        CartGrid.RowStyle = (Style)FindResource(isCompact ? "Pos.CartCompactRow" : "Pos.CartRow");
+
+        var hideProductDetails = ActualHeight < 650;
+        SelectedProductRow.Height = hideProductDetails ? new GridLength(0) : new GridLength(isCompact ? 74 : 82);
+        ProductPreviewPanel.Visibility = hideProductDetails ? Visibility.Collapsed : Visibility.Visible;
+        ShortcutHints.Text = isCompact
+            ? "F1 Cliente · F2 Buscar · F4 Cobrar · F6 Pausar · F8 Cantidad · F12 Caja"
+            : "F1 Cliente   ·   F2 Buscar   ·   F4 Cobrar   ·   F6 Pausar   ·   F8 Cantidad   ·   F12 Caja";
+    }
 
     private async void PauseSale_Click(object sender, RoutedEventArgs e)
     {
@@ -176,14 +230,8 @@ public partial class MainWindow : Window
         _exitConfirmed = true;
     }
 
-    private async void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PosViewModel.CurrentPriceLabel))
-        {
-            ProductPreviewPrice.Text = _viewModel.CurrentProduct is null ? string.Empty : _viewModel.CurrentPriceLabel;
-            ProductSummaryPrice.Text = _viewModel.CurrentProduct is null ? string.Empty : _viewModel.CurrentPriceLabel;
-            return;
-        }
         if (e.PropertyName == nameof(PosViewModel.RequiresCartPriceConfirmation))
         {
             AcceptCartValuesButton.Visibility = _viewModel.RequiresCartPriceConfirmation ? Visibility.Visible : Visibility.Collapsed;
@@ -194,44 +242,123 @@ public partial class MainWindow : Window
             CartWorkspaceStatusLabel.ToolTip = _viewModel.CartWorkspaceStatus;
             return;
         }
+        if (e.PropertyName == nameof(PosViewModel.SelectedCartLine) || e.PropertyName == nameof(PosViewModel.CurrentPriceLabel))
+        {
+            UpdateSelectedProductPreview(_viewModel.SelectedCartLine);
+            return;
+        }
         if (e.PropertyName != nameof(PosViewModel.CurrentProduct)) return;
         var product = _viewModel.CurrentProduct;
-        ProductPreviewName.Text = product?.Name ?? "Sin producto seleccionado";
-        ProductPreviewSku.Text = product is null ? string.Empty : $"Código: {product.Sku}";
-        ProductPreviewPrice.Text = product is null ? string.Empty : _viewModel.CurrentPriceLabel;
-        ProductSummaryCode.Text = product?.Sku ?? string.Empty;
-        ProductSummaryName.Text = product?.Name ?? string.Empty;
-        ProductSummaryPrice.Text = product is null ? string.Empty : _viewModel.CurrentPriceLabel;
-        ProductSummaryDetails.Visibility = product is null ? Visibility.Collapsed : Visibility.Visible;
-        CartWorkspaceStatusLabel.Visibility = product is null ? Visibility.Visible : Visibility.Collapsed;
         if (product is not null)
         {
             var selectedLine = _viewModel.CartLines.LastOrDefault(x => x.Product.Id == product.Id);
             if (selectedLine is not null)
             {
+                _viewModel.SelectedCartLine = selectedLine;
                 CartGrid.SelectedItem = selectedLine;
                 CartGrid.ScrollIntoView(selectedLine);
+                return;
             }
         }
+        UpdateSelectedProductPreview(_viewModel.SelectedCartLine);
+    }
+
+    private void CartGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (CartGrid.SelectedItem is not CartLineViewModel line) return;
+        _viewModel.SelectedCartLine = line;
+        UpdateSelectedProductPreview(line);
+    }
+
+    private void UpdateSelectedProductPreview(CartLineViewModel? line)
+    {
+        ProductPreviewName.Text = line?.Product.Name ?? "Selecciona un producto";
+        ProductPreviewSku.Text = line is null ? string.Empty : $"{line.Product.Sku}  ·  {line.SaleUnit.Label}  ·  {line.PriceTierLabel}";
+        ProductPreviewPrice.Text = line is null ? string.Empty : $"{line.SettlementCurrency} {line.UnitPrice:N2}";
         ProductPreviewImage.Source = null;
-        ProductPreviewImage.Visibility = Visibility.Collapsed;
-        ProductPreviewPlaceholder.Visibility = Visibility.Visible;
-        if (product is null || !product.HasImage) return;
+        ProductPreviewImage.Tag = line?.Product.Id;
+        SetProductImageVisibility(ProductPreviewImage, false);
+        if (line?.Product.HasImage == true) _ = LoadProductImageAsync(line.Product.Id);
+    }
+
+    private async Task LoadProductImageAsync(Guid productId)
+    {
+        if (_productImageCache.ContainsKey(productId))
+        {
+            ApplyCachedProductImage(productId);
+            return;
+        }
+        if (!_productImageLoadsInProgress.Add(productId)) return;
+
         try
         {
-            var bytes = await _viewModel.GetProductImageAsync(product.Id);
-            if (bytes is null || _viewModel.CurrentProduct?.Id != product.Id) return;
-            using var stream = new MemoryStream(bytes);
-            var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.StreamSource = stream; image.EndInit(); image.Freeze();
-            ProductPreviewImage.Source = image;
-            ProductPreviewImage.Visibility = Visibility.Visible;
-            ProductPreviewPlaceholder.Visibility = Visibility.Collapsed;
+            var bytes = await _viewModel.GetProductImageAsync(productId);
+            if (bytes is null || bytes.Length == 0)
+            {
+                _productImageCache[productId] = null;
+            }
+            else
+            {
+                using var stream = new MemoryStream(bytes);
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.DecodePixelWidth = 128;
+                image.StreamSource = stream;
+                image.EndInit();
+                image.Freeze();
+                _productImageCache[productId] = image;
+            }
         }
-        catch (Exception) { /* La venta sigue disponible si una foto no se puede cargar. */ }
+        catch (Exception)
+        {
+            // Una foto no debe bloquear la búsqueda ni la venta.
+            _productImageCache[productId] = null;
+        }
+        finally { _productImageLoadsInProgress.Remove(productId); }
+
+        ApplyCachedProductImage(productId);
+    }
+
+    private void ApplyCachedProductImage(Guid productId)
+    {
+        if (!_productImageCache.TryGetValue(productId, out var source)) return;
+        if (ProductPreviewImage.Tag is Guid previewId && previewId == productId)
+        {
+            ProductPreviewImage.Source = source;
+            SetProductImageVisibility(ProductPreviewImage, source is not null);
+        }
+        foreach (var image in FindVisualChildren<Image>(CartGrid))
+        {
+            if (image.Tag is not Guid imageId || imageId != productId) continue;
+            image.Source = source;
+            SetProductImageVisibility(image, source is not null);
+        }
+    }
+
+    private static void SetProductImageVisibility(Image image, bool hasImage)
+    {
+        image.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
+        if (image.Parent is not Grid parent) return;
+        foreach (var placeholder in parent.Children.OfType<TextBlock>())
+            placeholder.Visibility = hasImage ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void LoadCartRowImage(DataGridRow row)
+    {
+        if (row.Item is not CartLineViewModel line) return;
+        var image = FindVisualChild<Image>(row);
+        if (image is null) return;
+        image.Tag = line.Product.Id;
+        image.Source = null;
+        SetProductImageVisibility(image, false);
+        if (line.Product.HasImage) await LoadProductImageAsync(line.Product.Id);
+        System.Windows.Automation.AutomationProperties.SetName(image, $"Imagen de {line.Product.Name}");
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        ApplyResponsiveLayout();
         if (!await SignInAndLoadAsync()) Close();
     }
 
@@ -544,6 +671,18 @@ public partial class MainWindow : Window
     private async void EditCartLine_Click(object sender, RoutedEventArgs e)
     {
         if (!_viewModel.CanEditCart || (sender as FrameworkElement)?.DataContext is not CartLineViewModel line) return;
+        await EditCartLineAsync(line);
+    }
+
+    private async void EditSelectedCartLine_Click(object sender, RoutedEventArgs e)
+    {
+        var line = _viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel;
+        if (!_viewModel.CanEditCart || line is null) return;
+        await EditCartLineAsync(line);
+    }
+
+    private async Task EditCartLineAsync(CartLineViewModel line)
+    {
         if (line.AvailableSaleUnits.Count <= 1)
         {
             try { await _viewModel.RefreshCartLineSaleUnitsAsync(line); }
@@ -552,17 +691,31 @@ public partial class MainWindow : Window
         var dialog = new CartLineEditWindow(line) { Owner = this };
         if (dialog.ShowDialog() == true)
         {
-            if (ReferenceEquals(dialog.SaleUnit, line.SaleUnit))
-                _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
-            else
-                _viewModel.EditCartLine(line, dialog.SaleUnit, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+            var updated = ReferenceEquals(dialog.SaleUnit, line.SaleUnit)
+                ? _viewModel.EditCartLine(line, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason)
+                : _viewModel.EditCartLine(line, dialog.SaleUnit, dialog.Quantity, dialog.PriceTier, dialog.UnitPriceOverride, dialog.PriceOverrideReason);
+            if (updated)
+            {
+                _viewModel.SelectedCartLine = line;
+                CartGrid.SelectedItem = line;
+                UpdateSelectedProductPreview(line);
+            }
         }
         RefocusScanner();
     }
 
+    private void ChangeSelectedQuantity_Click(object sender, RoutedEventArgs e)
+        => FocusCartQuantity(_viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel);
+
+    private void RemoveSelectedCartLine_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.CanEditCart) _viewModel.RemoveProduct(_viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel);
+    }
+
     private void ModulesButton_Click(object sender, RoutedEventArgs e)
     {
-        ModulesPopup.PlacementTarget = ModulesButton;
+        MainMenuPopup.IsOpen = false;
+        ModulesPopup.PlacementTarget = MenuButton;
         ModulesPopup.IsOpen = !ModulesPopup.IsOpen;
     }
 
@@ -577,12 +730,19 @@ public partial class MainWindow : Window
         if (e.Key != Key.Escape) return;
         e.Handled = true;
         ModulesPopup.IsOpen = false;
-        ModulesButton.Focus();
+        MenuButton.Focus();
     }
 
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if (e.Key == Key.Escape && MainMenuPopup.IsOpen)
+        {
+            e.Handled = true;
+            MainMenuPopup.IsOpen = false;
+            MenuButton.Focus();
+            return;
+        }
         switch (e.Key)
         {
             case Key.F1:
@@ -610,7 +770,7 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 FocusCartQuantity(_viewModel.SelectedCartLine ?? CartGrid.SelectedItem as CartLineViewModel);
                 break;
-            case Key.Delete when CartGrid.IsKeyboardFocusWithin && !IsCartCellEditing:
+            case Key.Delete when CartGrid.IsKeyboardFocusWithin:
                 e.Handled = true;
                 if (CartGrid.SelectedItem is CartLineViewModel line && _viewModel.CanEditCart) _viewModel.RemoveProduct(line);
                 break;
@@ -622,64 +782,34 @@ public partial class MainWindow : Window
         }
     }
 
-    private void CartGrid_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if ((e.Key is Key.Up or Key.Down) && IsCartCellEditing)
-        {
-            e.Handled = true;
-            if (!CartGrid.CommitEdit(DataGridEditingUnit.Cell, true)) return;
-            CartGrid.CommitEdit(DataGridEditingUnit.Row, true);
-            var selected = CartGrid.SelectedItem as CartLineViewModel;
-            var index = selected is null ? -1 : _viewModel.CartLines.IndexOf(selected);
-            var next = index + (e.Key == Key.Down ? 1 : -1);
-            if (next >= 0 && next < _viewModel.CartLines.Count) FocusCartQuantity(_viewModel.CartLines[next]);
-            return;
-        }
-
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            if (IsCartCellEditing)
-            {
-                CartGrid.CommitEdit(DataGridEditingUnit.Cell, true);
-                CartGrid.CommitEdit(DataGridEditingUnit.Row, true);
-            }
-            else if (CartGrid.SelectedItem is CartLineViewModel selected)
-                FocusCartQuantity(selected);
-            return;
-        }
-
-        if (e.Key == Key.Escape && IsCartCellEditing)
-        {
-            e.Handled = true;
-            CartGrid.CancelEdit(DataGridEditingUnit.Cell);
-            CartGrid.CancelEdit(DataGridEditingUnit.Row);
-        }
-    }
-
     private void CartGrid_LoadingRow(object sender, DataGridRowEventArgs e)
     {
         e.Row.ToolTip = e.Row.Item is CartLineViewModel line ? line.Product.Name : null;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (e.Row.Item is CartLineViewModel rowLine)
+            {
+                foreach (var button in FindVisualChildren<Button>(e.Row))
+                {
+                    var action = button.Content?.ToString();
+                    if (action == "+")
+                        System.Windows.Automation.AutomationProperties.SetName(button, $"Aumentar cantidad de {rowLine.Product.Name}");
+                    else if (action == "−")
+                        System.Windows.Automation.AutomationProperties.SetName(button, $"Disminuir cantidad de {rowLine.Product.Name}");
+                }
+            }
+            LoadCartRowImage(e.Row);
+        }, DispatcherPriority.Loaded);
     }
 
     private void FocusCartQuantity(CartLineViewModel? line)
     {
-        if (!_viewModel.CanEditCart || _viewModel.CartLines.Count == 0) return;
-        line ??= _viewModel.CartLines.FirstOrDefault();
-        if (line is null) return;
-        var quantityColumn = CartGrid.Columns.FirstOrDefault(column => string.Equals(column.Header?.ToString(), "Cantidad", StringComparison.Ordinal));
-        if (quantityColumn is null) return;
-
+        if (!_viewModel.CanEditCart || line is null) return;
         _viewModel.SelectedCartLine = line;
         CartGrid.SelectedItem = line;
-        CartGrid.ScrollIntoView(line, quantityColumn);
-        CartGrid.CurrentCell = new DataGridCellInfo(line, quantityColumn);
-        CartGrid.Focus();
-        CartGrid.BeginEdit();
-        Dispatcher.BeginInvoke(() => FindVisualChild<TextBox>(CartGrid)?.SelectAll(), DispatcherPriority.Input);
+        CartGrid.ScrollIntoView(line);
+        _ = EditCartLineAsync(line);
     }
-
-    private bool IsCartCellEditing => CartGrid.CurrentCell.Column?.GetCellContent(CartGrid.CurrentCell.Item) is TextBox;
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {
@@ -691,6 +821,16 @@ public partial class MainWindow : Window
             if (nested is not null) return nested;
         }
         return null;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) yield return match;
+            foreach (var nested in FindVisualChildren<T>(child)) yield return nested;
+        }
     }
 
     private async void CashTool_Click(object sender, RoutedEventArgs e)
