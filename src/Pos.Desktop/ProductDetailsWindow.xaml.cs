@@ -21,7 +21,7 @@ public partial class ProductDetailsWindow : Window
     private bool _hasChanges;
     private Guid? _currentPresentationUnitId;
 
-    public ProductDetailsWindow(PosViewModel viewModel, InventoryItemInfo product, IReadOnlyList<LoadedDesktopModule>? modules = null)
+    internal ProductDetailsWindow(PosViewModel viewModel, InventoryItemInfo product, IReadOnlyList<LoadedDesktopModule>? modules = null)
     {
         InitializeComponent();
         _viewModel = viewModel;
