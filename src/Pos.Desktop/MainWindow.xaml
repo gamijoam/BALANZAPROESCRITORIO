@@ -337,7 +337,7 @@
                                                                TextTrimming="CharacterEllipsis" ToolTip="{Binding Product.Name}"/>
                                                     <TextBlock Foreground="{StaticResource Pos.TextMuted}" FontSize="13" Margin="0,3,0,0"
                                                                TextTrimming="CharacterEllipsis">
-                                                        <Run Text="{Binding Product.Sku}"/><Run Text="  ·  "/><Run Text="{Binding SaleUnitLabel}"/>
+                                                        <Run Text="{Binding Product.Sku, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding SaleUnitLabel, Mode=OneWay}"/>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </Grid>
